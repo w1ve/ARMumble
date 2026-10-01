@@ -332,6 +332,9 @@ pub fn run_with(context: tauri::Context, mode: Mode) {
                 if let Some(win) = app.get_webview_window(updater::MAIN_WINDOW_LABEL) {
                     let _ = win.hide();
                 }
+                // `updater::init` decides whether to run the startup check or
+                // reveal the main window immediately (it is disabled for the
+                // RemoteRadio apps, which have no release feed yet).
                 updater::init(app.handle());
             }
             Ok(())
@@ -842,6 +845,7 @@ macro_rules! all_command_handlers {
             commands::draw_overlay::close_drawing_overlay,
             commands::draw_overlay::take_drawing_overlay_context,
             commands::window::set_window_aspect_ratio,
+            commands::window::app_mode,
             #[cfg(not(target_os = "android"))]
             updater::commands::updater_check,
             #[cfg(not(target_os = "android"))]

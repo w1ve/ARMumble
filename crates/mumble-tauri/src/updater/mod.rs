@@ -35,10 +35,28 @@ pub(crate) fn register_plugins(builder: tauri::Builder<Wry>) -> tauri::Builder<W
         .plugin(tauri_plugin_process::init())
 }
 
+/// Whether the auto-updater is enabled for this build.
+///
+/// The RemoteRadio desktop apps (RemoteRadioClient / RemoteRadioStation) have
+/// no published release feed yet. Running the startup check against a missing
+/// feed opened the updater window and produced a relaunch loop, so the updater
+/// is disabled until a real feed exists. Flip this (or gate it on
+/// [`crate::Mode`]) once releases are published.
+const UPDATER_ENABLED: bool = false;
+
 /// Install the shared [`UpdaterState`] and kick off the background
 /// check-on-startup task. Safe to call once from the main `setup` hook.
+///
+/// When the updater is disabled ([`UPDATER_ENABLED`] is `false`) this reveals
+/// the main window immediately and performs no network check.
 pub(crate) fn init(app: &tauri::AppHandle) {
     let _ = app.manage(UpdaterState::default());
+
+    if !UPDATER_ENABLED {
+        show_main_window(app);
+        return;
+    }
+
     load_persisted_prefs(app);
     spawn_startup_check(app.clone());
 }

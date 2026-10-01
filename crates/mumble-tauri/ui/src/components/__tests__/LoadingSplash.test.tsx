@@ -20,12 +20,20 @@ describe("LoadingSplash", () => {
     vi.useRealTimers();
   });
 
-  it("renders the default title and a message from the pool", () => {
+  it("renders a non-empty brand title", () => {
     render(<LoadingSplash />);
-    expect(screen.getByText("Fancy Mumble")).toBeTruthy();
     const status = screen.getByRole("status");
-    const subtitle = status.lastElementChild?.textContent ?? "";
-    expect(__TEST_FUNNY_MESSAGES).toContain(subtitle);
+    // Children are: spinner (empty, aria-hidden), title, subtitle. The
+    // brand title is the middle child; assert it is non-empty. The exact
+    // string depends on resolved app mode / i18n init, so presence only.
+    // (The funny-message pool is covered by the rotation test below.)
+    const heading = status.children[1]?.textContent ?? "";
+    expect(heading.length).toBeGreaterThan(0);
+  });
+
+  it("uses an explicit title verbatim", () => {
+    render(<LoadingSplash title="Custom Brand" message="x" />);
+    expect(screen.getByText("Custom Brand")).toBeTruthy();
   });
 
   it("rotates the subtitle on a timer", () => {

@@ -1,5 +1,8 @@
 ﻿{
-  "brand": "Fancy Mumble",
+  "brand": "RemoteRadio",
+  "brandClient": "RemoteRadio Client",
+  "brandStation": "RemoteRadio Station",
+  "brandMumble": "RemoteRadioMumble",
   "actions": {
     "minimize": "Minimize",
     "maximize": "Maximize",

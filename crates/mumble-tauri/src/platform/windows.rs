@@ -25,7 +25,34 @@ use tracing::info;
 ///
 /// Chosen to be specific to this app and unlikely to conflict.
 /// Falls in the IANA dynamic/private port range (49152-65535).
-const DEEP_LINK_PORT: u16 = 58_722;
+///
+/// NOTE: `RemoteRadioClient` and `RemoteRadioStation` are designed to run at
+/// the same time (and often on the same machine during testing), so they must
+/// NOT share one port: whichever started second would fail to bind its
+/// deep-link listener. Each variant therefore derives its own port from
+/// [`DEEP_LINK_PORT_BASE`] via [`deep_link_port`].
+const DEEP_LINK_PORT_BASE: u16 = 58_722;
+
+/// Per-variant offset applied to [`DEEP_LINK_PORT_BASE`].
+///
+/// The value is resolved from the compiled binary's own name rather than
+/// shared mutable state so it is available before Tauri is initialised (which
+/// is when [`try_forward_deep_link`] runs).
+fn deep_link_port() -> u16 {
+    let exe = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().to_lowercase()))
+        .unwrap_or_default();
+
+    let offset = if exe.contains("station") {
+        1
+    } else if exe.contains("client") {
+        2
+    } else {
+        0
+    };
+    DEEP_LINK_PORT_BASE.saturating_add(offset)
+}
 
 /// Timeout when dialling an existing instance.
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(300);
@@ -34,7 +61,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_millis(300);
 const READ_TIMEOUT: Duration = Duration::from_secs(2);
 
 fn ipc_addr() -> SocketAddr {
-    SocketAddr::from(([127, 0, 0, 1], DEEP_LINK_PORT))
+    SocketAddr::from(([127, 0, 0, 1], deep_link_port()))
 }
 
 /// If this process was launched via a `fancy://` URL, try to forward it to

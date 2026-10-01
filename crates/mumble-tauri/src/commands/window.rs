@@ -29,3 +29,21 @@ pub(crate) fn set_window_aspect_ratio(
         Err(e) => Err(e.to_string()),
     }
 }
+
+/// Return the application variant this binary runs as, as a stable string:
+/// `"client"`, `"station"`, or `"mumble"`.
+///
+/// The shared frontend uses this to brand itself (window title, loading
+/// splash, layout) differently for `RemoteRadioClient` vs.
+/// `RemoteRadioStation` vs. the Android `RemoteRadioMumble` build, all of
+/// which load the same UI bundle.
+#[tauri::command]
+pub(crate) fn app_mode(mode: tauri::State<'_, crate::Mode>) -> &'static str {
+    match *mode.inner() {
+        #[cfg(target_os = "android")]
+        crate::Mode::Client => "mumble",
+        #[cfg(not(target_os = "android"))]
+        crate::Mode::Client => "client",
+        crate::Mode::Station => "station",
+    }
+}

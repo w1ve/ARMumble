@@ -33,8 +33,22 @@
     "active": true,
     "createUpdaterArtifacts": false,
     "icon": [
-      "../mumble-tauri/icons/icon.ico",
-      "../mumble-tauri/icons/icon.png"
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdCODZEMTk5QTVCRDM4MzEKUldReE9MMmxtZEdHZS90QmRQbGZZMHZqL01oeUhDekx5SUMwY08yc1N6aC84RE1LSVR6aTRJRFYK",
+      "endpoints": [
+        "https://github.com/w1ve/ARMumble/releases/latest/download/latest-station.json"
+      ],
+      "windows": {
+        "installMode": "quiet"
+      }
+    }
   }
 }
