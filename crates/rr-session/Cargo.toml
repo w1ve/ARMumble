@@ -1,0 +1,11 @@
+[package]
+name = "rr-session"
+version = "0.1.0"
+edition = "2021"
+description = "RemoteRadio control-arbitration state machine: cooperative single-controller handoff among multiple viewers (Station-authoritative)."
+license = "MIT"
+
+[dependencies]
+
+[lints]
+workspace = true
