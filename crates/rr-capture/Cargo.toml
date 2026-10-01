@@ -1,0 +1,24 @@
+[package]
+name = "rr-capture"
+version = "0.1.0"
+edition = "2021"
+description = "RemoteRadio screen capture: a backend-agnostic capturer trait, a deterministic synthetic source for tests, and an xcap-backed real screen capture backend."
+license = "MIT"
+
+[dependencies]
+thiserror = "2"
+
+# Only the real-capture backend logs, so tracing follows that feature.
+tracing = { version = "0.1", optional = true }
+
+# Real screen capture. Optional so headless CI (and the Client, which never
+# captures) can build and test this crate without a display server.
+xcap = { version = "0.9.8", optional = true }
+
+[features]
+default = []
+# Enable the xcap-backed real screen capture backend.
+screen-capture = ["xcap", "tracing"]
+
+[lints]
+workspace = true

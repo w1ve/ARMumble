@@ -1,0 +1,21 @@
+[package]
+name = "rr-codec"
+version = "0.1.0"
+edition = "2021"
+description = "RemoteRadio video codec: latency-tuned H.264 encoding and decoding for screen content, with keyframe-on-demand."
+license = "MIT"
+
+[dependencies]
+rr-capture = { path = "../rr-capture" }
+
+# BSD-2 licensed (both the Cisco core and the Rust wrapper), so it is safe to
+# redistribute alongside this MIT codebase. The `source` feature builds
+# OpenH264 from source rather than loading Cisco's prebuilt binary, which keeps
+# deployment self-contained.
+openh264 = { version = "0.9.8", features = ["source"] }
+
+thiserror = "2"
+tracing = "0.1"
+
+[lints]
+workspace = true

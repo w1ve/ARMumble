@@ -9,6 +9,8 @@ members = [
     "crates/rr-proto",
     "crates/rr-session",
     "crates/rr-webrtc",
+    "crates/rr-capture",
+    "crates/rr-codec",
     "crates/app-client",
     "crates/app-station",
 ]
