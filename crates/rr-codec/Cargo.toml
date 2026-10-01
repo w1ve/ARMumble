@@ -17,5 +17,11 @@ openh264 = { version = "0.9.8", features = ["source"] }
 thiserror = "2"
 tracing = "0.1"
 
+[features]
+default = []
+# Enables the `capture_probe` example to grab the real screen. Off by default so
+# headless CI builds this crate without pulling in xcap or needing a display.
+real-capture = ["rr-capture/screen-capture"]
+
 [lints]
 workspace = true

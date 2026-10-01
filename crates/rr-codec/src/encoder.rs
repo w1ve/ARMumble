@@ -87,7 +87,13 @@ impl Encoder {
             .max_frame_rate(openh264::encoder::FrameRate::from_hz(settings.max_fps))
             // 0 disables periodic intra frames: keyframes are on demand only,
             // which avoids a recurring bitrate spike that shows up as a stall.
-            .intra_frame_period(openh264::encoder::IntraFramePeriod::from_num_frames(0));
+            .intra_frame_period(openh264::encoder::IntraFramePeriod::from_num_frames(0))
+            // Both default to on but are unsupported in screen-content mode:
+            // OpenH264 silently turns them off and logs a warning. Setting them
+            // explicitly keeps the log quiet and makes the configuration
+            // describe what actually happens.
+            .adaptive_quantization(false)
+            .background_detection(false);
 
         let inner = OpenH264Encoder::with_api_config(OpenH264API::from_source(), config)
             .map_err(|e| CodecError::EncoderInit(e.to_string()))?;
