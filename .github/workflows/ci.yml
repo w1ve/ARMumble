@@ -99,6 +99,13 @@ jobs:
         working-directory: crates/mumble-tauri/ui
         run: npm test
 
+      # Build the shared UI dist so the RemoteRadioClient/Station binary
+      # crates' `tauri::generate_context!()` can resolve `frontendDist`
+      # (../mumble-tauri/ui/dist) during clippy's --all-targets compile.
+      - name: Build frontend (shared UI dist)
+        working-directory: crates/mumble-tauri/ui
+        run: npm run build
+
       # -- Rust ----------------------------------------------------
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
@@ -111,6 +118,9 @@ jobs:
 
       - name: Rust unit tests (mumble-tauri)
         run: cargo test --package mumble-tauri --lib
+
+      - name: Rust unit tests (RemoteRadio crates)
+        run: cargo test --package rr-proto --package rr-session
 
       # -- Integration tests (Linux only - Docker) ----------------
       - name: Start Mumble test server
@@ -186,23 +196,40 @@ jobs:
         with:
           tool: tauri-cli
 
-      - name: Build Tauri app
-        working-directory: crates/mumble-tauri
+      # Build the two branded RemoteRadio desktop binaries. Each binary crate
+      # has its own tauri.conf.json (distinct productName/identifier) and runs
+      # `cargo tauri build` from its own directory. The signal-bridge resource
+      # lives in ../mumble-tauri/signal-bridge relative to each binary crate.
+      - name: Build RemoteRadioClient
+        working-directory: crates/app-client
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           TAURI_CONFIG: >-
             ${{ runner.os == 'Windows'
-                && '{"bundle":{"resources":["signal-bridge/*.dll"]}}'
+                && '{"bundle":{"resources":["../mumble-tauri/signal-bridge/*.dll"]}}'
                 || runner.os == 'macOS'
-                && '{"bundle":{"resources":["signal-bridge/*.dylib"]}}'
-                || '{"bundle":{"resources":["signal-bridge/*.so"]}}' }}
-        run: cargo tauri build
+                && '{"bundle":{"resources":["../mumble-tauri/signal-bridge/*.dylib"]}}'
+                || '{"bundle":{"resources":["../mumble-tauri/signal-bridge/*.so"]}}' }}
+        run: cargo tauri build --bundles ${{ matrix.target.bundle-ext }}
+
+      - name: Build RemoteRadioStation
+        working-directory: crates/app-station
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_CONFIG: >-
+            ${{ runner.os == 'Windows'
+                && '{"bundle":{"resources":["../mumble-tauri/signal-bridge/*.dll"]}}'
+                || runner.os == 'macOS'
+                && '{"bundle":{"resources":["../mumble-tauri/signal-bridge/*.dylib"]}}'
+                || '{"bundle":{"resources":["../mumble-tauri/signal-bridge/*.so"]}}' }}
+        run: cargo tauri build --bundles ${{ matrix.target.bundle-ext }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: fancy-mumble-${{ matrix.target.name }}
+          name: remote-radio-${{ matrix.target.name }}
           path: |
             target/release/bundle/**/*.deb
             target/release/bundle/**/*.AppImage
