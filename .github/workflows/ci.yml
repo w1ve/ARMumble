@@ -119,8 +119,11 @@ jobs:
       - name: Rust unit tests (mumble-tauri)
         run: cargo test --package mumble-tauri --lib
 
+      # rr-webrtc's loopback test performs a real ICE handshake between two
+      # in-process peers over localhost. It needs no display, no Mumble server
+      # and no external network, so it is safe to run on every PR.
       - name: Rust unit tests (RemoteRadio crates)
-        run: cargo test --package rr-proto --package rr-session
+        run: cargo test --package rr-proto --package rr-session --package rr-webrtc
 
       # -- Integration tests (Linux only - Docker) ----------------
       - name: Start Mumble test server

@@ -8,6 +8,7 @@ members = [
     # RemoteRadio additions (see doc/remote-radio/SPEC.md).
     "crates/rr-proto",
     "crates/rr-session",
+    "crates/rr-webrtc",
     "crates/app-client",
     "crates/app-station",
 ]

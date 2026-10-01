@@ -1,0 +1,24 @@
+[package]
+name = "rr-webrtc"
+version = "0.1.0"
+edition = "2021"
+description = "RemoteRadio peer-to-peer WebRTC transport: offer/answer orchestration, trickle ICE and the control data channel, with a signaling-transport-agnostic interface."
+license = "MIT"
+
+[dependencies]
+rr-proto = { path = "../rr-proto" }
+
+webrtc = "0.21.0"
+async-trait = "0.1"
+bytes = "1"
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+tracing = "0.1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true
