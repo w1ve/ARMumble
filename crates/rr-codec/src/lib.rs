@@ -74,7 +74,7 @@ pub(crate) fn check_geometry(width: u32, height: u32) -> Result<()> {
             reason: "dimensions must be non-zero",
         });
     }
-    if width % 2 != 0 || height % 2 != 0 {
+    if !width.is_multiple_of(2) || !height.is_multiple_of(2) {
         return Err(CodecError::Geometry {
             width,
             height,

@@ -75,16 +75,22 @@ jobs:
           cache-dependency-path: crates/mumble-tauri/ui/package-lock.json
 
       # -- Linux system deps (Tauri + ALSA for cpal) --------------
+      # nasm is required by rr-codec: openh264 builds from source and uses it
+      # for its assembly kernels (up to ~3x faster encode/decode).
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
-          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev protobuf-compiler
+          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev protobuf-compiler nasm
           version: 1.0
 
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
         run: choco install protoc -y
+
+      - name: Install nasm (Windows)
+        if: runner.os == 'Windows'
+        run: choco install nasm -y
 
       # -- Frontend ------------------------------------------------
       - name: Install npm dependencies
@@ -123,7 +129,13 @@ jobs:
       # in-process peers over localhost. It needs no display, no Mumble server
       # and no external network, so it is safe to run on every PR.
       - name: Rust unit tests (RemoteRadio crates)
-        run: cargo test --package rr-proto --package rr-session --package rr-webrtc
+        run: >-
+          cargo test
+          --package rr-proto
+          --package rr-session
+          --package rr-webrtc
+          --package rr-capture
+          --package rr-codec
 
       # -- Integration tests (Linux only - Docker) ----------------
       - name: Start Mumble test server
@@ -179,16 +191,21 @@ jobs:
           cache: npm
           cache-dependency-path: crates/mumble-tauri/ui/package-lock.json
 
+      # nasm is needed by openh264 (rr-codec), which builds from source.
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
-          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev protobuf-compiler
+          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev protobuf-compiler nasm
           version: 1.0
 
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
         run: choco install protoc -y
+
+      - name: Install nasm (Windows)
+        if: runner.os == 'Windows'
+        run: choco install nasm -y
 
       - name: Install npm dependencies
         working-directory: crates/mumble-tauri/ui

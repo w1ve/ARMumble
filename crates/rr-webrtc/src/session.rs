@@ -369,6 +369,20 @@ impl PeerSession {
         Ok(dc)
     }
 
+    /// Ask the Station for a fresh keyframe.
+    ///
+    /// A viewer calls this on subscribe, and after loss has invalidated its
+    /// reference frames. Because periodic keyframes are disabled for latency,
+    /// this is the only way a late joiner becomes decodable.
+    ///
+    /// # Errors
+    /// Returns [`TransportError::ControlChannelUnavailable`] if the control
+    /// channel is not open.
+    pub async fn request_keyframe(&self) -> Result<()> {
+        self.send_control(&rr_proto::ControlMsg::RequestKeyframe)
+            .await
+    }
+
     /// Send a control message, failing if the channel is not usable.
     pub async fn send_control(&self, msg: &rr_proto::ControlMsg) -> Result<()> {
         let dc = self

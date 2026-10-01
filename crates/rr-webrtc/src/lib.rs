@@ -40,9 +40,13 @@ use tokio::sync::{mpsc, Mutex};
 
 mod session;
 mod signal;
+mod video;
 
 pub use session::{ConnectionState, PeerSession, SessionConfig};
 pub use signal::{InMemorySignaling, SignalMessage, SignalTransport};
+pub use video::{
+    VideoReceiver, VideoSender, H264_PAYLOAD_TYPE, VIDEO_STREAM_ID, VIDEO_TRACK_ID,
+};
 
 /// Default public STUN servers used for server-reflexive candidate discovery.
 ///

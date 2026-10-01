@@ -9,6 +9,11 @@ license = "MIT"
 rr-proto = { path = "../rr-proto" }
 
 webrtc = "0.21.0"
+# `Sample` lives in rtc-media and the RTP types (SSRC, PayloadType,
+# RtpCodecKind) in rtc — webrtc's sans-IO core crates. Neither is re-exported
+# from the webrtc root, so depend on them directly; versions track webrtc's.
+rtc-media = "0.21.0"
+rtc = "0.21.0"
 async-trait = "0.1"
 bytes = "1"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
@@ -19,6 +24,10 @@ serde_json = "1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+# The end-to-end video test drives the real capture and codec crates, proving
+# the phase's pieces compose rather than only compiling in isolation.
+rr-capture = { path = "../rr-capture" }
+rr-codec = { path = "../rr-codec" }
 
 [lints]
 workspace = true
