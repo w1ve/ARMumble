@@ -1,5 +1,5 @@
 {
-  "productName": "FancyMumble",
+  "productName": "RemoteRadioMumble",
   "version": "0.3.0",
   "identifier": "com.fancymumble.app",
   "build": {
@@ -12,7 +12,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Fancy Mumble",
+        "title": "RemoteRadioMumble",
         "width": 1024,
         "height": 768,
         "resizable": true,
