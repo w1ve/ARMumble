@@ -1,0 +1,27 @@
+[package]
+name = "app-station"
+version = "0.3.0"
+edition = "2021"
+description = "RemoteRadioStation desktop app: Mumble client plus remote-desktop host (screen share, input injection, clipboard/file transfer)."
+license = "MIT"
+default-run = "RemoteRadioStation"
+
+[[bin]]
+name = "RemoteRadioStation"
+path = "src/main.rs"
+
+[dependencies]
+# Shared application library (Tauri builder, commands, UI bridge, mode seam).
+mumble_tauri_lib = { package = "mumble-tauri", path = "../mumble-tauri" }
+tauri = { version = "2.10.1", features = ["protocol-asset", "tray-icon", "image-png"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[features]
+default = []
+# Forwarded to the shared lib so station-only subsystems compile in.
+custom-protocol = ["mumble_tauri_lib/custom-protocol"]
+
+[lints]
+workspace = true

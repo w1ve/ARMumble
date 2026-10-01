@@ -1,0 +1,27 @@
+[package]
+name = "app-client"
+version = "0.3.0"
+edition = "2021"
+description = "RemoteRadioClient desktop app: Mumble client plus remote-desktop viewer/controller (renders the Station's screen, captures and sends input)."
+license = "MIT"
+default-run = "RemoteRadioClient"
+
+[[bin]]
+name = "RemoteRadioClient"
+path = "src/main.rs"
+
+[dependencies]
+# Shared application library (Tauri builder, commands, UI bridge, mode seam).
+mumble_tauri_lib = { package = "mumble-tauri", path = "../mumble-tauri" }
+tauri = { version = "2.10.1", features = ["protocol-asset", "tray-icon", "image-png"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[features]
+default = []
+# Forwarded to the shared lib so client-only subsystems compile in.
+custom-protocol = ["mumble_tauri_lib/custom-protocol"]
+
+[lints]
+workspace = true

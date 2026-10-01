@@ -1,0 +1,40 @@
+{
+  "productName": "RemoteRadioStation",
+  "version": "0.3.0",
+  "identifier": "com.remoteradio.station",
+  "build": {
+    "frontendDist": "../mumble-tauri/ui/dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": { "script": "npm run dev", "cwd": "../mumble-tauri/ui" },
+    "beforeBuildCommand": { "script": "npm run build", "cwd": "../mumble-tauri/ui" }
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "RemoteRadio Station",
+        "width": 1024,
+        "height": 768,
+        "resizable": true,
+        "decorations": false,
+        "transparent": false,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": false,
+    "icon": [
+      "../mumble-tauri/icons/icon.ico",
+      "../mumble-tauri/icons/icon.png"
+    ]
+  }
+}

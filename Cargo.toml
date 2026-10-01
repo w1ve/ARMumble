@@ -8,6 +8,8 @@ members = [
     # RemoteRadio additions (see doc/remote-radio/SPEC.md).
     "crates/rr-proto",
     "crates/rr-session",
+    "crates/app-client",
+    "crates/app-station",
 ]
 # The Mumble server-side plugin host crates (mumble-plugin-api, mumble-file-server,
 # mumble-plugin-host) live in the mumble-server repository under
