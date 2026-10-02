@@ -258,6 +258,7 @@ RUN set -eu; \
            $(pick libmysqlclient21 libmysqlclient21t64) \
            $(pick libpq5 libpq5t64) \
            $(pick libzeroc-ice3.7t64 libzeroc-ice3.7) \
+           python3 python3-zeroc-ice \
            libbz2-1.0 libcap2 ca-certificates tzdata"; \
     echo "installing: $PKGS"; \
     apt-get install -y --no-install-recommends $PKGS; \
@@ -289,6 +290,24 @@ COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY mumble-server.ini /etc/mumble/mumble-server.ini.default
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
+# Virtual-server administration over Ice, used by `docker exec`. The Python Ice
+# client (python3-zeroc-ice, installed above) loads the slice at runtime, so the
+# slice definition travels into the image with it. These let an operator create
+# and configure virtual servers without an Ice toolchain on the host.
+COPY --from=builder /src/src/murmur/MumbleServer.ice /usr/local/share/MumbleServer.ice
+COPY mumble-ice-admin.py /usr/local/lib/mumble-ice-admin.py
+COPY create-virtual-servers.sh /usr/local/bin/create-virtual-servers.sh
+RUN chmod +x /usr/local/bin/create-virtual-servers.sh /usr/local/lib/mumble-ice-admin.py \
+    # The slice pulls in `#include <Ice/SliceChecksumDict.ice>`, a system slice
+    # the Debian python3-zeroc-ice package does not ship (only its pre-generated
+    # Python), and installing the full zeroc-ice-all-dev just for it would drag a
+    # compiler toolchain into the runtime image. The admin client never calls
+    # getSliceChecksums(), the one method that uses the type, so strip BOTH the
+    # include and that method declaration — removing only the include leaves a
+    # dangling `Ice::SliceChecksumDict` reference that fails slice parsing.
+    && sed -i '/#include <Ice\/SliceChecksumDict.ice>/d; /Ice::SliceChecksumDict getSliceChecksums/d' \
+        /usr/local/share/MumbleServer.ice
+
 # Unprivileged. The server only needs a privileged port if you configure one,
 # and 54736 is not privileged.
 RUN useradd --system --create-home --home-dir /var/lib/mumble --shell /usr/sbin/nologin mumble \
@@ -301,11 +320,13 @@ ENV QT_QPA_PLATFORM=offscreen
 
 VOLUME ["/data"]
 
-# Mumble needs BOTH: TCP for control and the audio tunnel fallback, UDP for the
-# normal low-latency voice path. Exposing only TCP silently forces every client
-# onto the tunnel, which is heavier and would quietly change the bandwidth
-# arithmetic.
-EXPOSE 54736/tcp 54736/udp
+# Mumble needs BOTH protocols on every port: TCP for control and the audio
+# tunnel fallback, UDP for the normal low-latency voice path. The documented
+# range covers up to 100 virtual servers (base 54735 + server number 1..100 =
+# 54736..54835), with 54836 left as headroom. EXPOSE is documentation only;
+# actual reachability comes from the run command — `--network host` for the
+# range, or `-p` for a single server. See deploy README.
+EXPOSE 54736-54836/tcp 54736-54836/udp
 
 USER mumble
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

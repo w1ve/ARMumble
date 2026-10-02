@@ -12,7 +12,7 @@ stereo audio work on stock Mumble; only the signalling needs the fork. See
 ## Build and run
 
 ```bash
-./build-and-run.sh                      # build, then run on port 54736
+./build-and-run.sh                      # build, then run a single server on 54736
 MUMBLE_SUPERUSER_PASSWORD=... ./build-and-run.sh   # set SuperUser on first run
 ./build-and-run.sh --build-only         # build only
 ./build-and-run.sh --save               # also export a portable tarball
@@ -22,6 +22,56 @@ MUMBLE_SUPERUSER_PASSWORD=... ./build-and-run.sh   # set SuperUser on first run
 Requires Docker. Builds `FROM ubuntu:24.04` regardless of the host release —
 the fork needs CMake >= 3.23, which Ubuntu 22.04 does not ship, but a built
 image runs fine on a 22.04 host.
+
+## Multiple virtual servers across a port range
+
+One `mumble-server` process hosts many virtual servers; it is **not** one
+container per server. Each virtual server with id `N` listens on `base_port + N`
+on both TCP and UDP, where `base_port` is the ini's `port` (54736 here). The
+**first server has id 0**, so:
+
+| server id | port |
+|---|---|
+| 0 | 54736 |
+| 1 | 54737 |
+| … | … |
+| 100 | 54836 |
+
+Run with host networking so the whole range is reachable without 200+
+per-port forwarding rules:
+
+```bash
+MUMBLE_SUPERUSER_PASSWORD=... MUMBLE_ICE_SECRET_WRITE=... ./run-multi.sh
+```
+
+A fresh database has only server 0. Create more over Ice — they persist in the
+database and boot on restart:
+
+```bash
+# ensure 10 virtual servers exist (ids 0..9 -> ports 54736..54745)
+docker exec -e MUMBLE_ICE_SECRET_WRITE=yoursecret fancy-mumble \
+    /usr/local/bin/create-virtual-servers.sh 10
+
+# list them
+docker exec -e MUMBLE_ICE_SECRET_WRITE=yoursecret fancy-mumble \
+    python3 /usr/local/lib/mumble-ice-admin.py list --secret yoursecret
+
+# per-server config (name, password, bandwidth, even a custom port)
+docker exec -e MUMBLE_ICE_SECRET_WRITE=yoursecret fancy-mumble \
+    python3 /usr/local/lib/mumble-ice-admin.py setconf \
+    --server 3 --key registername --value 'My Net' --secret yoursecret
+```
+
+Open the ports you use at the firewall yourself — the scripts do not touch it:
+
+```bash
+ufw allow 54736:54836/tcp
+ufw allow 54736:54836/udp
+```
+
+With host networking the container installs no iptables rules, so ufw applies
+normally (unlike Docker `-p` publishing, which bypasses it). A cloud security
+group, if any, is separate and must also allow the range.
 
 ## Deploy on a VPS without a build toolchain
 
