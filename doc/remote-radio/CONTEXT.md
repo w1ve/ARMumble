@@ -187,7 +187,7 @@ Backup: `E:\devtools\windows-kits-backup.reg`.
 | **P2** video path (`rr-capture`, `rr-codec`, video track) | ✅ complete — committed, CI wired, validated on real Windows hardware |
 | **P7a** Windows fast-path capture (`DxgiCapturer`) | ✅ complete — **pulled forward from P7**, user-approved |
 | **P7b** hardware H.264 encode (`rr-hwcodec`) | ✅ complete — **4K at 41.2 fps**, committed. See §11 |
-| P3 input control + arbitration | 🟢 **crate complete** — `rr-input` compiles, is a workspace member, 23 tests pass; the live `rr-webrtc` wiring (§12 step 5) is the remaining piece |
+| P3 input control + arbitration | ✅ **complete** — `rr-input` crate + the live `rr-webrtc` wiring (`StationControl`, §12 step 5) both done, verified, committed both machines |
 | P4 NAT traversal / TURN Docker | ⬜ |
 | P5 multi-viewer | ⬜ |
 | P6 clipboard + file transfer | ⬜ |
@@ -198,8 +198,8 @@ the P-series because they cut across it:
 
 | Work | Status |
 |---|---|
-| **Monitor origins** in `MonitorInfo` (wire + capture + layout) | ✅ done, verified both machines, **UNCOMMITTED** — §12 |
-| **§14 radio audio & rig PTT**: stereo, transmit modes, serial PTT | ⬜ **approved, not started** — see §14g for order |
+| **Monitor origins** in `MonitorInfo` (wire + capture + layout) | ✅ done, verified both machines, committed — §12 |
+| **§14 radio audio & rig PTT**: stereo, transmit modes, serial PTT | 🟢 **in progress** — §14c transmit-mode decoupling done + committed; next is §14f.1 sample-rate. See §14g for order |
 | **§13 macOS target** | ⬜ **backburner** (investigated only; Linux desktop never a target) |
 
 **Why P7a moved:** `xcap` capture measured ~33 ms/frame at 1920x1200, which
@@ -666,6 +666,26 @@ both branded desktop apps plus the Android APK.
 ## 10. Immediate next steps
 
 ### Current heads (both clean, 0 dirty, **not pushed to origin**)
+
+> ⚠️ **Updated.** Since this section was first written, several more batches
+> landed (monitor origins, Opus stereo controls, the stereo_live harness, the
+> Fancy 1.6 server, the completed `rr-input` crate, the P3 `rr-webrtc`
+> `StationControl` wiring, and §14c transmit-mode decoupling), all committed on
+> both machines with divergent histories but byte-identical content. **Latest
+> heads:**
+>
+> | | HEAD | last work |
+> |---|---|---|
+> | local `e:\AI\RRMumble\ARMumble` | **`0c3ba9f7`** | §14c (`ca768be9`→`0c3ba9f7`) on top of P3 wiring (`5a051797`→`90dd3313`) |
+> | big-linux `/home/gerry/RRMumble/ARMumble` | **`f7280c54`** | §14c (`f03a266b`→`f7280c54`) on top of P3 wiring (`c0f8d657`→`29d38278`) |
+>
+> P3 `rr-webrtc` wiring = 4 commits (deps, StationControl fabric, lib wiring,
+> integration tests); §14c = 2 commits (TransmitMode enum/field, gate decoupling
+> + tests). Content parity sha256-verified per batch.
+
+The table below is the **historical** snapshot from when §10 was written; keep it
+for the commit hashes it records, not as the current tip.
+
 | | HEAD | note |
 |---|---|---|
 | local `e:\AI\RRMumble\ARMumble` | **`9e6672c1`** | 4 commits past P7b |
@@ -1607,7 +1627,23 @@ a *stock* Mumble client actually hears when we transmit stereo into a shared
 channel, and whether the server's bandwidth accounting objects to 96 kbps+. Ask
 for host/port/credentials when starting §14g step 3.
 
-### 14c. Transmit mode: decouple VAD from noise suppression
+### 14c. Transmit mode: decouple VAD from noise suppression ✅ DONE
+
+> **Implemented and committed both machines.** `TransmitMode { Continuous,
+> VoiceActivity, PushToTalk }` added to `mumble-tauri/src/state/types.rs`
+> (`AudioSettings.transmit_mode`, `#[serde(default)]` = `VoiceActivity`), with a
+> `transmit_mode()` accessor that reconciles the legacy `push_to_talk` boolean so
+> old saved configs still behave. `build_outbound_filters` in
+> `state/audio.rs` now inserts the `NoiseGate` **only** in `VoiceActivity` mode,
+> independent of `noise_suppression` (the denoiser stays on its own toggle).
+> `needs_pipeline_restart()` reacts to a mode change. 6 behaviour tests.
+> mumble-tauri is a desktop/Android crate and does **not** build on big-linux (no
+> ALSA, not in `verify-all-remote.sh`), so this was verified on local Windows:
+> `cargo check`/`clippy` clean (only 3 pre-existing `doc_markdown` warnings in
+> `updater/mod.rs`, untouched), 240 lib tests + the 6 new ones pass. Still to do:
+> a UI control to surface the mode (the backend is complete).
+
+**Original design notes (kept for reference):**
 
 **Current behaviour, confirmed:**
 - **PTT is NOT in the audio pipeline.** `push_to_talk_start()` / `_end()`
@@ -1770,10 +1806,10 @@ never have been synced back. **Check before the next release build.**
    `OpusEncoderConfig` with Opus-default values. 8 tests, clippy clean.
    **Remaining from this step:** the server relay test, and the transitional
    `ForceChannels` test (correlated → diverging signal).
-1. **Fix the sample-rate bug** (14f.1). Independent, small, and it silently
-   corrupts radio audio today.
-2. **Transmit-mode decoupling** (14c). Small, self-contained, no stereo needed,
-   and it is a prerequisite for mode-B PTT.
+1. 🟢 **CURRENT — fix the sample-rate bug** (14f.1). Independent, small, and it
+   silently corrupts radio audio today.
+2. ✅ **DONE — transmit-mode decoupling** (14c). Small, self-contained, no stereo
+   needed, and it is a prerequisite for mode-B PTT. See §14c for what shipped.
 3. **Stereo plumbing** (14b): add `AudioFormat::STEREO_48KHZ_F32`; make capture and
    playback channel counts **independent and configurable**; replace the two
    downmix sites with conditionals; convert the mixer's sample-relative counts to
