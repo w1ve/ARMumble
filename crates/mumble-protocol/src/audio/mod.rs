@@ -32,6 +32,7 @@
 //! | `filter`   | [`AudioFilter`] trait, [`FilterChain`], concrete filters |
 //! | `encoder`  | [`AudioEncoder`] trait + [`OpusEncoder`] stub |
 //! | `decoder`  | [`AudioDecoder`] trait + [`OpusDecoder`] stub |
+//! | `resample` | [`LinearResampler`] — capture-side rate conversion to 48 kHz |
 //! | `pipeline` | [`OutboundPipeline`] / [`InboundPipeline`] + builders |
 
 pub mod capture;
@@ -41,4 +42,5 @@ pub mod filter;
 pub mod mixer;
 pub mod pipeline;
 pub mod playback;
+pub mod resample;
 pub mod sample;
