@@ -54,9 +54,6 @@ pub enum CodecError {
         /// What specifically is wrong.
         reason: &'static str,
     },
-    /// The captured frame's pixel format has no conversion path.
-    #[error("unsupported pixel format: {0:?}")]
-    UnsupportedFormat(rr_capture::PixelFormat),
 }
 
 /// Convenience result alias.

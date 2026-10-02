@@ -1,4 +1,14 @@
-# P2 latency baseline (pre-optimisation)
+# P2 latency baseline, and the capture backend that replaced it
+
+**Outcome: capture went from ~33 ms to ~3.9 ms per frame (roughly 8x), taking
+capture + encode from ~50 ms to ~22 ms — inside the 33.3 ms budget for 30 fps.**
+Jump to [the result](#measured-result) for the numbers, or read on for how the
+original baseline was measured and why the first diagnosis was wrong.
+
+The sections below are in the order they happened: the `xcap` baseline, the
+attribution that found the real cost, the DXGI replacement and its measurements,
+and a build-environment trap that briefly made the encoder look 10x slower than
+it is.
 
 Measured with `cargo run -p rr-codec --example capture_probe --features real-capture`
 (release build, cross-compiled for `x86_64-pc-windows-msvc`).
@@ -114,38 +124,128 @@ That gap is API overhead, not copying: `xcap` uses a GDI surface copy
 (`BitBlt` + `GetDIBits`) which forces a slow GPU→CPU readback of the entire
 framebuffer, with no damage-region tracking, every single call.
 
-**Consequence: the current backend can never reach 30 fps.** Capture alone
+**Consequence: the `xcap` backend can never reach 30 fps.** Capture alone
 (33.6 ms) already exceeds the whole 33.3 ms frame budget, before encoding,
 networking or decoding. Since "lowest latency possible" is the project's
-primary goal, this is a structural limit rather than a tuning problem.
+primary goal, this is a structural limit rather than a tuning problem — which is
+why the backend work was pulled forward from P7 instead of tuning around it.
 
-## What P7 must beat
+## The replacement: DXGI Desktop Duplication
 
-Capture average **33.6 ms** and combined capture + encode **49.9 ms** at
-1920x1200. Re-run both the probe and the benchmark after the new backend lands.
+Implemented as `DxgiCapturer` behind the existing `ScreenCapturer` trait, using
+[`windows-capture` 2.0.1](https://crates.io/crates/windows-capture) (MIT,
+published 2026-08-08). That crate is best known for its Windows.Graphics.Capture
+wrapper, but it also ships `dxgi_duplication_api`, a **pull-based** Desktop
+Duplication wrapper — `acquire_next_frame(timeout_ms)` — which fits
+`ScreenCapturer::grab()` directly. No push-to-pull bridge was needed, and no
+`unsafe` of our own (`rr-capture` keeps `#![forbid(unsafe_code)]`).
 
-### Recommended replacement
+Options considered and rejected:
 
-| Option | Notes |
+| Option | Why not |
 |---|---|
-| **`windows-capture` 2.0.1** (Windows.Graphics.Capture) | Actively maintained (1.8M downloads, Aug 2026). Push model: implement `GraphicsCaptureApiHandler::on_frame_arrived`, `frame.buffer()` for raw bytes. **Delivers frames only when the screen changes**, so a static desktop costs nothing. Works cross-GPU. No `unsafe` of our own. |
-| Hand-rolled **DXGI Desktop Duplication** via `windows` 0.62 | Explicit dirty/move rectangles and the lowest ceiling; Microsoft's own guidance recommends DXGI for "ultra-low-latency, full-display mirroring (e.g. VDI or remote desktop)". Costs `unsafe` FFI we maintain, and requires running on the same GPU as the display. |
-| Stale alternatives | `dxgcap` (2020), `scrap` (2018), `captrs` (2020) — all unmaintained; not viable. |
+| `windows-capture`'s WGC handler API | Push model; would need a latest-frame channel to fit the trait, for no measured gain over the duplication wrapper in the same crate. |
+| Hand-rolled DXGI on `windows` 0.62 | Same API, but `unsafe` FFI we would own and maintain. Only worth it if the wrapper fell short, and it did not. |
+| `dxgcap`, `scrap`, `captrs` | Unmaintained since 2018–2020. |
 
-Recommendation: try **`windows-capture`** first. It is the far smaller change,
-needs no `unsafe` from us, and its change-driven delivery directly removes the
-"pay full price for a static screen" behaviour that dominates the current
-numbers. Fall back to raw DXGI only if WGC does not hit the target.
+### Measured result
 
-Both are pull-vs-push mismatches with the current `ScreenCapturer::grab()`
-trait; bridge with a single-slot "latest frame" channel, which is the right
-semantic for remote desktop anyway (you always want the newest frame, never a
-backlog).
+Same machine, same monitor, release build, 1920x1200. Figures are the typical
+value across four runs, with the full observed range where it matters:
+
+| | `xcap` (GDI) | `DxgiCapturer` | Change |
+|---|---|---|---|
+| Capture work per frame | **33.0 ms** | **3.9 ms** | **~8x faster** |
+| Range across runs | 32.6 – 33.6 ms | 3.7 – 5.3 ms | 6.2x worst observed |
+| Capture worst single frame | 46.8 ms | 8.7 ms | |
+| vs. 0.92 ms memcpy floor | 36x | 4.2x | |
+| Encode (unchanged) | 16.9 – 17.2 ms | 17.8 – 21.5 ms | |
+| capture + encode | **49.8 – 50.0 ms** | **21.7 – 26.8 ms** | |
+| Sustainable frame rate | 20.0 – 20.1 fps | **37 – 46 fps** | inside the 33.3 ms budget |
+| Cost of a static screen | full price, every frame | nothing | |
+
+`xcap` is remarkably stable at ~33 ms because it does the same full readback
+regardless of machine state. `DxgiCapturer` is cheap enough that background load
+is visible in it: the 3.7 ms figures come from runs starting at ~20% CPU, the
+5.3 ms figure from a run starting at ~49%. Even the worst observed case leaves
+room inside the 30 fps budget.
+
+Benchmark detail, 30 delivered frames (`capture_bench`), two consecutive runs:
+
+| Stage | Mean | Min | Max |
+|---|---|---|---|
+| `grab()` work (copy + map, wait excluded) | **3.69 / 3.90 ms** | 3.30 / 3.40 ms | 4.14 / 4.71 ms |
+| blocked waiting for a change | 31.66 / 27.00 ms | 3.30 / 2.46 ms | 109.47 / 97.11 ms |
+| session setup (first grab only) | 69.76 / 70.41 ms | — | — |
+
+The per-frame spread is tight because the work is fixed: a GPU-side
+`CopyResource` into a reused staging texture, a map, and one 8.8 MiB copy out.
+Session setup — the Direct3D 11 device, the DXGI output lookup and the staging
+texture — is paid once and excluded.
+
+The blocked-wait column is not a cost. It is the Station idling while the user's
+screen holds still; across these runs 178 of 200 calls found no change at all,
+every one of which `xcap` would have charged a full 33 ms for.
+
+### Measuring a change-driven backend honestly
+
+Desktop Duplication blocks until the desktop changes, so a stopwatch around
+`grab()` on a quiet screen measures how still the screen was, not what capture
+costs. `ScreenCapturer::last_wait()` reports the blocked time and the probe
+subtracts it. Every figure above is work, not waiting.
+
+The first attempt at this used a zero acquire timeout so successful calls had no
+wait to subtract. That worked, but it busy-spins a core, and the spinning
+inflated the encode timings measured in the same loop. The blocking-plus-subtract
+approach measures the same thing without perturbing anything else.
+
+**Capture is no longer the bottleneck — encode is**, at 17–22 ms against
+capture's ~3.9 ms. That is where any further latency work should go, and on this
+hardware the obvious lever is hardware encoding (Quick Sync / NVENC) rather than
+OpenH264 on a 15 W CPU.
+
+## Correction: NASM, and a ten-fold encoder regression
+
+The first run of the new probe reported encode at **139–164 ms** rather than the
+~17 ms recorded here, on *both* backends. That was not the new code. The local
+Windows build had no NASM on `PATH`, and `openh264-sys2` reports that in its
+build log and carries on:
+
+```text
+Failed to compile NASM files, not using any assembly.
+```
+
+OpenH264's hand-written SIMD kernels were silently dropped and the pure-C
+fallback used instead, which is roughly **10x slower**. The original baseline was
+built on the Linux builder, where NASM 3.02 is present, so it was unaffected.
+
+Installing NASM 3.02 locally (matching the Linux builder exactly) and rebuilding
+reproduced the recorded baseline to within noise — `xcap` capture 32.6 ms vs
+33.3 ms, encode 17.2 ms vs 16.6 ms — which is also a useful cross-check that the
+two builders agree.
+
+Two lessons worth keeping:
+
+- A missing build tool here degrades performance **silently**. There is no error,
+  only a log line nobody reads. Any machine that benchmarks this project needs
+  NASM on `PATH`, and `E:\devtools\cargo-msvc.cmd` now fails loudly without it.
+- Always reproduce the baseline before trusting a comparison against it.
 
 ## Caveats
 
-- Multi-monitor is enumerated but only the primary was exercised end to end.
-- The primary monitor reports as `Unknown Monitor 65639`; `xcap` could not
-  resolve a friendly name for it. Cosmetic, but the Station UI should fall back
-  gracefully rather than showing that string to users.
-- Timings are from one machine; treat them as that machine's baseline.
+- Multi-monitor is enumerated by both backends but only the primary was exercised
+  end to end.
+- Monitor ids differ between backends by design: `xcap` exposes Windows monitor
+  handles (65639, 131073) while `DxgiCapturer` exposes the one-based display
+  number from `\\.\DISPLAYn` (1, 2). The latter is stable for a given display
+  configuration and readable in logs. A persisted monitor selection is therefore
+  backend-specific.
+- `DxgiCapturer` returned an empty friendly name for the primary monitor, where
+  `xcap` returned the placeholder `Unknown Monitor 65639`. Neither is useful; the
+  Station UI needs its own fallback label.
+- The test machine is an i7-1165G7 (15 W, 4 cores) that was running at **1201 MHz
+  against a 2803 MHz nominal** clock throughout, i.e. power-limited. Absolute
+  figures are pessimistic; the ratio between backends is the durable result.
+- A delta frame over a near-static screen encoded to **0 bytes**. That is correct
+  — nothing changed enough to code — but the transport must treat an empty
+  bitstream as "send nothing" rather than framing an empty packet.

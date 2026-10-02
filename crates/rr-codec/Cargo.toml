@@ -19,9 +19,13 @@ tracing = "0.1"
 
 [features]
 default = []
-# Enables the `capture_probe` example to grab the real screen. Off by default so
-# headless CI builds this crate without pulling in xcap or needing a display.
+# Lets the `capture_probe` example grab the real screen with the portable xcap
+# backend. Off by default so headless CI builds this crate without pulling in
+# xcap or needing a display.
 real-capture = ["rr-capture/screen-capture"]
+# Same, for the low-latency Windows DXGI Desktop Duplication backend. Enabling
+# both makes the probe run and compare them side by side.
+dxgi-capture = ["rr-capture/dxgi-capture"]
 
 [lints]
 workspace = true

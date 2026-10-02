@@ -10,7 +10,7 @@
     reason = "tests encode frames purely to advance encoder state and assert on later output"
 )]
 
-use rr_capture::{ScreenCapturer, SyntheticCapturer};
+use rr_capture::{PixelFormat, ScreenCapturer, SyntheticCapturer};
 
 use super::*;
 
@@ -231,4 +231,92 @@ fn keyframes_are_larger_than_delta_frames() {
         idr.data.len(),
         delta.data.len()
     );
+}
+
+/// Rewrite a frame's pixels from RGBA to BGRA, keeping everything else.
+///
+/// Used to prove the two encoder paths agree. If the BGRA path forgot to swap
+/// channels, the decoded image would come back with red and blue exchanged.
+fn as_bgra(frame: &rr_capture::Frame) -> rr_capture::Frame {
+    assert_eq!(frame.format, PixelFormat::Rgba8, "source must be RGBA");
+    let mut data = frame.data.clone();
+    // Fixed-size chunks let the compiler see the length, so swapping R and B is
+    // a bounds-check-free pair of moves.
+    for px in data.as_chunks_mut::<4>().0 {
+        px.swap(0, 2);
+    }
+    rr_capture::Frame {
+        data,
+        format: PixelFormat::Bgra8,
+        ..frame.clone()
+    }
+}
+
+#[test]
+fn bgra_frames_encode() {
+    // The DXGI backend hands over BGRA, the desktop's native order. If this
+    // path is missing, Windows capture cannot be encoded at all.
+    let mut enc = encoder();
+    let mut cap = SyntheticCapturer::new(W, H);
+    let frame = as_bgra(&cap.grab().unwrap());
+    assert_eq!(frame.format, PixelFormat::Bgra8);
+    let encoded = enc.encode(&frame).expect("BGRA frame must encode");
+    assert!(encoded.is_keyframe);
+    assert!(!encoded.data.is_empty());
+}
+
+#[test]
+fn bgra_and_rgba_decode_to_the_same_picture() {
+    // The real risk with a second colour path is not that it fails, but that it
+    // silently swaps red and blue. Encoding the same image through both paths
+    // and comparing the decoded output is what actually catches that: a swap
+    // would show up as a large delta on the red and blue channels only.
+    let mut cap = SyntheticCapturer::new(W, H);
+    let rgba = cap.grab().unwrap();
+    let bgra = as_bgra(&rgba);
+
+    let decode_one = |frame: &rr_capture::Frame| {
+        let mut enc = encoder();
+        let mut dec = Decoder::new().expect("decoder");
+        let encoded = enc.encode(frame).expect("encode");
+        dec.decode(&encoded.data)
+            .expect("decode")
+            .expect("IDR yields a picture")
+    };
+
+    let from_rgba = decode_one(&rgba);
+    let from_bgra = decode_one(&bgra);
+
+    let mut compared = 0u32;
+    let mut worst = 0u8;
+    for y in 0..H {
+        for x in 0..W {
+            let a = from_rgba.pixel(x, y).expect("pixel");
+            let b = from_bgra.pixel(x, y).expect("pixel");
+            for ch in 0..3 {
+                worst = worst.max(a[ch].abs_diff(b[ch]));
+                compared += 1;
+            }
+        }
+    }
+    assert!(compared > 0, "test must compare some pixels");
+    // Both paths feed the same YUV conversion, so the two bitstreams should be
+    // all but identical; a channel swap would push this into the hundreds.
+    assert!(
+        worst <= 2,
+        "BGRA and RGBA paths disagree by up to {worst} per channel - \
+         channel order is probably wrong in one of them"
+    );
+}
+
+#[test]
+fn padded_bgra_frames_encode() {
+    // DXGI pads rows to the staging texture's row pitch, so the padded-stride
+    // repack has to work on the BGRA path too, not just RGBA.
+    let mut enc = encoder();
+    let mut cap = SyntheticCapturer::new(W, H).with_row_padding(32);
+    let frame = as_bgra(&cap.grab().unwrap());
+    assert_ne!(frame.stride, W as usize * 4, "test needs real padding");
+    let encoded = enc.encode(&frame).expect("padded BGRA frame must encode");
+    assert!(!encoded.data.is_empty());
 }

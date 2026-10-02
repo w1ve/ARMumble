@@ -6,25 +6,43 @@
 //! - **Testability.** [`SyntheticCapturer`] produces deterministic frames with
 //!   no display server, so the whole capture → encode → transport path is
 //!   exercised in CI on a headless machine.
-//! - **Swappable backends.** `xcap` is the portable baseline; a Windows
-//!   DXGI/`WGC` fast path is planned for the latency-optimisation phase. Callers
-//!   depend on the trait, not the backend.
+//! - **Swappable backends.** `DxgiCapturer` is the real Windows path;
+//!   `XcapCapturer` is the portable fallback. Callers depend on the trait, not
+//!   the backend.
+//!
+//! # Which backend
+//!
+//! | Backend | Feature | Per-frame cost at 1920x1200 | Use |
+//! |---|---|---|---|
+//! | `DxgiCapturer` | `dxgi-capture` | see `doc/remote-radio/P2-BASELINE.md` | Windows Station |
+//! | `XcapCapturer` | `screen-capture` | 33.6 ms | portable fallback, non-Windows |
+//! | `SyntheticCapturer` | — | none | tests, headless CI |
+//!
+//! `xcap` reads the whole framebuffer back through GDI on every call, which is
+//! both slow and indifferent to whether anything changed. DXGI Desktop
+//! Duplication blocks until the desktop actually changes and hands over a
+//! GPU-composited surface. Both are kept: `xcap` is the only option on
+//! macOS/Linux and a useful cross-check on Windows.
 //!
 //! # Frame metadata
 //!
-//! `xcap` hands back only width, height and pixel bytes. A real pipeline needs
-//! stride (rows can be padded), an explicit pixel format, and a capture
-//! timestamp for pacing and latency measurement — so [`Frame`] carries all of
-//! them rather than leaving callers to assume.
+//! A real pipeline needs stride (DXGI rows are padded to the texture's row
+//! pitch), an explicit pixel format (DXGI gives BGRA, `xcap` gives RGBA), and a
+//! capture timestamp for pacing and latency measurement — so [`Frame`] carries
+//! all of them rather than leaving callers to assume.
 
 #![forbid(unsafe_code)]
 
 use std::time::{Duration, Instant};
 
+#[cfg(all(windows, feature = "dxgi-capture"))]
+mod dxgi_backend;
 mod synthetic;
 #[cfg(feature = "screen-capture")]
 mod xcap_backend;
 
+#[cfg(all(windows, feature = "dxgi-capture"))]
+pub use dxgi_backend::{DxgiCapturer, DEFAULT_TIMEOUT_MS};
 pub use synthetic::SyntheticCapturer;
 #[cfg(feature = "screen-capture")]
 pub use xcap_backend::XcapCapturer;
@@ -41,6 +59,20 @@ pub enum CaptureError {
     /// No monitors were found at all.
     #[error("no monitors available")]
     NoMonitors,
+    /// The screen did not change within the backend's wait window, so there is
+    /// no new frame to deliver.
+    ///
+    /// **Not a failure.** Change-driven backends (DXGI Desktop Duplication)
+    /// report this for a still desktop, which is the normal and desirable case:
+    /// nothing moved, so nothing needs capturing, encoding or sending. Callers
+    /// should treat it as "no work this tick" and loop, not as an error to
+    /// surface. The `xcap` backend never produces it, because it re-reads the
+    /// whole framebuffer whether or not anything changed.
+    #[error("no new frame: the screen has not changed")]
+    NoNewFrame,
+    /// The backend produced a pixel layout with no conversion path.
+    #[error("unsupported pixel format: {0}")]
+    UnsupportedPixelFormat(String),
     /// The backend returned a buffer whose size disagrees with its geometry.
     #[error("inconsistent frame: expected at least {expected} bytes, got {actual}")]
     InconsistentFrame {
@@ -169,8 +201,25 @@ pub trait ScreenCapturer: Send {
     /// Grab the current contents of the selected monitor.
     ///
     /// # Errors
-    /// Returns a [`CaptureError`] if the grab fails.
+    /// Returns a [`CaptureError`] if the grab fails, or
+    /// [`CaptureError::NoNewFrame`] if the backend is change-driven and nothing
+    /// has changed.
     fn grab(&mut self) -> Result<Frame>;
+
+    /// How much of the last [`ScreenCapturer::grab`] was spent *waiting* for the
+    /// screen to change, rather than doing work.
+    ///
+    /// Change-driven backends block until the desktop moves, so timing `grab`
+    /// with a stopwatch on a quiet screen measures how still the screen was, not
+    /// what the capturer costs. Subtracting this leaves the part that scales
+    /// with resolution and actually caps the frame rate — which is the number
+    /// worth comparing between backends and worth optimising.
+    ///
+    /// Returns `None` for backends that never wait, where the whole `grab` is
+    /// work.
+    fn last_wait(&self) -> Option<Duration> {
+        None
+    }
 }
 
 #[cfg(test)]

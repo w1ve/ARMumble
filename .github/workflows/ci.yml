@@ -116,6 +116,40 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # The real capture backends are feature-gated and off by default, so the
+      # pass above never compiles them and they would rot unnoticed. Windows
+      # only: DXGI Desktop Duplication exists nowhere else, and xcap needs a
+      # display server the Linux runner does not have.
+      - name: Clippy (capture backends, Windows only)
+        if: runner.os == 'Windows'
+        run: >-
+          cargo clippy
+          --package rr-capture --package rr-codec --all-targets
+          --features rr-capture/screen-capture,rr-capture/dxgi-capture,rr-codec/real-capture,rr-codec/dxgi-capture
+          -- -D warnings
+
+      # openh264 assembles its SIMD kernels with nasm, and when nasm is missing
+      # it *silently* falls back to pure C. Measured cost of that fallback:
+      # encoding 1920x1200 went from ~17 ms to ~140 ms per frame, with no error
+      # anywhere except one line in a build log nobody reads. Assert the line is
+      # absent, so a broken nasm install fails the build instead of shipping a
+      # 10x slower encoder.
+      - name: Verify OpenH264 built its assembly kernels
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          logs=(target/debug/build/openh264-sys2-*/output)
+          if [ ${#logs[@]} -eq 0 ]; then
+            echo "::error::No openh264-sys2 build log found; cannot verify assembly was built."
+            exit 1
+          fi
+          if grep -q "Failed to compile NASM files" "${logs[@]}"; then
+            echo "::error::openh264 fell back to pure C - nasm is missing or failing. Encoding would be ~10x slower."
+            exit 1
+          fi
+          echo "openh264 built with assembly kernels."
+
       - name: Rust unit tests (mumble-protocol)
         run: cargo test --package mumble-protocol --features opus-codec --lib
 

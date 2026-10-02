@@ -3,7 +3,7 @@
 use openh264::encoder::{
     Encoder as OpenH264Encoder, EncoderConfig, RateControlMode, UsageType,
 };
-use openh264::formats::{RgbaSliceU8, YUVBuffer};
+use openh264::formats::{BgraSliceU8, RgbaSliceU8, YUVBuffer};
 use openh264::OpenH264API;
 use rr_capture::{Frame, PixelFormat};
 use tracing::debug;
@@ -141,14 +141,9 @@ impl Encoder {
                 reason: "frame size does not match encoder configuration",
             });
         }
-        if frame.format != PixelFormat::Rgba8 {
-            // BGRA has its own OpenH264 source type; wire it up when a backend
-            // that produces BGRA (e.g. the planned DXGI path) lands.
-            return Err(CodecError::UnsupportedFormat(frame.format));
-        }
-
-        // `Frame` rows may be padded, but the RGBA source expects tightly
-        // packed rows, so repack when the stride is not exactly width * 4.
+        // `Frame` rows may be padded — DXGI pads to the staging texture's row
+        // pitch — but the OpenH264 sources expect tightly packed rows, so
+        // repack when the stride is not exactly width * 4.
         let packed_len = self.width as usize * 4 * self.height as usize;
         let packed: Vec<u8> = if frame.stride == self.width as usize * 4 {
             frame.data.get(..packed_len).unwrap_or(&frame.data).to_vec()
@@ -165,8 +160,18 @@ impl Encoder {
             buf
         };
 
-        let source = RgbaSliceU8::new(&packed, (self.width as usize, self.height as usize));
-        self.yuv.read_rgba8(source);
+        // Convert straight from the capture's native channel order. Swizzling
+        // BGRA to RGBA ourselves first would be a second full-frame pass for
+        // nothing: OpenH264 reads either order at the same cost.
+        let dims = (self.width as usize, self.height as usize);
+        match frame.format {
+            PixelFormat::Rgba8 => {
+                self.yuv.read_rgba8(RgbaSliceU8::new(&packed, dims));
+            }
+            PixelFormat::Bgra8 => {
+                self.yuv.read_bgra8(BgraSliceU8::new(&packed, dims));
+            }
+        }
 
         let want_keyframe = self.force_keyframe || self.first_frame;
         if want_keyframe {

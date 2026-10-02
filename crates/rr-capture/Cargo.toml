@@ -2,7 +2,7 @@
 name = "rr-capture"
 version = "0.1.0"
 edition = "2021"
-description = "RemoteRadio screen capture: a backend-agnostic capturer trait, a deterministic synthetic source for tests, and an xcap-backed real screen capture backend."
+description = "RemoteRadio screen capture: a backend-agnostic capturer trait, a deterministic synthetic source for tests, a portable xcap backend, and a low-latency Windows DXGI Desktop Duplication backend."
 license = "MIT"
 
 [dependencies]
@@ -15,10 +15,19 @@ tracing = { version = "0.1", optional = true }
 # captures) can build and test this crate without a display server.
 xcap = { version = "0.9.8", optional = true }
 
+# The low-latency Windows backend. Target-gated because DXGI Desktop
+# Duplication has no meaning elsewhere; `cargo` still defines the implicit
+# `windows-capture` feature on every target, so `dxgi-capture` resolves on
+# Linux CI (the module itself compiles to nothing there).
+[target.'cfg(windows)'.dependencies]
+windows-capture = { version = "2.0.1", optional = true }
+
 [features]
 default = []
 # Enable the xcap-backed real screen capture backend.
 screen-capture = ["xcap", "tracing"]
+# Enable the DXGI Desktop Duplication backend (Windows only).
+dxgi-capture = ["windows-capture", "tracing"]
 
 [lints]
 workspace = true

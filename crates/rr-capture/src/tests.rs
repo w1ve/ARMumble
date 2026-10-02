@@ -124,3 +124,38 @@ fn pixel_format_bytes_per_pixel() {
     assert_eq!(PixelFormat::Rgba8.bytes_per_pixel(), 4);
     assert_eq!(PixelFormat::Bgra8.bytes_per_pixel(), 4);
 }
+
+#[test]
+fn no_new_frame_is_its_own_case_and_says_why() {
+    // Callers must be able to distinguish "the screen is still" from a real
+    // failure, because the first is the normal state of a remote desktop and
+    // must not be logged or surfaced as an error.
+    let err = CaptureError::NoNewFrame;
+    assert!(matches!(err, CaptureError::NoNewFrame));
+    let text = err.to_string();
+    assert!(
+        text.contains("not changed"),
+        "message should explain the screen was still, got: {text}"
+    );
+}
+
+#[test]
+fn unsupported_pixel_format_names_the_format() {
+    // A bare "unsupported format" error sends the reader to the source; naming
+    // the format means the log line is the whole diagnosis.
+    let err = CaptureError::UnsupportedPixelFormat("DXGI_FORMAT_R16G16B16A16_FLOAT".to_owned());
+    assert!(err.to_string().contains("DXGI_FORMAT_R16G16B16A16_FLOAT"));
+}
+
+#[test]
+fn backends_that_never_wait_report_no_wait() {
+    // The default keeps every existing backend honest: only a backend that
+    // actually blocks for a change should claim a wait, and a caller
+    // subtracting `last_wait` must not accidentally subtract real work.
+    let mut cap = SyntheticCapturer::new(8, 8);
+    let _ = cap.grab().unwrap();
+    assert!(
+        cap.last_wait().is_none(),
+        "a backend that always does full work must report no wait"
+    );
+}

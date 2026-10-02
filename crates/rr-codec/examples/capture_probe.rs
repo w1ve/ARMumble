@@ -5,21 +5,39 @@
 //! a real compositor and actual monitor geometry. This example is the bridge —
 //! run it on the machine that will act as the Station.
 //!
-//! It reports, in order:
-//!   1. every monitor `xcap` can enumerate (id, name, geometry, primary flag),
+//! For each capture backend compiled in, it reports:
+//!   1. every monitor the backend can enumerate (id, name, geometry, primary),
 //!   2. a real capture from the primary monitor, with timing,
 //!   3. that the frame is self-consistent and not uniformly blank,
 //!   4. an H.264 encode of that frame (IDR, then a delta),
 //!   5. a decode back to RGBA at the original geometry,
-//!   6. a sustained capture→encode loop reporting per-stage latency, which is
-//!      the baseline the Windows fast path (`DXGI`/`WGC`) must beat later.
+//!   6. a sustained capture→encode loop reporting per-stage latency.
+//!
+//! With both backends enabled it finishes with a side-by-side comparison, which
+//! is the evidence for choosing one on Windows.
 //!
 //! Run with:
 //! ```text
-//! cargo run -p rr-codec --example capture_probe --features rr-capture/screen-capture
+//! cargo run --release -p rr-codec --example capture_probe --features real-capture,dxgi-capture
 //! ```
 //!
 //! Exits non-zero on failure so it can gate a release check.
+//!
+//! # Reading the numbers
+//!
+//! `xcap` re-reads the whole framebuffer on every call, so each call does the
+//! same work and its timing is simply "cost per frame".
+//!
+//! DXGI Desktop Duplication only hands over a frame when the desktop actually
+//! changed, so a stopwatch around `grab` would mostly measure *how still the
+//! screen was*, not what a frame costs us. To keep the two comparable, this
+//! probe subtracts [`ScreenCapturer::last_wait`] — the time the backend spent
+//! blocked waiting for a change — from each timing. What is left is the work
+//! that scales with resolution and caps the frame rate, which is the number
+//! worth comparing. `xcap` reports no wait, so for it the two are the same.
+//!
+//! The wait itself is reported separately, and it is a feature rather than a
+//! loss: a still screen costs the Station nothing.
 
 // A probe binary legitimately reports to stdout and bails out on error.
 #![allow(
@@ -36,242 +54,473 @@
     reason = "example uses a subset of the crate's dependencies"
 )]
 
-// These are only reachable when a real capture backend is compiled in.
-#[cfg(feature = "real-capture")]
-use std::time::{Duration, Instant};
+/// Whether the portable `xcap` backend is available.
+const HAS_XCAP: bool = cfg!(feature = "real-capture");
 
-#[cfg(feature = "real-capture")]
-use rr_capture::{Frame, ScreenCapturer};
-#[cfg(feature = "real-capture")]
-use rr_codec::{Decoder, Encoder, EncoderSettings};
+/// Whether the Windows DXGI backend is available.
+const HAS_DXGI: bool = cfg!(all(windows, feature = "dxgi-capture"));
 
-/// Frames to run in the sustained-throughput stage.
-#[cfg(feature = "real-capture")]
-const LOOP_FRAMES: usize = 60;
+#[cfg(any(feature = "real-capture", all(windows, feature = "dxgi-capture")))]
+mod probe {
+    use std::error::Error;
+    use std::time::{Duration, Instant};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("RemoteRadio capture probe");
-    println!("=========================\n");
-    run()
-}
+    use rr_capture::{CaptureError, Frame, MonitorInfo, ScreenCapturer};
+    use rr_codec::{Decoder, Encoder, EncoderSettings};
 
-/// Without the `real-capture` feature there is no backend to probe, so explain
-/// how to enable it rather than silently reporting success.
-#[cfg(not(feature = "real-capture"))]
-fn run() -> Result<(), Box<dyn std::error::Error>> {
-    println!("This probe needs real screen capture enabled. Re-run with:");
-    println!("  cargo run -p rr-codec --example capture_probe --features real-capture");
-    Err("real-capture feature not enabled".into())
-}
+    /// Frames to collect in the sustained-throughput stage.
+    const LOOP_FRAMES: usize = 60;
 
-#[cfg(feature = "real-capture")]
-fn run() -> Result<(), Box<dyn std::error::Error>> {
-    use rr_capture::XcapCapturer;
+    /// Wall-clock cap on the sustained stage, so a completely still desktop
+    /// cannot make a change-driven backend spin forever.
+    const LOOP_DEADLINE: Duration = Duration::from_secs(10);
 
-    // ---- 1. Monitor enumeration -------------------------------------
-    println!("[1] Enumerating monitors");
-    let mut capturer = XcapCapturer::new();
-    let monitors = capturer.monitors()?;
-    if monitors.is_empty() {
-        return Err("no monitors reported".into());
+    /// How long a one-shot stage waits for the desktop to move.
+    ///
+    /// Generous on purpose: an idle machine with a static wallpaper genuinely
+    /// produces no frames, and that is the backend working correctly, not a
+    /// failure to diagnose.
+    const ONESHOT_DEADLINE: Duration = Duration::from_secs(20);
+
+    /// What one backend achieved, for the final comparison.
+    pub(crate) struct Report {
+        /// Backend label.
+        pub(crate) label: &'static str,
+        /// Mean per-frame capture work, excluding time spent waiting for the
+        /// screen to change.
+        pub(crate) capture_mean: Duration,
+        /// Worst such measurement.
+        pub(crate) capture_worst: Duration,
+        /// Mean time spent blocked waiting for a change. Zero for `xcap`.
+        pub(crate) wait_mean: Duration,
+        /// Mean encode time.
+        pub(crate) encode_mean: Duration,
+        /// Frames actually measured.
+        pub(crate) frames: usize,
+        /// Calls that found no change (DXGI only; always 0 for `xcap`).
+        pub(crate) no_change: usize,
+        /// Encoded bits per second over the measured frames.
+        pub(crate) mbps: f64,
     }
-    for m in &monitors {
-        println!(
-            "    id={:<10} {:<28} {:>5}x{:<5} primary={}",
-            m.id, m.name, m.width, m.height, m.primary
-        );
+
+    impl Report {
+        /// Frames per second this backend could sustain, derived from its own
+        /// per-frame cost rather than from how often the test screen happened to
+        /// change.
+        pub(crate) fn sustainable_fps(&self) -> f64 {
+            let per_frame = (self.capture_mean + self.encode_mean).as_secs_f64();
+            if per_frame > 0.0 {
+                1.0 / per_frame
+            } else {
+                f64::INFINITY
+            }
+        }
     }
-    let target = monitors
-        .iter()
-        .find(|m| m.primary)
-        .unwrap_or(&monitors[0])
-        .clone();
-    println!("    -> using monitor id={} ({})\n", target.id, target.name);
-    capturer.select_monitor(target.id)?;
 
-    // ---- 2. One real capture ----------------------------------------
-    println!("[2] Capturing one frame");
-    let t0 = Instant::now();
-    let frame = capturer.grab()?;
-    let grab_time = t0.elapsed();
-    println!(
-        "    {}x{} stride={} format={:?} bytes={} in {:?}",
-        frame.width,
-        frame.height,
-        frame.stride,
-        frame.format,
-        frame.data.len(),
-        grab_time
-    );
+    /// Grab, treating "nothing changed" as something to wait through rather
+    /// than an error.
+    ///
+    /// Used for the one-shot stages, where the probe needs *a* frame and does
+    /// not care how long the desktop took to move.
+    fn grab_blocking(capturer: &mut dyn ScreenCapturer) -> Result<Frame, Box<dyn Error>> {
+        let start = Instant::now();
+        loop {
+            match capturer.grab() {
+                Ok(frame) => return Ok(frame),
+                Err(CaptureError::NoNewFrame) => {
+                    if start.elapsed() > ONESHOT_DEADLINE {
+                        return Err("no frame arrived: the screen never changed".into());
+                    }
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+    }
 
-    // ---- 3. Sanity-check the pixels ---------------------------------
-    println!("\n[3] Validating the frame");
-    frame.validate()?;
-    println!("    geometry/buffer consistent");
-    if frame.stride != frame.width as usize * frame.format.bytes_per_pixel() {
+    /// Stage 1: enumerate monitors and select the primary.
+    fn stage_monitors(capturer: &mut dyn ScreenCapturer) -> Result<MonitorInfo, Box<dyn Error>> {
+        println!("[1] Enumerating monitors");
+        let monitors = capturer.monitors()?;
+        if monitors.is_empty() {
+            return Err("no monitors reported".into());
+        }
+        for m in &monitors {
+            println!(
+                "    id={:<10} {:<28} {:>5}x{:<5} primary={}",
+                m.id, m.name, m.width, m.height, m.primary
+            );
+        }
+        let target = monitors
+            .iter()
+            .find(|m| m.primary)
+            .unwrap_or(&monitors[0])
+            .clone();
+        println!("    -> using monitor id={} ({})\n", target.id, target.name);
+        capturer.select_monitor(target.id)?;
+        Ok(target)
+    }
+
+    /// Stages 2 and 3: one capture, then prove it is a real picture.
+    fn stage_capture(capturer: &mut dyn ScreenCapturer) -> Result<Frame, Box<dyn Error>> {
+        println!("[2] Capturing one frame");
+        let t0 = Instant::now();
+        let frame = grab_blocking(capturer)?;
         println!(
-            "    note: rows are padded ({} vs {} packed) - stride handling exercised",
+            "    {}x{} stride={} format={:?} bytes={} seq={} in {:?}",
+            frame.width,
+            frame.height,
             frame.stride,
-            frame.width as usize * frame.format.bytes_per_pixel()
+            frame.format,
+            frame.data.len(),
+            frame.sequence,
+            t0.elapsed()
+        );
+
+        println!("\n[3] Validating the frame");
+        frame.validate()?;
+        println!("    geometry/buffer consistent");
+        let packed = frame.width as usize * frame.format.bytes_per_pixel();
+        if frame.stride != packed {
+            println!(
+                "    note: rows are padded ({} vs {packed} packed) - stride handling exercised",
+                frame.stride
+            );
+        }
+        // A capture that is a single flat colour usually means a permissions
+        // problem or a blank/protected surface rather than a working grab.
+        if is_uniform(&frame) {
+            return Err("captured frame is a single uniform colour - capture likely blocked".into());
+        }
+        println!("    frame contains varied pixel data (not blank)");
+        Ok(frame)
+    }
+
+    /// Stages 4 and 5: encode an IDR and a delta, then decode the IDR back.
+    fn stage_codec(
+        capturer: &mut dyn ScreenCapturer,
+        frame: &Frame,
+    ) -> Result<(Encoder, u32, u32), Box<dyn Error>> {
+        // H.264 4:2:0 needs even dimensions; real monitors can be odd.
+        let (enc_w, enc_h) = (frame.width & !1, frame.height & !1);
+        println!("\n[4] Encoding H.264 at {enc_w}x{enc_h} from {:?}", frame.format);
+        let mut encoder = Encoder::new(enc_w, enc_h, EncoderSettings::default())?;
+
+        let t1 = Instant::now();
+        let idr = encoder.encode(&crop_to(frame, enc_w, enc_h))?;
+        println!(
+            "    IDR:   {} bytes keyframe={} in {:?}",
+            idr.data.len(),
+            idr.is_keyframe,
+            t1.elapsed()
+        );
+        if !idr.is_keyframe {
+            return Err("first encoded frame was not a keyframe".into());
+        }
+
+        let next = grab_blocking(capturer)?;
+        let t2 = Instant::now();
+        let delta = encoder.encode(&crop_to(&next, enc_w, enc_h))?;
+        println!(
+            "    delta: {} bytes keyframe={} in {:?}",
+            delta.data.len(),
+            delta.is_keyframe,
+            t2.elapsed()
+        );
+
+        println!("\n[5] Decoding");
+        let mut decoder = Decoder::new()?;
+        let t3 = Instant::now();
+        let picture = decoder
+            .decode(&idr.data)?
+            .ok_or("IDR produced no picture")?;
+        println!(
+            "    {}x{} rgba={} bytes in {:?}",
+            picture.width,
+            picture.height,
+            picture.rgba.len(),
+            t3.elapsed()
+        );
+        if (picture.width, picture.height) != (enc_w, enc_h) {
+            return Err(format!(
+                "decoded geometry {}x{} does not match encoded {enc_w}x{enc_h}",
+                picture.width, picture.height
+            )
+            .into());
+        }
+        Ok((encoder, enc_w, enc_h))
+    }
+
+    /// Stage 6: sustained capture + encode, which produces the headline numbers.
+    fn stage_sustained(
+        label: &'static str,
+        capturer: &mut dyn ScreenCapturer,
+        encoder: &mut Encoder,
+        enc_w: u32,
+        enc_h: u32,
+    ) -> Result<Report, Box<dyn Error>> {
+        println!("\n[6] Sustained capture+encode, up to {LOOP_FRAMES} frames");
+        let mut capture_total = Duration::ZERO;
+        let mut encode_total = Duration::ZERO;
+        let mut bytes_total = 0usize;
+        let mut capture_worst = Duration::ZERO;
+        let mut encode_worst = Duration::ZERO;
+        let mut frames = 0usize;
+        let mut no_change = 0usize;
+
+        let mut wait_total = Duration::ZERO;
+        let loop_start = Instant::now();
+        while frames < LOOP_FRAMES && loop_start.elapsed() < LOOP_DEADLINE {
+            let a = Instant::now();
+            let f = match capturer.grab() {
+                Ok(f) => f,
+                // Nothing moved on screen. Not a frame, not a failure, and not
+                // something to charge to the backend's per-frame cost.
+                Err(CaptureError::NoNewFrame) => {
+                    no_change += 1;
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            };
+            // Charge the backend only for work, not for the user sitting still.
+            let wall = a.elapsed();
+            let wait = capturer.last_wait().unwrap_or(Duration::ZERO).min(wall);
+            let g = wall - wait;
+            wait_total += wait;
+
+            let b = Instant::now();
+            let e = encoder.encode(&crop_to(&f, enc_w, enc_h))?;
+            let enc = b.elapsed();
+
+            capture_total += g;
+            encode_total += enc;
+            bytes_total += e.data.len();
+            capture_worst = capture_worst.max(g);
+            encode_worst = encode_worst.max(enc);
+            frames += 1;
+        }
+        let wall = loop_start.elapsed();
+
+        if frames == 0 {
+            return Err("no frames captured in the sustained stage".into());
+        }
+        let n = u32::try_from(frames).unwrap_or(1);
+        let report = Report {
+            label,
+            capture_mean: capture_total / n,
+            capture_worst,
+            wait_mean: wait_total / n,
+            encode_mean: encode_total / n,
+            frames,
+            no_change,
+            mbps: (bytes_total as f64 * 8.0) / wall.as_secs_f64() / 1_000_000.0,
+        };
+
+        println!("    frames measured {frames}, no-change calls {no_change}, wall {wall:?}");
+        println!(
+            "    capture work avg {:?}  worst {capture_worst:?}",
+            report.capture_mean
+        );
+        println!(
+            "    waiting for change avg {:?} (not charged to capture)",
+            report.wait_mean
+        );
+        println!(
+            "    encode  avg {:?}  worst {encode_worst:?}",
+            report.encode_mean
+        );
+        println!("    encoded {:.2} Mbit/s", report.mbps);
+        println!(
+            "    capture+encode avg {:?} -> sustainable {:.1} fps (33.3ms = 30 fps)",
+            report.capture_mean + report.encode_mean,
+            report.sustainable_fps()
+        );
+        Ok(report)
+    }
+
+    /// Run the full probe against one backend.
+    ///
+    /// # Errors
+    /// Returns an error describing the first stage that failed.
+    pub(crate) fn run_backend(
+        label: &'static str,
+        capturer: &mut dyn ScreenCapturer,
+    ) -> Result<Report, Box<dyn Error>> {
+        println!("================================================");
+        println!("Backend: {label}");
+        println!("================================================\n");
+
+        let _target = stage_monitors(capturer)?;
+        let frame = stage_capture(capturer)?;
+        let (mut encoder, enc_w, enc_h) = stage_codec(capturer, &frame)?;
+        let report = stage_sustained(label, capturer, &mut encoder, enc_w, enc_h)?;
+
+        println!("\nRESULT: PASS - real capture, encode and decode all work with {label}.\n");
+        Ok(report)
+    }
+
+    /// Print the side-by-side table and the headline speedup.
+    pub(crate) fn print_comparison(reports: &[Report]) {
+        let (Some(new), Some(old)) = (reports.first(), reports.last()) else {
+            return;
+        };
+        println!("================================================");
+        println!("Comparison");
+        println!("================================================");
+        println!(
+            "{:<26} {:>7} {:>13} {:>12} {:>11} {:>8}",
+            "backend", "frames", "capture work", "capture max", "encode avg", "fps"
+        );
+        for r in reports {
+            println!(
+                "{:<26} {:>7} {:>13} {:>12} {:>11} {:>8.1}",
+                r.label,
+                r.frames,
+                format!("{:.2?}", r.capture_mean),
+                format!("{:.2?}", r.capture_worst),
+                format!("{:.2?}", r.encode_mean),
+                r.sustainable_fps()
+            );
+        }
+
+        // Callers push DXGI first, so `new` is the candidate and `old` is the
+        // baseline it has to beat.
+        let a = new.capture_mean.as_secs_f64();
+        let b = old.capture_mean.as_secs_f64();
+        if a > 0.0 {
+            println!(
+                "\n{} captures {:.1}x faster than {} ({:.2?} vs {:.2?} per frame).",
+                new.label,
+                b / a,
+                old.label,
+                new.capture_mean,
+                old.capture_mean
+            );
+        }
+        println!(
+            "{} skipped {} calls where the screen had not changed; {} always pays full price.",
+            new.label, new.no_change, old.label
         );
     }
-    // A capture that is a single flat colour usually means a permissions
-    // problem or a blank/protected surface rather than a working grab.
-    if is_uniform(&frame) {
-        return Err("captured frame is a single uniform colour - capture likely blocked".into());
-    }
-    println!("    frame contains varied pixel data (not blank)");
 
-    // ---- 4. Encode --------------------------------------------------
-    // H.264 4:2:0 needs even dimensions; real monitors can be odd.
-    let (enc_w, enc_h) = (frame.width & !1, frame.height & !1);
-    println!("\n[4] Encoding H.264 at {enc_w}x{enc_h}");
-    let mut encoder = Encoder::new(enc_w, enc_h, EncoderSettings::default())?;
-    let cropped = crop_to(&frame, enc_w, enc_h);
-
-    let t1 = Instant::now();
-    let idr = encoder.encode(&cropped)?;
-    let encode_idr = t1.elapsed();
-    println!(
-        "    IDR:   {} bytes keyframe={} in {:?}",
-        idr.data.len(),
-        idr.is_keyframe,
-        encode_idr
-    );
-    if !idr.is_keyframe {
-        return Err("first encoded frame was not a keyframe".into());
-    }
-
-    let next = capturer.grab()?;
-    let t2 = Instant::now();
-    let delta = encoder.encode(&crop_to(&next, enc_w, enc_h))?;
-    let encode_delta = t2.elapsed();
-    println!(
-        "    delta: {} bytes keyframe={} in {:?}",
-        delta.data.len(),
-        delta.is_keyframe,
-        encode_delta
-    );
-
-    // ---- 5. Decode --------------------------------------------------
-    println!("\n[5] Decoding");
-    let mut decoder = Decoder::new()?;
-    let t3 = Instant::now();
-    let picture = decoder
-        .decode(&idr.data)?
-        .ok_or("IDR produced no picture")?;
-    let decode_time = t3.elapsed();
-    println!(
-        "    {}x{} rgba={} bytes in {:?}",
-        picture.width,
-        picture.height,
-        picture.rgba.len(),
-        decode_time
-    );
-    if (picture.width, picture.height) != (enc_w, enc_h) {
-        return Err(format!(
-            "decoded geometry {}x{} does not match encoded {enc_w}x{enc_h}",
-            picture.width, picture.height
-        )
-        .into());
-    }
-
-    // ---- 6. Sustained loop (the P7 baseline) ------------------------
-    println!("\n[6] Sustained capture+encode, {LOOP_FRAMES} frames");
-    let mut grab_total = Duration::ZERO;
-    let mut encode_total = Duration::ZERO;
-    let mut bytes_total = 0usize;
-    let mut grab_worst = Duration::ZERO;
-    let mut encode_worst = Duration::ZERO;
-
-    let loop_start = Instant::now();
-    for _ in 0..LOOP_FRAMES {
-        let a = Instant::now();
-        let f = capturer.grab()?;
-        let g = a.elapsed();
-
-        let b = Instant::now();
-        let e = encoder.encode(&crop_to(&f, enc_w, enc_h))?;
-        let enc = b.elapsed();
-
-        grab_total += g;
-        encode_total += enc;
-        bytes_total += e.data.len();
-        grab_worst = grab_worst.max(g);
-        encode_worst = encode_worst.max(enc);
-    }
-    let wall = loop_start.elapsed();
-
-    let n = u32::try_from(LOOP_FRAMES).unwrap_or(1);
-    let fps = LOOP_FRAMES as f64 / wall.as_secs_f64();
-    let mbps = (bytes_total as f64 * 8.0) / wall.as_secs_f64() / 1_000_000.0;
-    println!("    capture avg {:?}  worst {:?}", grab_total / n, grab_worst);
-    println!(
-        "    encode  avg {:?}  worst {:?}",
-        encode_total / n,
-        encode_worst
-    );
-    println!("    throughput {fps:.1} fps, {mbps:.2} Mbit/s encoded");
-    println!(
-        "    per-frame budget at 30 fps is 33.3ms; capture+encode avg = {:?}",
-        (grab_total + encode_total) / n
-    );
-
-    println!("\nRESULT: PASS - real capture, encode and decode all work here.");
-    println!("Record the timings above as the pre-optimisation baseline (P7).");
-    Ok(())
-}
-
-/// True when every pixel is identical, which indicates a blocked or blank grab
-/// rather than a successful capture.
-#[cfg(feature = "real-capture")]
-fn is_uniform(frame: &Frame) -> bool {
-    let bpp = frame.format.bytes_per_pixel();
-    let Some(first_row) = frame.row(0) else {
-        return true;
-    };
-    let Some(first) = first_row.get(..bpp) else {
-        return true;
-    };
-    // Sample a grid rather than every pixel: enough to catch a flat surface
-    // without walking a 4K buffer.
-    for y in (0..frame.height).step_by(16) {
-        let Some(row) = frame.row(y) else { continue };
-        for x in (0..frame.width).step_by(16) {
-            let off = x as usize * bpp;
-            if let Some(px) = row.get(off..off + bpp) {
-                if px != first {
+    /// True when every pixel is identical, which indicates a blocked or blank
+    /// grab rather than a successful capture.
+    fn is_uniform(frame: &Frame) -> bool {
+        let bpp = frame.format.bytes_per_pixel();
+        let Some(first_row) = frame.row(0) else {
+            return true;
+        };
+        let Some(first) = first_row.get(..bpp) else {
+            return true;
+        };
+        // Sample a grid rather than every pixel: enough to catch a flat surface
+        // without walking a 4K buffer.
+        for y in (0..frame.height).step_by(16) {
+            let Some(row) = frame.row(y) else { continue };
+            for x in (0..frame.width).step_by(16) {
+                let off = x as usize * bpp;
+                // A pixel we cannot read is not evidence of variation, so only
+                // a readable pixel that differs settles it.
+                if row.get(off..off + bpp).is_some_and(|px| px != first) {
                     return false;
                 }
             }
         }
+        true
     }
-    true
-}
 
-/// Crop a frame to `w` x `h`, preserving stride semantics.
-///
-/// Real monitors can report odd dimensions, which H.264 4:2:0 cannot encode.
-#[cfg(feature = "real-capture")]
-fn crop_to(frame: &Frame, w: u32, h: u32) -> Frame {
-    if frame.width == w && frame.height == h {
-        return frame.clone();
-    }
-    let bpp = frame.format.bytes_per_pixel();
-    let packed = w as usize * bpp;
-    let mut data = Vec::with_capacity(packed * h as usize);
-    for y in 0..h {
-        if let Some(row) = frame.row(y) {
-            data.extend_from_slice(row.get(..packed).unwrap_or(row));
+    /// Crop a frame to `w` x `h`, preserving stride semantics.
+    ///
+    /// Real monitors can report odd dimensions, which H.264 4:2:0 cannot encode.
+    fn crop_to(frame: &Frame, w: u32, h: u32) -> Frame {
+        if frame.width == w && frame.height == h && frame.stride == w as usize * 4 {
+            return frame.clone();
+        }
+        let bpp = frame.format.bytes_per_pixel();
+        let packed = w as usize * bpp;
+        let mut data = Vec::with_capacity(packed * h as usize);
+        for y in 0..h {
+            if let Some(row) = frame.row(y) {
+                data.extend_from_slice(row.get(..packed).unwrap_or(row));
+            }
+        }
+        Frame {
+            data,
+            width: w,
+            height: h,
+            stride: packed,
+            format: frame.format,
+            captured_at: frame.captured_at,
+            sequence: frame.sequence,
         }
     }
-    Frame {
-        data,
-        width: w,
-        height: h,
-        stride: packed,
-        format: frame.format,
-        captured_at: frame.captured_at,
-        sequence: frame.sequence,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("RemoteRadio capture probe");
+    println!("=========================\n");
+    if !(HAS_XCAP || HAS_DXGI) {
+        println!("This probe needs a real capture backend. Re-run with:");
+        println!("  cargo run --release -p rr-codec --example capture_probe");
+        println!("    --features real-capture,dxgi-capture");
+        return Err("no capture backend enabled".into());
     }
+    run()
+}
+
+/// Unreachable without a backend; `main` rejects that case first.
+#[cfg(not(any(feature = "real-capture", all(windows, feature = "dxgi-capture"))))]
+fn run() -> Result<(), Box<dyn std::error::Error>> {
+    Err("no capture backend enabled".into())
+}
+
+/// Probe the DXGI backend.
+///
+/// It runs with a real acquire timeout so a still desktop makes the capture
+/// thread *sleep* rather than spin — spinning would burn a core and distort the
+/// encode timings measured in the same loop. The wait is then subtracted via
+/// `last_wait`, so blocking costs the measurement nothing.
+#[cfg(all(windows, feature = "dxgi-capture"))]
+fn probe_dxgi(reports: &mut Vec<probe::Report>) -> Result<(), Box<dyn std::error::Error>> {
+    let mut dxgi = rr_capture::DxgiCapturer::new()?;
+    reports.push(probe::run_backend("DXGI Desktop Duplication", &mut dxgi)?);
+    Ok(())
+}
+
+/// No DXGI backend compiled in, so nothing to probe.
+#[cfg(all(
+    not(all(windows, feature = "dxgi-capture")),
+    any(feature = "real-capture", all(windows, feature = "dxgi-capture"))
+))]
+fn probe_dxgi(_reports: &mut Vec<probe::Report>) -> Result<(), Box<dyn std::error::Error>> {
+    Ok(())
+}
+
+/// Probe the portable `xcap` backend.
+#[cfg(feature = "real-capture")]
+fn probe_xcap(reports: &mut Vec<probe::Report>) -> Result<(), Box<dyn std::error::Error>> {
+    let mut xcap = rr_capture::XcapCapturer::new();
+    reports.push(probe::run_backend("xcap (GDI baseline)", &mut xcap)?);
+    Ok(())
+}
+
+/// No `xcap` backend compiled in, so nothing to probe.
+#[cfg(all(
+    not(feature = "real-capture"),
+    any(feature = "real-capture", all(windows, feature = "dxgi-capture"))
+))]
+fn probe_xcap(_reports: &mut Vec<probe::Report>) -> Result<(), Box<dyn std::error::Error>> {
+    Ok(())
+}
+
+#[cfg(any(feature = "real-capture", all(windows, feature = "dxgi-capture")))]
+fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let mut reports = Vec::new();
+    // DXGI first: it is the backend the Station will actually use on Windows,
+    // and `print_comparison` reads the first entry as the candidate.
+    probe_dxgi(&mut reports)?;
+    probe_xcap(&mut reports)?;
+    if reports.len() > 1 {
+        probe::print_comparison(&reports);
+    }
+    Ok(())
 }
