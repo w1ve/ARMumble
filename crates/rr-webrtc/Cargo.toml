@@ -7,6 +7,13 @@ license = "MIT"
 
 [dependencies]
 rr-proto = { path = "../rr-proto" }
+# The Station side of the control channel: `rr-session` arbitrates control
+# among several viewers and `rr-input` turns an authorised message into a real
+# keystroke. The gate is generic over its injector, so this crate stays
+# injector-agnostic — the real `EnigoInjector` only appears in the Station app,
+# the headless tests here use `RecordingInjector`.
+rr-session = { path = "../rr-session" }
+rr-input = { path = "../rr-input" }
 
 webrtc = "0.21.0"
 # `Sample` lives in rtc-media and the RTP types (SSRC, PayloadType,
