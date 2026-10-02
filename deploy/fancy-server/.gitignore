@@ -1,0 +1,7 @@
+# Build/run artifacts produced by build-and-run.sh — never commit these.
+fancy-mumble-*.tar.gz
+build-*.log
+build-run.txt
+save.txt
+verify.txt
+fancy-mumble-data/
