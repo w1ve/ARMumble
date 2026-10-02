@@ -307,16 +307,65 @@ either runs on Intel's media engine or fails to initialise, and it ran.
    the hardware is actually in use, not infer it from being faster than the thing
    it replaced.
 
+### Verified on this machine by `rr-hwcodec`
+
+`cargo run --release -p rr-hwcodec --example list_encoders`:
+
+```text
+H.264 encoders (2 found):
+  [HARDWARE] Intel® Quick Sync Video H.264 Encoder MFT
+  [software] H264 Encoder MFT
+Hardware H.264 available: true
+```
+
+So the Station can determine at startup whether to use hardware, rather than
+guessing from the CPU model. Note that drivers register the same encoder more
+than once — Intel's appears twice on this single-GPU laptop — so enumeration
+deduplicates by name.
+
+### Colour conversion is not free, and it changes the design
+
+`BGRA → NV12`, which is required if the chosen MFT will not accept BGRA:
+
+| Resolution | Best of 5 | Per megapixel |
+|---|---|---|
+| 1920x1200 | 2.8 ms | 1.22 ms/Mpx |
+| 3840x2160 | **11.4 ms** | 1.37 ms/Mpx |
+
+At 4K that is 11.4 ms of a 33.3 ms budget *before encoding*, on top of 16–18 ms
+of capture. Hardware encode fed from a CPU buffer would therefore be roughly
+16 + 11 + 12 = **39 ms, outside the budget** — the hardware encoder would be fast
+enough and we would still miss 30 fps, on colour conversion and a readback.
+
+Two consequences for the design, both now evidence-backed rather than assumed:
+
+1. **Negotiate BGRA input first.** An MFT that accepts BGRA converts on the GPU
+   as part of encoding, which costs us nothing. `InputLayout` records which case
+   we got, so the cost is visible rather than silently absorbed.
+2. **Zero-copy matters more than it appeared.** Keeping the frame on the GPU
+   removes the readback *and* the conversion together. At 1920x1200 the CPU path
+   is comfortable either way; at 4K it is the difference between making the budget
+   and missing it.
+
 ### What reaching it from our own code requires
 
 - The **Media Foundation H.264 MFT** driven directly, with a D3D device manager,
   producing an H.264 elementary stream. One API covers Quick Sync, NVENC and
   AMD VCN, which is what makes it the right choice for varied hardware.
-- `unsafe` COM FFI that we own. The workspace sets `unsafe_code = deny`, so this
-  needs a deliberate, narrowly scoped exception — a project-convention decision,
-  not an implementation detail.
-- Capability detection and an `OpenH264` fallback, for machines with no hardware
-  encoder (VMs, older hardware).
+- ✅ `unsafe` COM FFI that we own, confined to **`rr-hwcodec`** — the only crate
+  in the workspace permitted `unsafe`, with the rationale and the rules that keep
+  the exception contained in its `lib.rs`.
+- ✅ Capability detection (done, verified above). An `OpenH264` fallback for
+  machines with no hardware encoder (VMs, older hardware) still needs wiring in
+  `rr-codec`, which owns the choice.
+- ⚠️ **Hardware H.264 MFTs are usually asynchronous.** They need the event-driven
+  Media Foundation model — `MF_TRANSFORM_ASYNC_UNLOCK`, then
+  `METransformNeedInput` / `METransformHaveOutput` events — not the much simpler
+  synchronous `ProcessInput`/`ProcessOutput` loop. An async MFT returns
+  `MF_E_TRANSFORM_ASYNC_LOCKED` until unlocked, so a synchronous implementation
+  would work on whichever machines happen to expose a sync MFT and fail on the
+  rest. This is the main reason the encode path is not landing in the same step as
+  enumeration.
 - Ideally **zero-copy**: feed the DXGI texture straight to the encoder so the
   frame never leaves the GPU, which also removes the 16–18 ms capture readback at
   4K. That changes the capture/codec boundary, since `ScreenCapturer::grab`

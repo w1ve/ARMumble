@@ -11,6 +11,12 @@ members = [
     "crates/rr-webrtc",
     "crates/rr-capture",
     "crates/rr-codec",
+    # The only rr-* crate permitted to use `unsafe`, and the only crate anywhere
+    # here that takes the exception crate-wide (Media Foundation is Win32 COM).
+    # See its lib.rs for the rationale and the rules that contain it. Note the
+    # inherited mumble-* crates do carry narrower per-item unsafe exceptions for
+    # platform FFI.
+    "crates/rr-hwcodec",
     "crates/app-client",
     "crates/app-station",
 ]

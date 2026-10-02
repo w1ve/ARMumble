@@ -5828,6 +5828,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rr-hwcodec"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.18",
+ "tracing",
+ "windows 0.62.2",
+]
+
+[[package]]
 name = "rr-proto"
 version = "0.1.0"
 dependencies = [

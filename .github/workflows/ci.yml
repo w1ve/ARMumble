@@ -170,6 +170,30 @@ jobs:
           --package rr-webrtc
           --package rr-capture
           --package rr-codec
+          --package rr-hwcodec
+
+      # rr-hwcodec is the only RemoteRadio crate allowed `unsafe`, by explicit
+      # decision (Media Foundation is Win32 COM). Guard that: if a second rr-*
+      # crate starts using it, this fails and the exception gets discussed rather
+      # than spreading quietly.
+      #
+      # Scoped to crates/rr-* on purpose. The inherited mumble-* crates carry their
+      # own narrower per-item unsafe exceptions for platform FFI (WASAPI, oboe,
+      # glib, WebView2, signal-bridge), which predate this project and are not what
+      # this check is about.
+      - name: Verify the unsafe exception stays in rr-hwcodec
+        shell: bash
+        run: |
+          set -euo pipefail
+          offenders=$(grep -rln --include=Cargo.toml --include='*.rs' \
+            -e 'allow(unsafe_code' crates/rr-* \
+            | grep -v '^crates/rr-hwcodec/' || true)
+          if [ -n "$offenders" ]; then
+            echo "::error::unsafe_code is allowed in an rr-* crate other than rr-hwcodec:"
+            echo "$offenders"
+            exit 1
+          fi
+          echo "unsafe_code remains confined to rr-hwcodec among the rr-* crates."
 
       # -- Integration tests (Linux only - Docker) ----------------
       - name: Start Mumble test server

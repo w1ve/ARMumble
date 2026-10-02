@@ -1,0 +1,26 @@
+[package]
+name = "rr-hwcodec"
+version = "0.1.0"
+edition = "2021"
+description = "RemoteRadio hardware video encoding: a safe wrapper around the Windows Media Foundation H.264 encoder, which dispatches to Intel Quick Sync, NVIDIA NVENC or AMD VCN. The only crate in the workspace permitted to use unsafe."
+license = "MIT"
+
+[dependencies]
+thiserror = "2"
+
+# Media Foundation lives behind Win32 COM, and only the Windows code logs, so both
+# of these are target-gated: off Windows this crate is a stub with no dependencies
+# beyond `thiserror`. `windows` is pinned to the same minor version that
+# `windows-capture` already pulls in, so the workspace resolves a single copy.
+[target.'cfg(windows)'.dependencies]
+tracing = "0.1"
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Media_MediaFoundation",
+    "Win32_System_Com",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi_Common",
+] }
+
+[lints]
+workspace = true
