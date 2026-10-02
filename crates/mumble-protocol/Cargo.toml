@@ -64,6 +64,14 @@ serde_bytes = { version = "0.11", optional = true }
 uuid = { version = "1", features = ["v4"], optional = true }
 libloading = { version = "0.8", optional = true }
 
+# Live-server stereo relay harness. Declared explicitly so cargo knows it needs
+# the Opus codec; without `required-features` a default-feature `--all-targets`
+# build would try to compile it and fail. It talks to an external Mumble server,
+# so it is an example rather than a test and never runs in CI.
+[[example]]
+name = "stereo_live"
+required-features = ["opus-codec"]
+
 [features]
 default = []
 opus-codec = ["opus"]
