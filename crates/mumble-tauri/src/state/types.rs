@@ -984,6 +984,31 @@ pub struct AudioDevice {
     pub is_default: bool,
 }
 
+/// How the outbound pipeline decides when to transmit.
+///
+/// This is deliberately separate from noise suppression. Suppression cleans up
+/// the audio that *is* sent; the transmit mode decides *whether* a frame is
+/// sent at all. Bundling the two — as the code used to, by hanging the voice
+/// gate off the `noise_suppression` toggle — meant turning suppression off also
+/// silently removed voice gating, which is wrong for an amateur-radio Station:
+/// it wants the raw, unprocessed signal *and* a mic that is always live.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TransmitMode {
+    /// Always transmit. No voice gate, so the mic is permanently open. This is
+    /// what a radio Station runs: the far end hears everything, continuously,
+    /// exactly as a keyed-up transmitter would.
+    Continuous,
+    /// Transmit only while the input is above the voice-activation threshold.
+    /// A noise gate drives this and is the historical default.
+    #[default]
+    VoiceActivity,
+    /// Transmit only while the push-to-talk key is held. Gating is done by
+    /// self-mute at the protocol level, not by a filter, so no voice gate is
+    /// inserted in the chain.
+    PushToTalk,
+}
+
 /// User-configurable audio settings.
 #[derive(Debug, Clone, Serialize, serde::Deserialize, PartialEq)]
 pub struct AudioSettings {
@@ -1002,7 +1027,18 @@ pub struct AudioSettings {
     /// Number of frames to hold the gate open after audio drops below threshold.
     #[serde(default = "AudioSettings::default_hold_frames")]
     pub hold_frames: u32,
+    /// When the outbound pipeline transmits: always, on voice activity, or on
+    /// push-to-talk. Absent in older saved configs, where the legacy
+    /// `push_to_talk` boolean is the source of truth; [`AudioSettings::transmit_mode`]
+    /// reconciles the two, so read transmit policy through that, not this field.
+    #[serde(default)]
+    pub transmit_mode: TransmitMode,
     /// Use push-to-talk instead of voice activation.
+    ///
+    /// Retained for backward compatibility with saved configs and the existing
+    /// self-mute PTT path. New code should prefer [`AudioSettings::transmit_mode`],
+    /// which supersedes this and adds the explicit `Continuous` mode a radio
+    /// Station needs.
     #[serde(default)]
     pub push_to_talk: bool,
     /// Global shortcut string for PTT (e.g. "Alt+T").
@@ -1076,6 +1112,24 @@ impl AudioSettings {
         }
     }
 
+    /// The effective transmit mode, reconciling the legacy `push_to_talk` flag.
+    ///
+    /// A config saved before `transmit_mode` existed deserialises the field to
+    /// its default (`VoiceActivity`) but may carry `push_to_talk = true`. In
+    /// that case push-to-talk is what the user actually chose, so it wins. Once
+    /// a config is saved through the new UI the explicit mode is authoritative
+    /// and the boolean is kept in step. Read transmit policy through here.
+    #[must_use]
+    pub fn transmit_mode(&self) -> TransmitMode {
+        match self.transmit_mode {
+            // Only honour the legacy flag when the explicit field is still at
+            // its migration default; an explicit Continuous or VoiceActivity
+            // choice must not be overridden by a stale boolean.
+            TransmitMode::VoiceActivity if self.push_to_talk => TransmitMode::PushToTalk,
+            mode => mode,
+        }
+    }
+
     /// Whether any pipeline-relevant setting differs from `other`.
     ///
     /// PTT key and UI-only fields are excluded since they don't
@@ -1093,6 +1147,10 @@ impl AudioSettings {
             || self.denoiser_algorithm != other.denoiser_algorithm
             || self.denoiser_params != other.denoiser_params
             || self.auto_input_sensitivity != other.auto_input_sensitivity
+            // The transmit mode decides whether the voice gate is in the chain,
+            // so a change to it (including a change to the legacy flag that
+            // feeds `transmit_mode()`) must rebuild the pipeline.
+            || self.transmit_mode() != other.transmit_mode()
     }
 
     /// Whether the output device changed, requiring inbound pipeline restart.
@@ -1110,6 +1168,7 @@ impl Default for AudioSettings {
             max_gain_db: 15.0,
             noise_gate_close_ratio: 0.8,
             hold_frames: 15,
+            transmit_mode: TransmitMode::default(),
             push_to_talk: false,
             push_to_talk_key: None,
             bitrate_bps: 72_000,
