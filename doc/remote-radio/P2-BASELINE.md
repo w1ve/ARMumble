@@ -84,10 +84,63 @@ A second run after the encoder fix, same machine:
 Capture is stable across runs; encode varies more with whatever is on screen
 (it is content-dependent). The conclusion is unchanged: **capture dominates**.
 
+## Where the capture time actually goes
+
+Measured with `cargo run --release -p rr-capture --example capture_bench
+--features screen-capture`, 30 samples per stage, same machine:
+
+| Stage | Mean | Min | Max |
+|---|---|---|---|
+| `Monitor::all()` (enumeration) | **2.64 µs** | 1.70 µs | 23.70 µs |
+| `friendly_name()` (`QueryDisplayConfig`) | 30.30 µs | 21.70 µs | 110.30 µs |
+| `id()` | 26 ns | — | 100 ns |
+| **`capture_image()` (handle cached)** | **33.60 ms** | 28.52 ms | 49.02 ms |
+| enumerate + capture (current path) | 33.98 ms | 20.90 ms | 55.01 ms |
+
+### Conclusion: it is `capture_image()`, and it cannot be tuned away
+
+An initial hypothesis — that re-enumerating monitors every frame (which
+`XcapCapturer::grab` does, via `resolve()`) was the cost — is **wrong**.
+Enumeration is 2.64 µs, about **1%** of the frame path. Caching the monitor
+handle is tidy but worth nothing measurable.
+
+The cost is `capture_image()` itself:
+
+- 1920x1200 RGBA = **8.8 MiB** per frame.
+- A raw memcpy of 8.8 MiB at 10 GB/s would take **~0.92 ms**.
+- We measure **33.60 ms** — roughly **36x** the memory-bandwidth floor.
+
+That gap is API overhead, not copying: `xcap` uses a GDI surface copy
+(`BitBlt` + `GetDIBits`) which forces a slow GPU→CPU readback of the entire
+framebuffer, with no damage-region tracking, every single call.
+
+**Consequence: the current backend can never reach 30 fps.** Capture alone
+(33.6 ms) already exceeds the whole 33.3 ms frame budget, before encoding,
+networking or decoding. Since "lowest latency possible" is the project's
+primary goal, this is a structural limit rather than a tuning problem.
+
 ## What P7 must beat
 
-Capture average **33.3 ms** and combined capture + encode **49.9 ms** at
-1920x1200. Re-run this same probe after the DXGI/`WGC` backend lands and compare.
+Capture average **33.6 ms** and combined capture + encode **49.9 ms** at
+1920x1200. Re-run both the probe and the benchmark after the new backend lands.
+
+### Recommended replacement
+
+| Option | Notes |
+|---|---|
+| **`windows-capture` 2.0.1** (Windows.Graphics.Capture) | Actively maintained (1.8M downloads, Aug 2026). Push model: implement `GraphicsCaptureApiHandler::on_frame_arrived`, `frame.buffer()` for raw bytes. **Delivers frames only when the screen changes**, so a static desktop costs nothing. Works cross-GPU. No `unsafe` of our own. |
+| Hand-rolled **DXGI Desktop Duplication** via `windows` 0.62 | Explicit dirty/move rectangles and the lowest ceiling; Microsoft's own guidance recommends DXGI for "ultra-low-latency, full-display mirroring (e.g. VDI or remote desktop)". Costs `unsafe` FFI we maintain, and requires running on the same GPU as the display. |
+| Stale alternatives | `dxgcap` (2020), `scrap` (2018), `captrs` (2020) — all unmaintained; not viable. |
+
+Recommendation: try **`windows-capture`** first. It is the far smaller change,
+needs no `unsafe` from us, and its change-driven delivery directly removes the
+"pay full price for a static screen" behaviour that dominates the current
+numbers. Fall back to raw DXGI only if WGC does not hit the target.
+
+Both are pull-vs-push mismatches with the current `ScreenCapturer::grab()`
+trait; bridge with a single-slot "latest frame" channel, which is the right
+semantic for remote desktop anyway (you always want the newest frame, never a
+backlog).
 
 ## Caveats
 
