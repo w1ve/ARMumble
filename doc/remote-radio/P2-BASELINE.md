@@ -6,8 +6,12 @@ for 30 fps.**
 
 **Caveat that matters more than the headline: at 3840x2160 we get 7.5–13.8 fps,
 and software encode is 78% of that frame time.** 1080p-class displays are
-comfortable; 4K needs hardware encoding or fewer encoded pixels. See
+comfortable; 4K needs hardware encoding. See
 [Resolution is the thing that decides whether this works](#resolution-is-the-thing-that-decides-whether-this-works).
+
+**And 4K *is* reachable on this class of machine**: the same laptop's Quick Sync
+encoder does 3840x2160 at **70–85 fps**, 4–8x faster than software. See
+[Is 4K achievable on this class of machine?](#is-4k-achievable-on-this-class-of-machine-yes-with-hardware-encoding)
 
 Jump to [the result](#measured-result) for the capture numbers, or read on for how
 the original baseline was measured and why the first diagnosis was wrong.
@@ -265,6 +269,60 @@ runs), and position within the run predicted the result better than the setting
 did — background processes stealing cores on a 4-core machine. The fix was to
 interleave rounds and report the minimum, which collapsed the spread to the 6%
 above. Mean-of-one-pass benchmarking on a busy desktop is not measurement.
+
+## Is 4K achievable on this class of machine? Yes, with hardware encoding
+
+Measured on the same i7-1165G7 / Iris Xe laptop, 3840x2160 H.264:
+
+| Encoder | Per frame | Throughput | Media engine busy |
+|---|---|---|---|
+| `OpenH264`, real desktop content | 56–114 ms | 7.5–13.8 fps | n/a (CPU) |
+| `libx264 -preset veryfast` | 23.9 ms | 41.9 fps | n/a (CPU) |
+| **Quick Sync (`h264_qsv`)** | **11.8–14.1 ms** | **70–85 fps** | **62.7%** |
+
+The Quick Sync figures *include* generating 4K source frames on the CPU in the
+same process, so they are pessimistic: real use would feed captured frames
+instead. **4K at 30 fps is comfortably achievable on this hardware** — the
+fixed-function encoder is 4–8x faster than software and leaves most of the
+33.3 ms budget for capture and transport.
+
+This was measured with `ffmpeg -c:v h264_qsv`, used purely as an instrument.
+ffmpeg is **not** a dependency of this project and nothing from it ships, so its
+GPL licence does not touch the codebase. `h264_qsv` has no software fallback: it
+either runs on Intel's media engine or fails to initialise, and it ran.
+
+### Two traps when verifying hardware encoding on Windows
+
+1. **Intel's media engine reports under `engtype_videodecode`, not
+   `engtype_VideoEncode`.** One block does both. Watching
+   `\GPU Engine(*engtype_VideoEncode)\Utilization Percentage` shows **0%** while
+   Quick Sync is fully busy, which looks exactly like "hardware is not being
+   used".
+2. **Media Foundation falls back to a software MFT silently.** The
+   `hwencode_probe` example reaches ~51 fps at 4K through
+   `windows-capture`'s `VideoEncoder`, which *looks* like a hardware win against
+   `OpenH264` — but the media engine stays at 0% and the CPU runs 37–73%. The
+   cause is feeding it a CPU buffer: without a D3D device manager on the sink
+   writer, a hardware MFT is never eligible. Any hardware-encode work must assert
+   the hardware is actually in use, not infer it from being faster than the thing
+   it replaced.
+
+### What reaching it from our own code requires
+
+- The **Media Foundation H.264 MFT** driven directly, with a D3D device manager,
+  producing an H.264 elementary stream. One API covers Quick Sync, NVENC and
+  AMD VCN, which is what makes it the right choice for varied hardware.
+- `unsafe` COM FFI that we own. The workspace sets `unsafe_code = deny`, so this
+  needs a deliberate, narrowly scoped exception — a project-convention decision,
+  not an implementation detail.
+- Capability detection and an `OpenH264` fallback, for machines with no hardware
+  encoder (VMs, older hardware).
+- Ideally **zero-copy**: feed the DXGI texture straight to the encoder so the
+  frame never leaves the GPU, which also removes the 16–18 ms capture readback at
+  4K. That changes the capture/codec boundary, since `ScreenCapturer::grab`
+  currently hands back CPU bytes. Hardware encode from a CPU buffer would be
+  ~14 ms encode + ~18 ms capture = ~32 ms, only just inside budget; zero-copy is
+  what creates real headroom.
 
 ## Bug found by measuring at 4K
 
