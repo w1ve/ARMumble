@@ -68,6 +68,40 @@ impl From<OpusApplication> for opus::Application {
     }
 }
 
+/// How many channels Opus should *code*, independent of the input format.
+///
+/// Separate from the input channel count on purpose. Opus is free to code a
+/// stereo input as one channel when it judges the two to be near-identical,
+/// which saves bits and is the right call for ordinary stereo material.
+///
+/// It is the wrong call for a transceiver's **main and sub receiver**: those are
+/// two unrelated signals that merely *happen* to look alike when one of them is
+/// squelched, and letting the encoder collapse them means a receiver silently
+/// disappears and comes back. [`ForceChannels::Stereo`] pins it.
+#[cfg(feature = "opus-codec")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ForceChannels {
+    /// Let Opus choose. Matches `OPUS_AUTO`, i.e. the behaviour when this
+    /// control is never set.
+    #[default]
+    Auto,
+    /// Always code a single channel.
+    Mono,
+    /// Always code two channels.
+    Stereo,
+}
+
+#[cfg(feature = "opus-codec")]
+impl From<ForceChannels> for Option<opus::Channels> {
+    fn from(f: ForceChannels) -> Self {
+        match f {
+            ForceChannels::Auto => None,
+            ForceChannels::Mono => Some(opus::Channels::Mono),
+            ForceChannels::Stereo => Some(opus::Channels::Stereo),
+        }
+    }
+}
+
 /// Configuration for [`OpusEncoder`].
 #[cfg(feature = "opus-codec")]
 #[derive(Debug, Clone)]
@@ -96,6 +130,22 @@ pub struct OpusEncoderConfig {
     /// when the signal is near the noise-gate threshold, because the
     /// encoder alternates between normal and comfort-noise modes.
     pub dtx: bool,
+    /// Pin the coded channel count. See [`ForceChannels`].
+    ///
+    /// Defaults to [`ForceChannels::Auto`], which is what Opus does when the
+    /// control is never set, so the default changes nothing.
+    pub force_channels: ForceChannels,
+    /// Disable phase inversion for intensity stereo.
+    ///
+    /// Opus normally uses phase inversion when coupling stereo channels, which
+    /// can partially **cancel** when the stream is later downmixed to mono.
+    /// That matters here more than usual: Mumble has no stereo support, so every
+    /// stock client builds a mono decoder and hears a downmix of anything stereo
+    /// we send. Setting this trades a little stereo quality for a downmix that
+    /// does not lose level.
+    ///
+    /// Defaults to `false` (the Opus default), so mono senders are unaffected.
+    pub phase_inversion_disabled: bool,
 }
 
 #[cfg(feature = "opus-codec")]
@@ -116,6 +166,11 @@ impl Default for OpusEncoderConfig {
             fec: true,
             packet_loss_percent: 3,
             dtx: false,
+            // Both of these match Opus's own defaults, so a mono caller that
+            // never touches them gets byte-identical behaviour to before they
+            // existed.
+            force_channels: ForceChannels::Auto,
+            phase_inversion_disabled: false,
         }
     }
 }
@@ -197,6 +252,13 @@ impl OpusEncoder {
         enc.set_packet_loss_perc(config.packet_loss_percent)
             .map_err(|e| Error::OpusCodec(e.to_string()))?;
         enc.set_dtx(config.dtx)
+            .map_err(|e| Error::OpusCodec(e.to_string()))?;
+        // Applied unconditionally: `Auto` and `false` are Opus's own defaults, so
+        // setting them is a no-op rather than a behaviour change, and keeping the
+        // calls unconditional means a stale value cannot survive a `reset()`.
+        enc.set_force_channels(config.force_channels.into())
+            .map_err(|e| Error::OpusCodec(e.to_string()))?;
+        enc.set_phase_inversion_disabled(config.phase_inversion_disabled)
             .map_err(|e| Error::OpusCodec(e.to_string()))?;
         Ok(())
     }
