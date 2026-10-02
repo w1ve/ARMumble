@@ -333,3 +333,23 @@ impl<I: InputInjector> ControlGate<I> {
         }
     }
 }
+
+/// Test-only windows into the gated injector.
+///
+/// The injector is private by design — the whole point of the gate is that
+/// there is no public path to it — so these accessors exist **only** under
+/// `#[cfg(test)]` and never widen the production surface. They let the headless
+/// suite assert the one property that matters: exactly what was, and was not,
+/// injected.
+#[cfg(test)]
+impl ControlGate<crate::RecordingInjector> {
+    /// Everything the injector recorded, in order.
+    pub(crate) fn injector_actions(&self) -> &[crate::RecordedAction] {
+        self.injector.actions()
+    }
+
+    /// Forget everything recorded, to isolate the next assertion.
+    pub(crate) fn clear_injector(&mut self) {
+        self.injector.clear();
+    }
+}

@@ -171,6 +171,15 @@ jobs:
           --package rr-capture
           --package rr-codec
           --package rr-hwcodec
+          --package rr-input
+
+      # rr-input's real injector (the `inject` feature, enigo-backed) is behind
+      # a feature flag, so the default workspace clippy never compiles it. On
+      # Linux enigo pulls libxkbcommon; the backend module is pure translation
+      # with no display needed, so a clippy pass is enough to keep it from
+      # rotting. The tests themselves run above without the feature, headless.
+      - name: Clippy (rr-input injection backend)
+        run: cargo clippy --package rr-input --all-targets --features inject -- -D warnings
 
       # rr-hwcodec is the only RemoteRadio crate allowed `unsafe`, by explicit
       # decision (Media Foundation is Win32 COM). Guard that: if a second rr-*

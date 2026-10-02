@@ -187,7 +187,7 @@ Backup: `E:\devtools\windows-kits-backup.reg`.
 | **P2** video path (`rr-capture`, `rr-codec`, video track) | ✅ complete — committed, CI wired, validated on real Windows hardware |
 | **P7a** Windows fast-path capture (`DxgiCapturer`) | ✅ complete — **pulled forward from P7**, user-approved |
 | **P7b** hardware H.264 encode (`rr-hwcodec`) | ✅ complete — **4K at 41.2 fps**, committed. See §11 |
-| P3 input control + arbitration | 🟡 **in progress, UNCOMMITTED** — see §12 |
+| P3 input control + arbitration | 🟢 **crate complete** — `rr-input` compiles, is a workspace member, 23 tests pass; the live `rr-webrtc` wiring (§12 step 5) is the remaining piece |
 | P4 NAT traversal / TURN Docker | ⬜ |
 | P5 multi-viewer | ⬜ |
 | P6 clipboard + file transfer | ⬜ |
@@ -904,24 +904,27 @@ Locally: `E:\devtools\verify-local.ps1`.
 > `cargo xwin build --target x86_64-pc-windows-msvc` instead (passes).
 
 ### Next: finish P3 — input control + arbitration
-`crates/rr-input` is **partly written, uncommitted, and has never been
-compiled**. Full state, design decisions and open questions in **§12**. The
-immediate to-do list:
-1. Write the two missing modules `src/enigo_backend.rs` and `src/tests.rs`
-   (both are referenced from `lib.rs`, so `--all-targets` and `cargo test` cannot
-   build without them; the lib target already does — see the note above).
-2. Add `crates/rr-input` to workspace `members` in `ARMumble/Cargo.toml`.
-3. Compile, clippy, test (gating + coordinate mapping are testable headless via
-   `RecordingInjector`). `MonitorLayout::from_advertised` now copies real origins,
-   so its test should assert a **negative** origin — the live two-monitor case
-   here is `(-953, -2160)`, which the old left-to-right guess got wrong.
-4. Commit on both machines (including the monitor-origin change, §10).
-5. Then wire `ControlGate` over the live `rr-control` data channel in
-   `rr-webrtc`, with auto-connect and auto-grant-when-free.
+Steps 1–4 are **DONE** (§12b): `crates/rr-input` is written, a workspace member,
+and green on both machines — 23 tests, both feature sets clippy-clean, Windows
+target via `cargo xwin`, no `unsafe`. `MonitorLayout::from_advertised` copies the
+real origins and a test asserts the negative-origin `(-953, -2160)` case. CI
+wired. Committed.
+
+**The one remaining P3 step:**
+5. Wire `ControlGate` over the live `rr-control` data channel in `rr-webrtc`,
+   with auto-connect and auto-grant-when-free. `ControlGate::handle` already
+   takes a `SessionId` + `ControlMsg` and returns an `Outcome` carrying the
+   `Effect`s to broadcast — so this is plumbing: decode inbound `rr-control`
+   frames to `ControlMsg`, call `handle`, and relay the `Outcome.effects` /
+   `keyframe_requested` / `monitor_selected` back out. The Station builds the
+   gate with `EnigoInjector` (feature `inject`); the Client never does.
 
 Exit criterion: one controller drives the Station, handoff works, and the
 arbitration edge cases already covered by `rr-session`'s 19 tests hold over a
-real link.
+real link. ⚠️ This now also needs the **Fancy server** standing up to relay
+`WebRtcSignal` — which is deployed (§16): `fancy-mumble:1.6` on
+`newyork.remote.radio:54736`, verified relaying stereo + announcing
+`fancy_version`.
 
 ### Useful commands
 ```powershell
@@ -1099,21 +1102,15 @@ comparison. Deferred — 41.2 fps clears the bar, and P3 is worth more.
 
 ---
 
-## 12. P3: `crates/rr-input` — WRITTEN, UNCOMMITTED, NEVER COMPILED
+## 12. P3: `crates/rr-input` — COMPLETE (crate), live wiring remaining
 
-> ⚠️ Still **not** in the workspace `members` list in `ARMumble/Cargo.toml`, so
-> `cargo build` ignores it entirely. Git shows it only as `?? crates/rr-input/`.
->
-> **Update (monitor-origin work):** the **lib target now compiles clean**.
-> `mod tests` is `#[cfg(test)]` and `mod enigo_backend` is behind the `inject`
-> feature, so `cargo build -p rr-input` needs neither missing file — only
-> `--all-targets` or `cargo test` does. That is enough to compile-check
-> `lib/gate/keymap/layout/recorder`, via `E:\devtools\check-rr-input.ps1`
-> (temporarily add the crate to `members`, build, then
-> `git checkout -- Cargo.toml Cargo.lock` — the temporary membership makes cargo
-> add `enigo` and `xkbcommon` to the lock, so reverting the lock matters).
-> **The lib target is also clippy-clean under `-D warnings`**: its one error,
-> `gate.rs:261` `branches_sharing_code`, is now fixed (§10).
+> ✅ **DONE (this is now history).** `rr-input` is a workspace member, both
+> missing modules are written, and it is green on both machines:
+> `CLIPPY_DEFAULT=0 CLIPPY_INJECT=0 TEST=0 UNSAFE_GUARD=0`, **23 tests**, plus the
+> `cargo xwin` Windows-target pass. `Cargo.lock` gained `enigo` 0.6.1 and
+> `xkbcommon` (the `inject` feature's Linux dep). Details below in §12b; the only
+> P3 work left is wiring `ControlGate` over the live `rr-control` channel
+> (step 5).
 
 ### Files written
 | file | contents |
@@ -1125,7 +1122,21 @@ comparison. Deferred — 41.2 fps clears the bar, and P3 is worth more.
 | `src/gate.rs` | `ControlGate::{new, handle, tick, disconnect, set_layout, set_shared_monitor}`, `Outcome`, `Refusal`, `RefusalCounts` |
 | `src/recorder.rs` | `RecordingInjector`, `RecordedAction` — lets gating and coordinate mapping be tested headless |
 
-### Files MISSING (both referenced from `lib.rs`, so the crate cannot compile)
+### §12b. Both modules now written (the two that used to be missing)
+
+> ✅ Both are written and green on both machines: 23 tests, no `unsafe`, both
+> feature sets clippy-clean, `cargo xwin` Windows-target pass.
+>
+> ⚠️ `enigo` 0.6.1 cross-platform key gotcha, cost one Linux build failure:
+> `Key::LWin`/`Key::RWin` are Windows-only — they compiled locally and failed on
+> big-linux. The portable key is `Key::Meta` (enigo''s "windows/super/command"),
+> so MetaLeft/MetaRight both map to it and lose the side, same as AltLeft/AltRight
+> -> `Key::Alt`. The local Windows build does NOT prove the `inject` feature
+> compiles; enigo''s `Key` is heavily cfg(target_os)-gated. A CI clippy step with
+> `--features inject` now guards this. The injector uses discrete Press/Release,
+> never Click (the wire protocol carries down/up separately).
+
+Original note, for the record:
 - **`src/enigo_backend.rs`** — the real injector behind feature `inject`. I was
   mid-`fs_write` when interrupted. Intended `enigo` 0.6.1 API:
   `Enigo::new(&Settings::default())`; traits `Mouse` / `Keyboard` must be in
