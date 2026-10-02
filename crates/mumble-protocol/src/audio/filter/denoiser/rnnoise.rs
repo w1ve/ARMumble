@@ -42,7 +42,13 @@ impl DenoiserBackend for RnnoiseBackend {
         let mut in_buf = [0.0_f32; FRAME];
         let mut out_buf = [0.0_f32; FRAME];
 
-        for chunk in samples.chunks_exact_mut(FRAME) {
+        // `as_chunks_mut` rather than `chunks_exact_mut(FRAME)`: the chunk size is
+        // a constant, so this yields `&mut [[f32; FRAME]]` and drops a bounds
+        // check per chunk on a per-frame hot path. The trailing partial chunk is
+        // the discarded remainder, which preserves the documented behaviour of
+        // leaving it untouched.
+        let (chunks, _remainder) = samples.as_chunks_mut::<FRAME>();
+        for chunk in chunks {
             for (dst, &src) in in_buf.iter_mut().zip(chunk.iter()) {
                 *dst = src * SCALE_UP;
             }

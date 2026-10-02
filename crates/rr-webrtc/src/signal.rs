@@ -49,6 +49,16 @@ pub enum SignalMessage {
 /// A bidirectional signaling channel to exactly one remote peer.
 ///
 /// Implementations are expected to be cheap to clone/share behind an `Arc`.
+// `async_trait` desugars each method to one returning `Pin<Box<dyn Future>>` and
+// marks it `#[must_use]` to keep `async fn`'s semantics. A boxed future is
+// already `#[must_use]`, so clippy sees the attribute twice and fires
+// `double_must_use` — on generated code, at the span of the attribute macro, with
+// nothing in this file to change. Native `async fn` in traits would avoid the
+// macro but is not `dyn`-compatible, and this trait is used behind `Arc<dyn ..>`.
+#[allow(
+    clippy::double_must_use,
+    reason = "emitted by the `async_trait` expansion, not by this code"
+)]
 #[async_trait]
 pub trait SignalTransport: Send + Sync + 'static {
     /// Send a message to the remote peer.

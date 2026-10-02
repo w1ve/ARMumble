@@ -844,8 +844,9 @@ mod tests {
             is_silent: false,
         };
         // Fill with constant 0.8 amplitude (worst case onset).
-        for chunk in frame.data.chunks_exact_mut(4) {
-            chunk.copy_from_slice(&0.8_f32.to_le_bytes());
+        let (chunks, _remainder) = frame.data.as_chunks_mut::<4>();
+        for chunk in chunks {
+            *chunk = 0.8_f32.to_le_bytes();
         }
 
         apply_cold_start_fade_in(&mut frame);

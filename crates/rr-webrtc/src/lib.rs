@@ -87,6 +87,12 @@ pub type Result<T> = std::result::Result<T, TransportError>;
 /// Callbacks delivered to the application as a session progresses.
 ///
 /// Implementations must be cheap and non-blocking; do real work on a task.
+// See the matching note on `SignalTransport`: `double_must_use` fires on the
+// `async_trait` expansion, not on anything written here.
+#[allow(
+    clippy::double_must_use,
+    reason = "emitted by the `async_trait` expansion, not by this code"
+)]
 #[async_trait]
 pub trait SessionObserver: Send + Sync + 'static {
     /// The peer connection's aggregate state changed.

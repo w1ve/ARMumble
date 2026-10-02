@@ -46,8 +46,13 @@ pub trait AudioDecoder: Send + 'static {
 #[cfg(feature = "opus-codec")]
 fn f32_slice_to_ne_bytes(pcm: &[f32]) -> Vec<u8> {
     let mut data = vec![0u8; pcm.len() * 4];
-    for (chunk, s) in data.chunks_exact_mut(4).zip(pcm) {
-        chunk.copy_from_slice(&s.to_ne_bytes());
+    // `as_chunks_mut` rather than `chunks_exact_mut(4)`: the chunk size is a
+    // constant, so this hands back `&mut [[u8; 4]]` and the write becomes a
+    // whole-array assignment with no length check per sample. Clippy's
+    // `chunks_exact_to_as_chunks` asks for exactly this.
+    let (chunks, _remainder) = data.as_chunks_mut::<4>();
+    for (chunk, s) in chunks.iter_mut().zip(pcm) {
+        *chunk = s.to_ne_bytes();
     }
     data
 }
