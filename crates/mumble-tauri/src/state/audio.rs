@@ -119,7 +119,7 @@ mod voice_pipeline {
 
     use crate::audio::{AudioDeviceFactory, PlatformAudioFactory};
 
-    use crate::state::types::{AudioSettings, VoiceState};
+    use crate::state::types::{AudioSettings, TransmitMode, VoiceState};
     use crate::state::AppState;
 
     impl AppState {
@@ -962,6 +962,9 @@ mod voice_pipeline {
         if let Some(agc) = build_agc_filter(settings) {
             filters.push(Box::new(agc));
         }
+        // Noise suppression cleans the signal that is sent; it says nothing
+        // about *whether* to send. So it is applied on its own toggle,
+        // independent of the transmit mode.
         if settings.noise_suppression {
             let denoiser_config = DenoiserConfig {
                 algorithm: settings.denoiser_algorithm,
@@ -969,6 +972,13 @@ mod voice_pipeline {
                 ..DenoiserConfig::default()
             };
             filters.push(Box::new(SpectralDenoiser::new(denoiser_config)));
+        }
+        // The voice gate is what makes transmission conditional, so it belongs
+        // only to VoiceActivity mode. Continuous keeps the mic permanently open
+        // (the radio Station case); PushToTalk gates by self-mute at the
+        // protocol level, not by a filter. In both of those the gate must be
+        // absent, or the far end would lose audio the operator expects to send.
+        if settings.transmit_mode() == TransmitMode::VoiceActivity {
             filters.push(Box::new(NoiseGate::new(NoiseGateConfig {
                 open_threshold: settings.vad_threshold,
                 close_threshold: settings.vad_threshold * settings.noise_gate_close_ratio,
@@ -1083,6 +1093,149 @@ mod voice_pipeline {
                 capture,
                 FilterChain::new(),
                 Box::new(encoder),
+            );
+        }
+
+        // --- Transmit mode / VAD decoupling (§14c) ------------------------
+
+        use crate::state::types::TransmitMode;
+        use mumble_protocol::audio::sample::AudioFrame;
+
+        /// A mono/48k frame of constant amplitude, for driving the gate.
+        fn frame_at(amplitude: f32, samples: usize) -> AudioFrame {
+            let mut data = Vec::with_capacity(samples * 4);
+            for _ in 0..samples {
+                data.extend_from_slice(&amplitude.to_le_bytes());
+            }
+            AudioFrame {
+                data,
+                format: AudioFormat::MONO_48KHZ_F32,
+                sequence: 0,
+                is_silent: false,
+            }
+        }
+
+        /// Settings with every processing stage off, so a test turns on only
+        /// the one thing it means to exercise.
+        fn bare_settings() -> AudioSettings {
+            AudioSettings {
+                auto_gain: false,
+                noise_suppression: false,
+                transmit_mode: TransmitMode::VoiceActivity,
+                push_to_talk: false,
+                ..AudioSettings::default()
+            }
+        }
+
+        #[test]
+        fn voice_activity_mode_inserts_a_gate_that_silences_quiet_input() {
+            let settings = AudioSettings {
+                transmit_mode: TransmitMode::VoiceActivity,
+                ..bare_settings()
+            };
+            let mut chain = build_outbound_filters(&settings);
+            assert_eq!(chain.len(), 1, "only the voice gate should be present");
+
+            // Below the 0.01 open threshold: the gate must mark it silent.
+            let mut quiet = frame_at(0.001, 480);
+            assert!(chain.process(&mut quiet).is_ok(), "filter chain runs");
+            assert!(
+                quiet.is_silent,
+                "VoiceActivity must gate sub-threshold input"
+            );
+        }
+
+        #[test]
+        fn continuous_mode_has_no_gate_so_quiet_input_still_transmits() {
+            let settings = AudioSettings {
+                transmit_mode: TransmitMode::Continuous,
+                ..bare_settings()
+            };
+            let mut chain = build_outbound_filters(&settings);
+            assert!(
+                chain.is_empty(),
+                "Continuous with no AGC/suppression is a pass-through"
+            );
+
+            // The same quiet frame must NOT be silenced: the mic is always live.
+            let mut quiet = frame_at(0.001, 480);
+            assert!(chain.process(&mut quiet).is_ok(), "filter chain runs");
+            assert!(
+                !quiet.is_silent,
+                "Continuous must never gate — the radio stays keyed up"
+            );
+        }
+
+        #[test]
+        fn push_to_talk_mode_has_no_voice_gate() {
+            // PTT gates by self-mute at the protocol level, not by a filter.
+            let settings = AudioSettings {
+                transmit_mode: TransmitMode::PushToTalk,
+                ..bare_settings()
+            };
+            let chain = build_outbound_filters(&settings);
+            assert!(chain.is_empty(), "PushToTalk must not insert a voice gate");
+        }
+
+        #[test]
+        fn noise_suppression_is_independent_of_the_voice_gate() {
+            // The historical bug: the gate hung off `noise_suppression`. Now a
+            // Continuous Station can clean its audio without re-introducing a
+            // gate, and VoiceActivity can gate with suppression off.
+            let suppressed_continuous = AudioSettings {
+                transmit_mode: TransmitMode::Continuous,
+                noise_suppression: true,
+                ..bare_settings()
+            };
+            let chain = build_outbound_filters(&suppressed_continuous);
+            // Denoiser present, but still no gate: a quiet frame stays live.
+            assert_eq!(chain.len(), 1, "denoiser only, no gate");
+
+            let gated_unsuppressed = AudioSettings {
+                transmit_mode: TransmitMode::VoiceActivity,
+                noise_suppression: false,
+                ..bare_settings()
+            };
+            assert_eq!(
+                build_outbound_filters(&gated_unsuppressed).len(),
+                1,
+                "gate present even with suppression off"
+            );
+        }
+
+        #[test]
+        fn legacy_push_to_talk_flag_is_honoured_when_mode_is_unset() {
+            // A config saved before `transmit_mode` existed: the field defaults
+            // to VoiceActivity but the legacy boolean says PTT, which must win.
+            let legacy = AudioSettings {
+                transmit_mode: TransmitMode::VoiceActivity,
+                push_to_talk: true,
+                ..bare_settings()
+            };
+            assert_eq!(legacy.transmit_mode(), TransmitMode::PushToTalk);
+            // And so no voice gate is inserted for that legacy PTT user.
+            assert!(build_outbound_filters(&legacy).is_empty());
+
+            // An explicit Continuous choice must not be overridden by a stale
+            // boolean left set in an old config.
+            let explicit = AudioSettings {
+                transmit_mode: TransmitMode::Continuous,
+                push_to_talk: true,
+                ..bare_settings()
+            };
+            assert_eq!(explicit.transmit_mode(), TransmitMode::Continuous);
+        }
+
+        #[test]
+        fn changing_transmit_mode_requires_a_pipeline_restart() {
+            let voice = bare_settings();
+            let continuous = AudioSettings {
+                transmit_mode: TransmitMode::Continuous,
+                ..bare_settings()
+            };
+            assert!(
+                voice.needs_pipeline_restart(&continuous),
+                "swapping the gate in or out must rebuild the pipeline"
             );
         }
 
