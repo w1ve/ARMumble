@@ -1,0 +1,27 @@
+[package]
+name = "rr-input"
+version = "0.1.0"
+edition = "2021"
+description = "RemoteRadio input control: arbitration-gated injection of remote mouse and keyboard events, monitor-relative to absolute coordinate mapping, and a platform-independent key code table."
+license = "MIT"
+
+[dependencies]
+rr-proto = { path = "../rr-proto" }
+rr-session = { path = "../rr-session" }
+thiserror = "2"
+tracing = "0.1"
+
+# Injection. Cross-platform, MIT, and uses SendInput on Windows so no `unsafe`
+# reaches this crate. Optional because the Client never injects — it only
+# translates its own UI events into wire messages — and because the arbitration
+# and coordinate logic is worth testing on a headless CI box that has no input
+# system at all.
+enigo = { version = "0.6.1", optional = true }
+
+[features]
+default = []
+# Enable real input injection. The Station needs this; the Client does not.
+inject = ["enigo"]
+
+[lints]
+workspace = true
