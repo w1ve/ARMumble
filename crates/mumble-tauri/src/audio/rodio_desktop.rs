@@ -17,6 +17,7 @@ const SAMPLE_RATE_48K: NonZero<u32> = NonZero::new(48_000).unwrap();
 
 use mumble_protocol::audio::capture::AudioCapture;
 use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes};
+use mumble_protocol::audio::resample::LinearResampler;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
 use rodio::microphone::{available_inputs, MicrophoneBuilder};
@@ -151,11 +152,21 @@ impl AudioCapture for RodioCapture {
             .map_err(|e| Error::InvalidState(format!("Open microphone: {e}")))?;
 
         let config = mic.config();
+        let device_rate = config.sample_rate.get();
         debug!(
             "rodio microphone opened: rate={}, channels={}",
-            config.sample_rate.get(),
+            device_rate,
             config.channel_count.get(),
         );
+        if device_rate != SAMPLE_RATE_48K.get() {
+            // `prefer_sample_rates` is only a preference; a device that does not
+            // offer 48 kHz (SignaLink and many USB dongles are 44.1 kHz) opens
+            // at its own rate. Resample on capture so the frames we label 48 kHz
+            // really are 48 kHz — otherwise the far end hears the radio sped up.
+            debug!(
+                "rodio capture: device rate {device_rate} Hz != 48 kHz; resampling on capture"
+            );
+        }
 
         let mic_channels = config.channel_count.get() as usize;
 
@@ -164,7 +175,7 @@ impl AudioCapture for RodioCapture {
 
         let handle = thread::Builder::new()
             .name("rodio-mic-reader".into())
-            .spawn(move || capture_thread(mic, mic_channels, tx))
+            .spawn(move || capture_thread(mic, mic_channels, device_rate, tx))
             .map_err(|e| Error::InvalidState(format!("Spawn mic thread: {e}")))?;
 
         self.sample_rx = Some(rx);
@@ -190,30 +201,61 @@ const CAPTURE_CHUNK: usize = 480;
 fn capture_thread(
     mut mic: rodio::microphone::Microphone,
     channels: usize,
+    device_rate: u32,
     tx: SyncSender<Vec<f32>>,
 ) {
-    let mut chunk: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK);
+    // Convert the mono device stream to 48 kHz. For a 48 kHz device this is a
+    // pass-through (`is_identity`), so the common case costs nothing. The
+    // resampler is streaming: it keeps its interpolation phase across the small
+    // batches we feed it, so there is no click where one batch meets the next.
+    let mut resampler = LinearResampler::new(device_rate, SAMPLE_RATE_48K.get());
+    // Downmixed mono samples at the device rate, fed to the resampler in small
+    // batches so phase advances smoothly rather than in one big jump.
+    let mut mono_in: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK);
+    // Resampled 48 kHz samples awaiting dispatch in CAPTURE_CHUNK batches.
+    let mut out_48k: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK * 2);
+
+    // Feed `mono_in` through the resampler into `out_48k`, then dispatch every
+    // full CAPTURE_CHUNK. Returns false if the receiver has gone away.
+    fn drain(
+        resampler: &mut LinearResampler,
+        mono_in: &mut Vec<f32>,
+        out_48k: &mut Vec<f32>,
+        tx: &SyncSender<Vec<f32>>,
+    ) -> bool {
+        resampler.process(mono_in, out_48k);
+        mono_in.clear();
+        while out_48k.len() >= CAPTURE_CHUNK {
+            let batch: Vec<f32> = out_48k.drain(..CAPTURE_CHUNK).collect();
+            if tx.send(batch).is_err() {
+                return false;
+            }
+        }
+        true
+    }
+
     loop {
         let mut sum = 0.0f32;
         for _ in 0..channels {
             match mic.next() {
                 Some(s) => sum += s,
                 None => {
-                    // Stream ended - flush what we have so the last
-                    // partial chunk is not lost.
-                    if !chunk.is_empty() {
-                        let _ = tx.send(chunk);
+                    // Stream ended: push any remaining input through the
+                    // resampler and flush whatever full batches result, so the
+                    // tail is not lost.
+                    let _ = drain(&mut resampler, &mut mono_in, &mut out_48k, &tx);
+                    if !out_48k.is_empty() {
+                        let _ = tx.send(std::mem::take(&mut out_48k));
                     }
                     return;
                 }
             }
         }
-        chunk.push(sum / channels as f32);
-        if chunk.len() >= CAPTURE_CHUNK {
-            let full = std::mem::replace(&mut chunk, Vec::with_capacity(CAPTURE_CHUNK));
-            if tx.send(full).is_err() {
-                return;
-            }
+        mono_in.push(sum / channels as f32);
+        if mono_in.len() >= CAPTURE_CHUNK
+            && !drain(&mut resampler, &mut mono_in, &mut out_48k, &tx)
+        {
+            return;
         }
     }
 }

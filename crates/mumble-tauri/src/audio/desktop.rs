@@ -9,9 +9,10 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 use mumble_protocol::audio::capture::AudioCapture;
+use mumble_protocol::audio::resample::LinearResampler;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
 
@@ -100,16 +101,27 @@ fn handle_cpal_input(
     data: &[f32],
     hw_channels: u16,
     overflow_warned: &Arc<AtomicBool>,
+    resampler: &mut LinearResampler,
+    resampled: &mut Vec<f32>,
 ) {
     let Ok(mut buf) = buffer.lock() else { return };
-    if hw_channels == 1 {
-        buf.extend(data.iter().copied());
+
+    // Downmix to mono first (the resampler is a mono stream), then resample the
+    // mono stream to 48 kHz. For a 48 kHz device the resampler is a pass-through
+    // (identity), so this adds a copy and nothing else in the common case.
+    resampled.clear();
+    if hw_channels <= 1 {
+        resampler.process(data, resampled);
     } else {
+        let mut mono: Vec<f32> = Vec::with_capacity(data.len() / hw_channels as usize + 1);
         for chunk in data.chunks(hw_channels as usize) {
             let sum: f32 = chunk.iter().sum();
-            buf.push_back(sum / hw_channels as f32);
+            mono.push(sum / hw_channels as f32);
         }
+        resampler.process(&mono, resampled);
     }
+    buf.extend(resampled.iter().copied());
+
     const MAX_SAMPLES: usize = 9_600;
     if buf.len() > MAX_SAMPLES {
         if !overflow_warned.swap(true, Ordering::Relaxed) {
@@ -172,18 +184,47 @@ impl AudioCapture for CpalCapture {
         let hw_channels = self.hw_channels;
         let overflow_warned = self.overflow_warned.clone();
 
+        // Open at the device's own default rate rather than demanding 48 kHz.
+        // Hardcoding 48 kHz made a 44.1 kHz-only device fail to open at all; a
+        // `SignaLink` or USB dongle at 44.1 kHz is exactly the rig interface this
+        // app must support. Read the real rate and resample to 48 kHz in the
+        // input callback, so the samples we hand the pipeline are genuinely
+        // 48 kHz.
+        let default_cfg = self
+            .device
+            .default_input_config()
+            .map_err(|e| Error::InvalidState(format!("input config query: {e}")))?;
+        let device_rate = default_cfg.sample_rate();
+
         let stream_config = cpal::StreamConfig {
             channels: hw_channels,
-            sample_rate: 48_000,
+            sample_rate: device_rate,
             buffer_size: cpal::BufferSize::Default,
         };
+
+        // One resampler for the whole stream, owned by the callback so its
+        // interpolation phase is continuous across callback invocations.
+        let mut resampler = LinearResampler::new(device_rate, 48_000);
+        if !resampler.is_identity() {
+            debug!(
+                "cpal capture: device rate {device_rate} Hz != 48 kHz; resampling on capture"
+            );
+        }
+        let mut resampled: Vec<f32> = Vec::new();
 
         let stream = self
             .device
             .build_input_stream(
                 &stream_config,
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                    handle_cpal_input(&buffer, data, hw_channels, &overflow_warned);
+                    handle_cpal_input(
+                        &buffer,
+                        data,
+                        hw_channels,
+                        &overflow_warned,
+                        &mut resampler,
+                        &mut resampled,
+                    );
                 },
                 |err| error!("cpal input error: {err}"),
                 None,
