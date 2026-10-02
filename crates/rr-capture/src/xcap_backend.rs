@@ -78,6 +78,11 @@ impl ScreenCapturer for XcapCapturer {
             out.push(MonitorInfo {
                 id: m.id().map_err(backend_err)?,
                 name: m.friendly_name().map_err(backend_err)?,
+                // `xcap` reports origins natively, on every platform it
+                // supports. On Windows they come from the same `DEVMODEW` as
+                // `width`/`height`, so the rectangle is internally consistent.
+                x: m.x().map_err(backend_err)?,
+                y: m.y().map_err(backend_err)?,
                 width: m.width().map_err(backend_err)?,
                 height: m.height().map_err(backend_err)?,
                 primary: m.is_primary().map_err(backend_err)?,

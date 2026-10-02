@@ -17,6 +17,18 @@ fn synthetic_reports_one_primary_monitor() {
 }
 
 #[test]
+fn synthetic_monitor_sits_at_the_virtual_desktop_origin() {
+    // Pinned because coordinate-mapping tests downstream rely on
+    // monitor-relative and absolute coordinates being the same number for this
+    // capturer. If the synthetic monitor ever moved, those tests would still
+    // pass while asserting the wrong thing.
+    let cap = SyntheticCapturer::new(64, 32);
+    let m = &cap.monitors().expect("monitors")[0];
+    assert_eq!(m.x, 0);
+    assert_eq!(m.y, 0);
+}
+
+#[test]
 fn synthetic_rejects_unknown_monitor() {
     let mut cap = SyntheticCapturer::new(16, 16);
     let err = cap.select_monitor(999).unwrap_err();

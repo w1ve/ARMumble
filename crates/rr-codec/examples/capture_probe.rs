@@ -153,13 +153,20 @@ mod probe {
             return Err("no monitors reported".into());
         }
         for (i, m) in monitors.iter().enumerate() {
+            // The origin is printed because it is the one piece of monitor
+            // geometry nothing downstream can sanity-check for itself: a wrong
+            // width shows up as a distorted picture, whereas a wrong origin only
+            // shows up as remote clicks landing on the wrong display. Seeing the
+            // real numbers against a known desk layout is the check.
             println!(
-                "    [{}] id={:<10} {:<28} {:>5}x{:<5} primary={}",
+                "    [{}] id={:<10} {:<28} {:>5}x{:<5} at ({:>6},{:>6}) primary={}",
                 i + 1,
                 m.id,
                 m.name,
                 m.width,
                 m.height,
+                m.x,
+                m.y,
                 m.primary
             );
         }

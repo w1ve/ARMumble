@@ -82,6 +82,11 @@ impl ScreenCapturer for SyntheticCapturer {
         Ok(vec![MonitorInfo {
             id: SYNTHETIC_MONITOR_ID,
             name: "Synthetic".to_owned(),
+            // A single monitor at the virtual-desktop origin: exact rather than
+            // arbitrary, so a coordinate-mapping test that expects
+            // monitor-relative == absolute is asserting real behaviour.
+            x: 0,
+            y: 0,
             width: self.width,
             height: self.height,
             primary: true,

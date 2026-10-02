@@ -21,7 +21,15 @@ use serde::{Deserialize, Serialize};
 
 /// Wire-protocol version. Bump on any breaking change to the message shapes
 /// below. Peers compare this during the presence handshake.
-pub const PROTOCOL_VERSION: u16 = 1;
+///
+/// History:
+/// - **1** — initial shape.
+/// - **2** — [`MonitorInfo`] gained required `x`/`y` origins, so the Station's
+///   display arrangement is described rather than inferred. A v1 peer omits
+///   them, and because they are not defaulted it would fail to decode; the
+///   version check catches that first and reports it as a version mismatch,
+///   which is actionable, instead of a JSON error that is not.
+pub const PROTOCOL_VERSION: u16 = 2;
 
 /// Errors produced while decoding a wire message.
 #[derive(Debug, thiserror::Error)]
@@ -72,12 +80,48 @@ pub enum Role {
 }
 
 /// A monitor advertised by a Station.
+///
+/// # Coordinate space
+///
+/// `x`/`y` are the monitor's top-left corner on the Station's **virtual
+/// desktop**, in physical pixels — the same space the Station injects pointer
+/// events in. Origins are **signed** because only the primary monitor is at
+/// `(0, 0)`: anything placed to its left or above it has negative coordinates,
+/// which is an ordinary arrangement and not an error.
+///
+/// `width`/`height` are the monitor's own pixel dimensions, so its rectangle is
+/// `(x, y) .. (x + width, y + height)`.
+///
+/// # Why the origins are carried at all
+///
+/// Wire input coordinates are monitor-*relative* (see [`InputEvent::MouseMove`]),
+/// which keeps the Client ignorant of the Station's display arrangement. The
+/// Station still has to turn those into absolute coordinates to inject them, and
+/// that needs each monitor's origin. Before these fields existed the only option
+/// was to assume a left-to-right row, which is right for one monitor, right for
+/// the common two-monitor case, and wrong for stacked, offset or
+/// right-to-left arrangements — with a failure mode of clicking at the correct
+/// offset on the *wrong display*. Carrying the real origins removes the guess.
+///
+/// # Why they are required, not defaulted
+///
+/// A missing origin would deserialise as `(0, 0)` and stack every display on top
+/// of the primary, which looks plausible and misroutes every click on a
+/// secondary monitor. A decode failure is noisy and immediate, so these fields
+/// are deliberately not `#[serde(default)]`; [`PROTOCOL_VERSION`] was bumped to
+/// 2 so a v1 peer is refused by the version check before it gets that far.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MonitorInfo {
     /// Stable per-session monitor index.
     pub id: u32,
     /// Human-readable label (e.g. `"Monitor 1 (2560x1440)"`).
     pub label: String,
+    /// Virtual-desktop X of the monitor's left edge, in physical pixels. May be
+    /// negative.
+    pub x: i32,
+    /// Virtual-desktop Y of the monitor's top edge, in physical pixels. May be
+    /// negative.
+    pub y: i32,
     /// Width in physical pixels.
     pub width: u32,
     /// Height in physical pixels.

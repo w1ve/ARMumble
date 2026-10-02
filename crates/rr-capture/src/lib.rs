@@ -109,12 +109,29 @@ impl PixelFormat {
 }
 
 /// A monitor available for sharing.
+///
+/// # Coordinate space
+///
+/// `x`/`y` place the monitor's top-left corner on the **virtual desktop**, in
+/// physical pixels, matching `rr_proto::MonitorInfo` so the Station can advertise
+/// one from the other without converting. Origins are signed: only the primary
+/// monitor sits at `(0, 0)`, and displays arranged to its left or above it have
+/// negative coordinates.
+///
+/// The Station needs these to turn the monitor-relative coordinates in a wire
+/// input event into the absolute position it injects at. Enumerating a monitor
+/// without its origin would leave the only options as guessing an arrangement or
+/// refusing to inject, so every backend supplies it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MonitorInfo {
     /// Stable identifier used to select this monitor.
     pub id: u32,
     /// Human-readable label for the UI.
     pub name: String,
+    /// Virtual-desktop X of the monitor's left edge. May be negative.
+    pub x: i32,
+    /// Virtual-desktop Y of the monitor's top edge. May be negative.
+    pub y: i32,
     /// Width in physical pixels.
     pub width: u32,
     /// Height in physical pixels.

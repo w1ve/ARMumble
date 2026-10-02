@@ -15,10 +15,11 @@ tracing = { version = "0.1", optional = true }
 # captures) can build and test this crate without a display server.
 xcap = { version = "0.9.8", optional = true }
 
-# The low-latency Windows backend. Target-gated because DXGI Desktop
-# Duplication has no meaning elsewhere; `cargo` still defines the implicit
-# `windows-capture` feature on every target, so `dxgi-capture` resolves on
-# Linux CI (the module itself compiles to nothing there).
+# The low-latency Windows backend. Target-gated because DXGI Desktop Duplication
+# has no meaning elsewhere; `cargo` still defines the implicit `windows-capture`
+# feature on every target, so the `dxgi-capture` feature name resolves off
+# Windows and the module itself compiles to nothing there. (It does pull `xcap`
+# now, for monitor origins — see the feature's own note below.)
 [target.'cfg(windows)'.dependencies]
 windows-capture = { version = "2.0.1", optional = true }
 
@@ -27,7 +28,25 @@ default = []
 # Enable the xcap-backed real screen capture backend.
 screen-capture = ["xcap", "tracing"]
 # Enable the DXGI Desktop Duplication backend (Windows only).
-dxgi-capture = ["windows-capture", "tracing"]
+#
+# Depends on `screen-capture` for one specific thing: monitor origins.
+# `windows-capture`'s `Monitor` exposes size, name and index but *no position*,
+# and the Station needs each monitor's virtual-desktop origin to know where a
+# monitor-relative input event actually points. Reading `EnumDisplaySettingsW`
+# directly would put `unsafe` into this crate, which the project confines to
+# `rr-hwcodec` (CI enforces it), and `xcap` already wraps that same call safely —
+# it reads `dmPosition` from the very `DEVMODEW` that `windows-capture` reads
+# `dmPelsWidth`/`dmPelsHeight` from, so origin and size describe one rectangle
+# instead of two that happen to agree.
+#
+# The cost is that `--features dxgi-capture` now pulls `xcap`, which on a
+# *Linux-native* build wants X11/Wayland system libraries. Nothing builds that
+# combination: DXGI is Windows-only, and every command that enables it (CI's
+# Windows clippy pass, and `verify-dxgi.sh` / `verify-targeted.sh` /
+# `verify-hwcodec2.sh` on the Linux build host) already passes `screen-capture`
+# too and targets Windows via `cargo xwin`, where `xcap`'s Windows dependencies
+# apply instead.
+dxgi-capture = ["screen-capture", "windows-capture", "tracing"]
 
 [lints]
 workspace = true

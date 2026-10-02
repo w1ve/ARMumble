@@ -39,6 +39,17 @@
 //! for exactly this reason. Asking for RGBA instead would buy a prettier
 //! [`PixelFormat`] at the cost of a full-frame channel swizzle every frame.
 //!
+//! # Where monitor origins come from
+//!
+//! `windows-capture`'s `Monitor` exposes size, name and index but no position,
+//! and the Station needs each monitor's virtual-desktop origin to turn the
+//! monitor-relative coordinates in a wire input event into somewhere to click.
+//! Querying Windows for it directly means `unsafe`, which this project keeps
+//! confined to `rr-hwcodec`, so [`monitor_origins`] borrows `xcap`'s safe wrapper
+//! around the same `EnumDisplaySettingsW` call `windows-capture` already uses for
+//! width and height. None of `xcap`'s capture path is involved — only the
+//! geometry.
+//!
 //! # Things that end a duplication session
 //!
 //! `AcquireNextFrame` reports `AccessLost` when the display mode changes, when
@@ -52,6 +63,11 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use tracing::{debug, warn};
+// Monitor geometry only — see `monitor_origins`. Aliased because
+// `windows_capture` has a `Monitor` of its own and the two are not
+// interchangeable.
+use xcap::Monitor as XcapMonitor;
+
 use windows_capture::d3d11::StagingTexture;
 use windows_capture::dxgi_duplication_api::{
     DxgiDuplicationApi, DxgiDuplicationFormat, Error as DupError,
@@ -126,6 +142,52 @@ fn enumerate() -> Result<Vec<(u32, Monitor)>> {
     }
     if out.is_empty() {
         return Err(CaptureError::NoMonitors);
+    }
+    Ok(out)
+}
+
+/// Parse the display number out of a Windows device name (`\\.\DISPLAY2` → 2).
+///
+/// Deliberately the same transformation `windows_capture::Monitor::index()`
+/// performs, so the number parsed here and the id [`enumerate`] hands out cannot
+/// come to mean different displays.
+fn display_number(device_name: &str) -> Option<u32> {
+    device_name.strip_prefix(r"\\.\DISPLAY")?.parse().ok()
+}
+
+/// Virtual-desktop origins for every monitor, paired with the display number
+/// [`enumerate`] uses as an id.
+///
+/// `windows-capture` reports a monitor's size, name and index but **not its
+/// position**, and reading `GetMonitorInfoW` or `EnumDisplaySettingsW` here
+/// directly would put `unsafe` into this crate, which the project keeps confined
+/// to `rr-hwcodec`. `xcap` already wraps that call safely, so it is used for the
+/// origin and nothing else — none of its capture path is involved. That is why
+/// the `dxgi-capture` feature depends on `screen-capture`.
+///
+/// The two crates describe one rectangle rather than two that happen to agree:
+/// `windows-capture` reads `dmPelsWidth`/`dmPelsHeight` from
+/// `EnumDisplaySettingsW`'s `DEVMODEW`, and `xcap` reads `dmPosition` from the
+/// same structure. `dmPosition` is also the DPI-independent choice: it is always
+/// in physical pixels, whereas `GetMonitorInfoW`'s `rcMonitor` is scaled unless
+/// the process happens to be per-monitor DPI aware.
+///
+/// Monitors whose device name carries no display number are skipped, matching
+/// [`enumerate`]: a monitor with no id cannot be asked for anyway.
+fn monitor_origins() -> Result<Vec<(u32, i32, i32)>> {
+    let monitors = XcapMonitor::all().map_err(backend_err)?;
+    let mut out = Vec::with_capacity(monitors.len());
+    for m in monitors {
+        let device = m.name().map_err(backend_err)?;
+        let Some(id) = display_number(&device) else {
+            warn!(device, "skipping monitor whose device name carries no display number");
+            continue;
+        };
+        out.push((
+            id,
+            m.x().map_err(backend_err)?,
+            m.y().map_err(backend_err)?,
+        ));
     }
     Ok(out)
 }
@@ -231,6 +293,7 @@ impl Engine {
     /// List monitors.
     fn monitors(&self) -> Result<Vec<MonitorInfo>> {
         let primary = Monitor::primary().ok();
+        let origins = monitor_origins()?;
         let mut out = Vec::new();
         for (id, m) in enumerate()? {
             // Prefer the friendly name ("V505-G9"); fall back to the device
@@ -239,9 +302,23 @@ impl Engine {
                 .name()
                 .or_else(|_| m.device_name())
                 .unwrap_or_else(|_| format!("Display {id}"));
+            // An enumerated monitor with no origin would have to be placed by
+            // guesswork, and a guess here puts remote clicks on the wrong
+            // display — the one failure this whole change exists to remove. Fail
+            // the enumeration instead. In practice this cannot diverge from the
+            // width/height reads below: both come from the same
+            // `EnumDisplaySettingsW` call, which already hard-fails.
+            let &(_, x, y) = origins
+                .iter()
+                .find(|&&(found, _, _)| found == id)
+                .ok_or_else(|| {
+                    CaptureError::Backend(format!("no virtual-desktop origin for display {id}"))
+                })?;
             out.push(MonitorInfo {
                 id,
                 name,
+                x,
+                y,
                 width: m.width().map_err(backend_err)?,
                 height: m.height().map_err(backend_err)?,
                 primary: primary.is_some_and(|p| p == m),

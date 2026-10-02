@@ -39,6 +39,8 @@ fn presence_round_trips() {
         monitors: vec![MonitorInfo {
             id: 0,
             label: "Monitor 1 (2560x1440)".into(),
+            x: 0,
+            y: 0,
             width: 2560,
             height: 1440,
             primary: true,
@@ -73,12 +75,64 @@ fn presence_role_tag_is_stable() {
 #[test]
 fn presence_tolerates_missing_optional_fields() {
     // A minimal Station announcement from a future/compact peer.
-    let json = r#"{"version":1,"role":"client"}"#;
+    let json = r#"{"version":2,"role":"client"}"#;
     let p = Presence::from_json(json).expect("deserialise minimal");
     assert_eq!(p.role, Role::Client);
     assert!(p.monitors.is_empty());
     assert_eq!(p.controller, None);
     assert!(!p.caps.clipboard);
+}
+
+// -- monitor geometry -------------------------------------------------------
+
+#[test]
+fn monitor_origins_round_trip_including_negatives() {
+    // A second display placed above and to the left of the primary. Both
+    // coordinates are negative, which is an ordinary Windows arrangement and the
+    // case a `u32` origin would have made unrepresentable.
+    let p = Presence {
+        version: PROTOCOL_VERSION,
+        role: Role::Station,
+        monitors: vec![
+            MonitorInfo {
+                id: 1,
+                label: "Primary".into(),
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1200,
+                primary: true,
+            },
+            MonitorInfo {
+                id: 2,
+                label: "Above left".into(),
+                x: -3840,
+                y: -2160,
+                width: 3840,
+                height: 2160,
+                primary: false,
+            },
+        ],
+        controller: None,
+        caps: Caps::default(),
+    };
+    let back = Presence::from_json(&p.to_json().expect("serialise")).expect("deserialise");
+    assert_eq!(p, back);
+    assert_eq!(back.monitors[1].x, -3840);
+    assert_eq!(back.monitors[1].y, -2160);
+}
+
+#[test]
+fn monitor_without_an_origin_is_rejected() {
+    // The origins are deliberately *not* `#[serde(default)]`. Defaulting them
+    // would stack every display on the primary and misroute every click on a
+    // secondary monitor, while looking entirely plausible. Failing to decode is
+    // the loud alternative, and this test is what keeps it that way: adding a
+    // `#[serde(default)]` to `x`/`y` breaks here.
+    let json = r#"{"version":2,"role":"station","monitors":[
+        {"id":1,"label":"No origin","width":1920,"height":1200,"primary":true}
+    ]}"#;
+    assert!(Presence::from_json(json).is_err());
 }
 
 // -- control channel --------------------------------------------------------
