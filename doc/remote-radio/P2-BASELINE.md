@@ -165,10 +165,11 @@ value across four runs, with the full observed range where it matters:
 | Cost of a static screen | full price, every frame | nothing | |
 
 `xcap` is remarkably stable at ~33 ms because it does the same full readback
-regardless of machine state. `DxgiCapturer` is cheap enough that background load
-is visible in it: the 3.7 ms figures come from runs starting at ~20% CPU, the
-5.3 ms figure from a run starting at ~49%. Even the worst observed case leaves
-room inside the 30 fps budget.
+regardless of machine state. `DxgiCapturer` is cheap enough that *background
+load* is visible in it: the 3.7 ms figures come from runs starting at ~20% CPU,
+the 5.3 ms figure from a run starting at ~49%. That is contention from other
+processes, not CPU throttling — see the caveats. Even the worst observed case
+leaves room inside the 30 fps budget.
 
 Benchmark detail, 30 delivered frames (`capture_bench`), two consecutive runs:
 
@@ -200,9 +201,10 @@ inflated the encode timings measured in the same loop. The blocking-plus-subtrac
 approach measures the same thing without perturbing anything else.
 
 **Capture is no longer the bottleneck — encode is**, at 17–22 ms against
-capture's ~3.9 ms. That is where any further latency work should go, and on this
-hardware the obvious lever is hardware encoding (Quick Sync / NVENC) rather than
-OpenH264 on a 15 W CPU.
+capture's ~3.9 ms. That is where any further latency work should go. On a 4-core
+mobile i7 the obvious lever is **hardware encoding**: this machine's Iris Xe has
+Quick Sync, which would move H.264 off the CPU entirely and free those cores for
+everything else the Station is doing.
 
 ## Correction: NASM, and a ten-fold encoder regression
 
@@ -243,9 +245,27 @@ Two lessons worth keeping:
 - `DxgiCapturer` returned an empty friendly name for the primary monitor, where
   `xcap` returned the placeholder `Unknown Monitor 65639`. Neither is useful; the
   Station UI needs its own fallback label.
-- The test machine is an i7-1165G7 (15 W, 4 cores) that was running at **1201 MHz
-  against a 2803 MHz nominal** clock throughout, i.e. power-limited. Absolute
-  figures are pessimistic; the ratio between backends is the durable result.
+- Test machine: Lenovo `20XXX16500` laptop, **i7-1165G7** (Tiger Lake mobile,
+  4 cores / 8 threads), **32 GB LPDDR4X-4267**, Windows 11. The CPU ran **at or
+  slightly above its 2.80 GHz nominal clock** throughout (84–112% of nominal on
+  the `% Processor Performance` counter, ≈2.4–3.1 GHz), so these are honest
+  figures for a 4-core mobile i7 — not a throttled machine.
+
+  An earlier revision of this document claimed the CPU was pinned at 1201 MHz
+  and therefore power-limited. **That was wrong.**
+  `Win32_Processor.CurrentClockSpeed` is a cached WMI value that is frozen at
+  1201 MHz on this machine and never moves, under any load. Use
+  `Win32_PerfFormattedData_Counters_ProcessorInformation.PercentProcessorPerformance`
+  instead, which is live and tracks boost.
+
+  What a faster machine would change: **encode**, which is CPU-bound and scales
+  with cores. Capture is a GPU copy plus one 8.8 MiB memcpy, so it has much less
+  to gain.
+- The 10 GB/s used for the memcpy floor is deliberately conservative. This
+  machine's LPDDR4X-4267 is well above that, so the real floor is below 0.92 ms
+  and `DxgiCapturer` sits further from memory-bound than the stated 4.2x — i.e.
+  there is probably some headroom left, though not enough to matter while encode
+  costs 4x as much.
 - A delta frame over a near-static screen encoded to **0 bytes**. That is correct
   — nothing changed enough to code — but the transport must treat an empty
   bitstream as "send nothing" rather than framing an empty packet.
