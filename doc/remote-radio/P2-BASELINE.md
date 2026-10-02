@@ -9,9 +9,10 @@ and software encode is 78% of that frame time.** 1080p-class displays are
 comfortable; 4K needs hardware encoding. See
 [Resolution is the thing that decides whether this works](#resolution-is-the-thing-that-decides-whether-this-works).
 
-**And 4K *is* reachable on this class of machine**: the same laptop's Quick Sync
-encoder does 3840x2160 at **70–85 fps**, 4–8x faster than software. See
-[Is 4K achievable on this class of machine?](#is-4k-achievable-on-this-class-of-machine-yes-with-hardware-encoding)
+**4K is now delivered at 41.2 fps** through `rr-hwcodec` driving Quick Sync
+(capture 14.27 ms + encode 10.01 ms), against 13.1 fps in software — and with the
+CPU at 45% of nominal rather than 123%. See
+[Delivered: 4K at 41 fps on hardware](#delivered-4k-at-41-fps-on-hardware).
 
 Jump to [the result](#measured-result) for the capture numbers, or read on for how
 the original baseline was measured and why the first diagnosis was wrong.
@@ -372,6 +373,65 @@ Two consequences for the design, both now evidence-backed rather than assumed:
   currently hands back CPU bytes. Hardware encode from a CPU buffer would be
   ~14 ms encode + ~18 ms capture = ~32 ms, only just inside budget; zero-copy is
   what creates real headroom.
+
+## Delivered: 4K at 41 fps on hardware
+
+`rr-hwcodec` now drives the Media Foundation H.264 MFT. Measured with
+`capture_probe` on the same machine, 3840x2160, DXGI capture throughout:
+
+| Encoder | capture | encode | total | **fps** |
+|---|---|---|---|---|
+| **Quick Sync (`rr-hwcodec`)** | 14.27 ms | **10.01 ms** | 24.27 ms | **41.2** |
+| `OpenH264` (software) | 14.81 ms | 61.41 ms | 76.22 ms | 13.1 |
+
+**6.1x faster on encode, and 4K clears 30 fps with headroom.** Output is verified
+decodable by `OpenH264` at the correct geometry, not merely non-empty.
+
+A detail worth more than the frame rate: the hardware runs were measured with the
+CPU at **45% of its nominal clock**, the software runs at **109–123%**. The work
+left the cores entirely. On a laptop Station that is the difference between a
+remote session and a hot, throttled machine that can do nothing else.
+
+At 1920x1200 software was already adequate (16.95 ms encode, 48 fps), so the
+hardware path matters most exactly where software failed.
+
+### Where the remaining encode time goes
+
+`cargo run --release -p rr-hwcodec --example bench_encode -- 2`, 90 frames at
+3840x2160:
+
+| Phase | Mean |
+|---|---|
+| build — colour conversion plus the copy into a Media Foundation buffer | **5.62 ms** |
+| submit — `ProcessInput` | 2.91 ms |
+| drain — event pump and output copy | 3.4 µs |
+| **encode total** | **8.54 ms** (worst 11.50 ms) |
+
+Staging is **66%** of encode time, and it is a pure 33 MiB memcpy. Feeding the
+DXGI texture straight to the encoder would remove it *and* the 14 ms capture
+readback above it — one change, both costs. That is the only large optimisation
+left in the video path.
+
+### Input format: ask, do not assume
+
+The Quick Sync MFT **accepts BGRA directly**, so it converts to NV12 on the GPU as
+part of encoding and the 11.4 ms CPU conversion measured earlier is never paid.
+`configure_input` enumerates what the MFT offers and prefers BGRA for exactly this
+reason, recording the outcome in `InputLayout` so the cost stays visible. The NV12
+conversion is kept for encoders that refuse BGRA, and
+`HwEncoderSettings::prefer_bgra` can force that path — a driver that accepts a
+BGRA input type and then misbehaves is not hypothetical.
+
+### The performance bug that mattered most
+
+The first working version measured **41.9 ms a frame** at 4K — barely better than
+software. The cause was not the encoder: `encode()` waited for the output of the
+frame it had just submitted, which serialises a pipeline. Submitting and collecting
+whatever is already finished took the same work to **10 ms**.
+
+A hardware encoder is a pipeline and has to be used as one. The only place the
+encoder now blocks is waiting for `METransformNeedInput`, which is backpressure and
+belongs there.
 
 ## Bug found by measuring at 4K
 

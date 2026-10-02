@@ -191,3 +191,10 @@ fn enumeration_does_not_fail_on_this_platform() {
     let any_hw = encoders.iter().any(|e| e.hardware);
     assert_eq!(has_hardware_h264().unwrap(), any_hw);
 }
+
+// `tracing-subscriber` is a dev-dependency used only by the examples, which turn
+// on logging to watch the Media Foundation negotiation. The lib's own test target
+// never touches it, so acknowledge it here rather than dropping a dependency the
+// examples need.
+#[cfg(windows)]
+use tracing_subscriber as _;

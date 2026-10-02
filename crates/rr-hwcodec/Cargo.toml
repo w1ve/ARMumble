@@ -14,13 +14,26 @@ thiserror = "2"
 # `windows-capture` already pulls in, so the workspace resolves a single copy.
 [target.'cfg(windows)'.dependencies]
 tracing = "0.1"
+# Only the encoder touches captured frames, and the encoder is Windows-only.
+rr-capture = { path = "../rr-capture" }
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_Media_MediaFoundation",
     "Win32_System_Com",
     "Win32_Graphics_Direct3D11",
     "Win32_Graphics_Dxgi_Common",
+    "Win32_System_Variant",
+    # VARIANT, and therefore ICodecAPI::SetValue, is gated behind Ole.
+    "Win32_System_Ole",
 ] }
 
 [lints]
 workspace = true
+
+# Examples turn on tracing so the Media Foundation negotiation can be watched;
+# the library itself never installs a subscriber.
+[target.'cfg(windows)'.dev-dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# The benchmark captures a real monitor, so the examples need the DXGI backend.
+# This unifies with the normal dependency rather than adding a second copy.
+rr-capture = { path = "../rr-capture", features = ["dxgi-capture"] }

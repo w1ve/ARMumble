@@ -5823,6 +5823,7 @@ version = "0.1.0"
 dependencies = [
  "openh264",
  "rr-capture",
+ "rr-hwcodec",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -5831,8 +5832,10 @@ dependencies = [
 name = "rr-hwcodec"
 version = "0.1.0"
 dependencies = [
+ "rr-capture",
  "thiserror 2.0.18",
  "tracing",
+ "tracing-subscriber",
  "windows 0.62.2",
 ]
 

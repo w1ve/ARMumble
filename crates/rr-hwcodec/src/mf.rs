@@ -5,13 +5,13 @@
 
 use std::sync::OnceLock;
 
-use tracing::debug;
+use tracing::{debug, warn};
 use windows::core::{GUID, PWSTR};
 use windows::Win32::Media::MediaFoundation::{
-    IMFActivate, MFStartup, MFTEnumEx, MFMediaType_Video, MFSTARTUP_FULL, MFT_CATEGORY_VIDEO_ENCODER,
-    MFT_ENUM_FLAG, MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT,
-    MFT_FRIENDLY_NAME_Attribute, MFT_REGISTER_TYPE_INFO, MFVideoFormat_H264, MFVideoFormat_NV12,
-    MF_VERSION,
+    IMFActivate, IMFTransform, MFMediaType_Video, MFSTARTUP_FULL, MFStartup, MFTEnumEx,
+    MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG, MFT_ENUM_FLAG_HARDWARE,
+    MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT, MFT_FRIENDLY_NAME_Attribute,
+    MFT_REGISTER_TYPE_INFO, MFVideoFormat_H264, MFVideoFormat_NV12, MF_VERSION,
 };
 use windows::Win32::System::Com::CoTaskMemFree;
 
@@ -173,6 +173,66 @@ fn enumerate_with_flags(flags: MFT_ENUM_FLAG, hardware: bool) -> Result<Vec<Enco
         out.push(EncoderInfo { name, hardware });
     }
     Ok(out)
+}
+
+/// Activate the first hardware H.264 encoder MFT that will instantiate.
+///
+/// Enumeration order is the system's preference, and activation can fail even for
+/// an enumerated MFT (a busy or disabled adapter, for example), so this walks the
+/// list rather than trusting the first entry.
+pub(crate) fn activate_hardware_h264() -> Result<(IMFTransform, EncoderInfo)> {
+    ensure_started()?;
+
+    let input = MFT_REGISTER_TYPE_INFO {
+        guidMajorType: MFMediaType_Video,
+        guidSubtype: MFVideoFormat_NV12,
+    };
+    let output = MFT_REGISTER_TYPE_INFO {
+        guidMajorType: MFMediaType_Video,
+        guidSubtype: MFVideoFormat_H264,
+    };
+
+    let mut ptr: *mut Option<IMFActivate> = std::ptr::null_mut();
+    let mut len: u32 = 0;
+
+    // SAFETY: as in `enumerate_with_flags` — the type-info locals outlive the
+    // call and are only read; `ptr`/`len` are writable locals of the required
+    // types; `ActivateArray` takes ownership of the returned allocation so it is
+    // freed exactly once.
+    unsafe {
+        MFTEnumEx(
+            MFT_CATEGORY_VIDEO_ENCODER,
+            MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER,
+            Some(&raw const input),
+            Some(&raw const output),
+            &raw mut ptr,
+            &raw mut len,
+        )
+    }
+    .map_err(mf_err("MFTEnumEx"))?;
+
+    let array = ActivateArray { ptr, len };
+    for slot in array.as_slice() {
+        let Some(activate) = slot.as_ref() else {
+            continue;
+        };
+        let name = friendly_name(activate).unwrap_or_else(|| "<unnamed MFT>".to_owned());
+
+        // SAFETY: `activate` is a live `IMFActivate` borrowed from the array we
+        // own, and `ActivateObject` only reads it. The returned interface is
+        // reference-counted by `windows`, so ownership is handled for us.
+        match unsafe { activate.ActivateObject::<IMFTransform>() } {
+            Ok(transform) => {
+                debug!(name = %name, "activated hardware H.264 encoder");
+                return Ok((transform, EncoderInfo { name, hardware: true }));
+            }
+            Err(e) => {
+                // Not fatal: another adapter may still work.
+                warn!(name = %name, error = %e, "hardware MFT failed to activate, trying next");
+            }
+        }
+    }
+    Err(HwCodecError::NoEncoder("hardware H.264"))
 }
 
 /// Read an MFT's friendly name, or `None` if the driver does not supply one.

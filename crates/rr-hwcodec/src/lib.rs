@@ -45,25 +45,48 @@
 //!
 //! # What this crate does not do
 //!
-//! It does not pick an encoder for the Station; `rr-codec` will do that, because
-//! it owns the software fallback.
+//! It does not pick an encoder for the Station; `rr-codec`'s `VideoEncoder` does
+//! that, because it owns the software fallback.
 //!
-//! # Status
+//! And it does not yet take frames directly from the GPU. Frames arrive as CPU
+//! bytes, and staging them into a Media Foundation buffer — a 33 MiB copy at 4K —
+//! is **66% of the remaining encode time**. Feeding the capture texture straight to
+//! the encoder would remove that *and* the capture readback above it. That is the
+//! next optimisation, and it is now the only large one left.
 //!
-//! **Capability detection and colour conversion are complete and verified.** The
-//! encode path itself is not here yet. That is deliberate rather than
-//! half-finished work: enumeration revealed that hardware H.264 MFTs are usually
-//! *asynchronous*, which requires the event-driven Media Foundation model
-//! (`MF_TRANSFORM_ASYNC_UNLOCK`, `METransformNeedInput` / `METransformHaveOutput`)
-//! rather than the far simpler synchronous `ProcessInput`/`ProcessOutput` loop.
-//! Writing the synchronous version first would have produced code that works on
-//! some machines and silently fails on others — exactly the cross-hardware
-//! fragility this crate exists to avoid.
+//! # Measured result
 //!
-//! What is here is what selection needs: [`available_h264_encoders`] and
-//! [`has_hardware_h264`] let the Station decide between hardware and software
-//! before either is built, and [`bgra_to_nv12`] is the conversion the encoder will
-//! need for MFTs that will not take BGRA directly.
+//! On an i7-1165G7 with Iris Xe, capturing its 3840x2160 display with DXGI Desktop
+//! Duplication and encoding through this crate:
+//!
+//! | 3840x2160 | capture | encode | total | fps |
+//! |---|---|---|---|---|
+//! | **hardware (this crate)** | 14.27 ms | **10.01 ms** | 24.27 ms | **41.2** |
+//! | software (`OpenH264`) | 14.81 ms | 61.41 ms | 76.22 ms | 13.1 |
+//!
+//! 6.1x faster on encode, and it did it with the CPU at **45% of its nominal
+//! clock** against 109–123% for the software run — the work moved off the cores
+//! entirely, which matters for a laptop Station doing anything else at the same
+//! time. Output is verified decodable by `rr-codec`'s `OpenH264` decoder, not just
+//! assumed from its size.
+//!
+//! # Three things the MFT contract requires that are easy to get wrong
+//!
+//! Each of these produced a failure that looked like something else entirely:
+//!
+//! 1. **Set the output type, negotiate input, then set the output type again.**
+//!    Agreeing an input type invalidates the output type, and Quick Sync then
+//!    raises `MF_E_TRANSFORM_STREAM_CHANGE` on the first `ProcessOutput`.
+//! 2. **When renegotiating, overlay frame size, rate and bitrate onto the MFT's
+//!    preferred type.** Handing back its bare preference leaves it in a state where
+//!    the next call fails with an undiagnosable `E_UNEXPECTED`.
+//! 3. **Draining is event-driven too.** Polling `ProcessOutput` after
+//!    `MFT_MESSAGE_COMMAND_DRAIN` is an out-of-turn call on an async MFT and fails
+//!    the flush with `E_UNEXPECTED` — after every frame had encoded perfectly well.
+//!
+//! And one performance trap: [`HwEncoder::encode`] must **not** wait for the output
+//! of the frame it just submitted. Doing so serialises a pipelined encoder and cost
+//! 41.9 ms a frame at 4K against 10 ms of real throughput.
 
 // The one permitted exception in the workspace. See the module docs above for
 // the rules that keep it contained.
@@ -76,9 +99,13 @@
 
 mod convert;
 #[cfg(windows)]
+mod encoder;
+#[cfg(windows)]
 mod mf;
 
-pub use convert::{bgra_to_nv12, nv12_len};
+pub use convert::{bgra_to_nv12, nv12_len, rgba_to_nv12};
+#[cfg(windows)]
+pub use encoder::{EncodeStats, HwEncoder, HwEncoderSettings};
 
 /// Errors from hardware encoding.
 #[derive(Debug, thiserror::Error)]

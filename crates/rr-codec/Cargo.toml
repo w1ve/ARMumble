@@ -17,6 +17,11 @@ openh264 = { version = "0.9.8", features = ["source"] }
 thiserror = "2"
 tracing = "0.1"
 
+# Hardware encoding is Windows-only and not optional there: at 4K the software
+# encoder misses 30 fps by 2-4x, so a Windows Station should always prefer it.
+[target.'cfg(windows)'.dependencies]
+rr-hwcodec = { path = "../rr-hwcodec" }
+
 [features]
 default = []
 # Lets the `capture_probe` example grab the real screen with the portable xcap

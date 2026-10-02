@@ -66,7 +66,7 @@ mod probe {
     use std::time::{Duration, Instant};
 
     use rr_capture::{CaptureError, Frame, MonitorInfo, ScreenCapturer};
-    use rr_codec::{Decoder, Encoder, EncoderSettings};
+    use rr_codec::{Decoder, EncoderSettings, VideoEncoder};
 
     /// Frames to collect in the sustained-throughput stage.
     const LOOP_FRAMES: usize = 60;
@@ -217,18 +217,59 @@ mod probe {
         Ok(frame)
     }
 
+    /// Encode until the encoder actually yields a frame.
+    ///
+    /// A hardware encoder is a pipeline: it can accept a frame and return nothing
+    /// while it fills, with the output arriving a call or two later. The software
+    /// encoder always answers immediately. This hides the difference from the
+    /// one-shot stages, which just need *a* frame.
+    fn encode_blocking(
+        encoder: &mut VideoEncoder,
+        capturer: &mut dyn ScreenCapturer,
+        frame: &Frame,
+        enc_w: u32,
+        enc_h: u32,
+    ) -> Result<rr_codec::EncodedFrame, Box<dyn Error>> {
+        if let Some(out) = encoder.encode(&crop_to(frame, enc_w, enc_h))? {
+            return Ok(out);
+        }
+        // Keep feeding fresh frames until something comes out.
+        for _ in 0..16 {
+            let next = grab_blocking(capturer)?;
+            if let Some(out) = encoder.encode(&crop_to(&next, enc_w, enc_h))? {
+                return Ok(out);
+            }
+        }
+        Err("encoder accepted frames but produced no output".into())
+    }
+
     /// Stages 4 and 5: encode an IDR and a delta, then decode the IDR back.
     fn stage_codec(
         capturer: &mut dyn ScreenCapturer,
         frame: &Frame,
-    ) -> Result<(Encoder, u32, u32), Box<dyn Error>> {
+    ) -> Result<(VideoEncoder, u32, u32), Box<dyn Error>> {
         // H.264 4:2:0 needs even dimensions; real monitors can be odd.
         let (enc_w, enc_h) = (frame.width & !1, frame.height & !1);
         println!("\n[4] Encoding H.264 at {enc_w}x{enc_h} from {:?}", frame.format);
-        let mut encoder = Encoder::new(enc_w, enc_h, EncoderSettings::default())?;
+
+        // `RR_FORCE_SOFTWARE=1` pins the software path, so the two can be compared
+        // on the same machine without a rebuild.
+        let mut encoder = if std::env::var("RR_FORCE_SOFTWARE").is_ok() {
+            VideoEncoder::new_software(enc_w, enc_h, EncoderSettings::default())?
+        } else {
+            VideoEncoder::new(enc_w, enc_h, EncoderSettings::default())?
+        };
+        println!(
+            "    encoder: {} (hardware: {})",
+            encoder.name(),
+            encoder.is_hardware()
+        );
+        // A viewer joining mid-stream needs an IDR, so ask for one explicitly
+        // rather than relying on the encoder opening with one.
+        encoder.request_keyframe();
 
         let t1 = Instant::now();
-        let idr = encoder.encode(&crop_to(frame, enc_w, enc_h))?;
+        let idr = encode_blocking(&mut encoder, capturer, frame, enc_w, enc_h)?;
         println!(
             "    IDR:   {} bytes keyframe={} in {:?}",
             idr.data.len(),
@@ -241,7 +282,7 @@ mod probe {
 
         let next = grab_blocking(capturer)?;
         let t2 = Instant::now();
-        let delta = encoder.encode(&crop_to(&next, enc_w, enc_h))?;
+        let delta = encode_blocking(&mut encoder, capturer, &next, enc_w, enc_h)?;
         println!(
             "    delta: {} bytes keyframe={} in {:?}",
             delta.data.len(),
@@ -276,7 +317,7 @@ mod probe {
     fn stage_sustained(
         label: &'static str,
         capturer: &mut dyn ScreenCapturer,
-        encoder: &mut Encoder,
+        encoder: &mut VideoEncoder,
         enc_w: u32,
         enc_h: u32,
     ) -> Result<Report, Box<dyn Error>> {
@@ -310,12 +351,17 @@ mod probe {
             wait_total += wait;
 
             let b = Instant::now();
-            let e = encoder.encode(&crop_to(&f, enc_w, enc_h))?;
+            let produced = encoder.encode(&crop_to(&f, enc_w, enc_h))?;
             let enc = b.elapsed();
 
+            // A hardware pipeline can swallow a frame and answer later. Charge the
+            // submission time regardless — it is real cost — but only count bytes
+            // for frames that actually came out.
             capture_total += g;
             encode_total += enc;
-            bytes_total += e.data.len();
+            if let Some(e) = produced {
+                bytes_total += e.data.len();
+            }
             capture_worst = capture_worst.max(g);
             encode_worst = encode_worst.max(enc);
             frames += 1;
@@ -455,9 +501,14 @@ mod probe {
     /// Crop a frame to `w` x `h`, preserving stride semantics.
     ///
     /// Real monitors can report odd dimensions, which H.264 4:2:0 cannot encode.
-    fn crop_to(frame: &Frame, w: u32, h: u32) -> Frame {
+    ///
+    /// Borrows when no crop is needed, which is the common case. Returning an owned
+    /// `Frame` unconditionally meant cloning 33 MiB per frame at 4K *inside the
+    /// timed region*, which inflated the measured encode cost by several
+    /// milliseconds and would have been pure waste in a real pipeline too.
+    fn crop_to(frame: &Frame, w: u32, h: u32) -> std::borrow::Cow<'_, Frame> {
         if frame.width == w && frame.height == h && frame.stride == w as usize * 4 {
-            return frame.clone();
+            return std::borrow::Cow::Borrowed(frame);
         }
         let bpp = frame.format.bytes_per_pixel();
         let packed = w as usize * bpp;
@@ -467,7 +518,7 @@ mod probe {
                 data.extend_from_slice(row.get(..packed).unwrap_or(row));
             }
         }
-        Frame {
+        std::borrow::Cow::Owned(Frame {
             data,
             width: w,
             height: h,
@@ -475,7 +526,7 @@ mod probe {
             format: frame.format,
             captured_at: frame.captured_at,
             sequence: frame.sequence,
-        }
+        })
     }
 }
 

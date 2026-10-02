@@ -42,6 +42,37 @@ pub fn bgra_to_nv12(
     stride: usize,
     dst: &mut [u8],
 ) -> Option<usize> {
+    to_nv12::<true>(src, width, height, stride, dst)
+}
+
+/// Convert packed RGBA to NV12.
+///
+/// Same as [`bgra_to_nv12`] but for the opposite channel order, which is what the
+/// portable `xcap` capture backend produces. Having both avoids a separate
+/// full-frame swizzle pass just to reuse one function.
+#[must_use]
+pub fn rgba_to_nv12(
+    src: &[u8],
+    width: u32,
+    height: u32,
+    stride: usize,
+    dst: &mut [u8],
+) -> Option<usize> {
+    to_nv12::<false>(src, width, height, stride, dst)
+}
+
+/// The shared implementation.
+///
+/// `BGRA` is a const parameter rather than a runtime flag so the channel indices
+/// fold away at compile time and the inner loop is identical to a hand-written
+/// single-order version.
+fn to_nv12<const BGRA: bool>(
+    src: &[u8],
+    width: u32,
+    height: u32,
+    stride: usize,
+    dst: &mut [u8],
+) -> Option<usize> {
     let w = width as usize;
     let h = height as usize;
     if w == 0 || h == 0 || !width.is_multiple_of(2) || !height.is_multiple_of(2) {
@@ -76,13 +107,16 @@ pub fn bgra_to_nv12(
             let mut g_sum = 0i32;
             let mut r_sum = 0i32;
 
+            // Channel offsets, resolved at compile time from the const parameter.
+            let (bi, ri) = if BGRA { (0usize, 2usize) } else { (2usize, 0usize) };
+
             // The four pixels of this 2x2 block: luma per pixel, chroma averaged.
             for (row, y_row) in [(row0, &mut *y_row0), (row1, &mut *y_row1)] {
                 for k in 0..2 {
                     let o = (x + k) * 4;
-                    let b = i32::from(row[o]);
+                    let b = i32::from(row[o + bi]);
                     let g = i32::from(row[o + 1]);
-                    let r = i32::from(row[o + 2]);
+                    let r = i32::from(row[o + ri]);
                     b_sum += b;
                     g_sum += g;
                     r_sum += r;

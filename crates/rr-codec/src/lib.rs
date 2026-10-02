@@ -25,9 +25,11 @@
 
 mod decoder;
 mod encoder;
+mod select;
 
 pub use decoder::{DecodedFrame, Decoder};
 pub use encoder::{EncodedFrame, Encoder, EncoderSettings};
+pub use select::VideoEncoder;
 
 /// Errors from encoding or decoding.
 #[derive(Debug, thiserror::Error)]
