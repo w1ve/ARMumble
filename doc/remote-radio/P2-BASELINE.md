@@ -1,9 +1,16 @@
 # P2 latency baseline, and the capture backend that replaced it
 
 **Outcome: capture went from ~33 ms to ~3.9 ms per frame (roughly 8x), taking
-capture + encode from ~50 ms to ~22 ms — inside the 33.3 ms budget for 30 fps.**
-Jump to [the result](#measured-result) for the numbers, or read on for how the
-original baseline was measured and why the first diagnosis was wrong.
+capture + encode from ~50 ms to ~22 ms at 1920x1200 — inside the 33.3 ms budget
+for 30 fps.**
+
+**Caveat that matters more than the headline: at 3840x2160 we get 7.5–13.8 fps,
+and software encode is 78% of that frame time.** 1080p-class displays are
+comfortable; 4K needs hardware encoding or fewer encoded pixels. See
+[Resolution is the thing that decides whether this works](#resolution-is-the-thing-that-decides-whether-this-works).
+
+Jump to [the result](#measured-result) for the capture numbers, or read on for how
+the original baseline was measured and why the first diagnosis was wrong.
 
 The sections below are in the order they happened: the `xcap` baseline, the
 attribution that found the real cost, the DXGI replacement and its measurements,
@@ -201,10 +208,83 @@ inflated the encode timings measured in the same loop. The blocking-plus-subtrac
 approach measures the same thing without perturbing anything else.
 
 **Capture is no longer the bottleneck — encode is**, at 17–22 ms against
-capture's ~3.9 ms. That is where any further latency work should go. On a 4-core
-mobile i7 the obvious lever is **hardware encoding**: this machine's Iris Xe has
-Quick Sync, which would move H.264 off the CPU entirely and free those cores for
-everything else the Station is doing.
+capture's ~3.9 ms. See the next section for how far that goes.
+
+## Resolution is the thing that decides whether this works
+
+The 1920x1200 figures above are comfortable. The same probe against this
+machine's second display, a 3840x2160 panel (3.6x the pixels), is not:
+
+| | 1920x1200 (2.3 Mpx) | 3840x2160 (8.3 Mpx) |
+|---|---|---|
+| `DxgiCapturer` capture work | 3.9 ms | 16–18 ms |
+| `OpenH264` encode, real desktop content | 17–21 ms | **56–114 ms** |
+| capture + encode | 22–27 ms | 72–133 ms |
+| Sustainable | **37–46 fps** | **7.5–13.8 fps** |
+
+Capture scales about as expected with pixel count. **Encode does not** — it is
+78% of the 4K frame time and the reason 4K misses the 30 fps budget by 2–4x.
+
+### Configuration is not the lever
+
+`cargo run --release -p rr-codec --example encoder_tune --features dxgi-capture`
+sweeps `complexity` (`Low`/`Medium`/`High`) and `num_threads` (1/auto/2/4/8)
+against an identical frame sequence, interleaved, best-of-3:
+
+| | 1920x1200 | 3840x2160 |
+|---|---|---|
+| Spread across all 10 configurations | 8.32 – 8.83 ms | 14.70 – 15.40 ms |
+| Shipped configuration | 8.63 ms | 15.13 ms |
+
+A 6% spread at 1080p and 5% at 4K. **Neither knob is worth setting**, and
+`OpenH264`'s internal threading does not parallelise this workload at all —
+`threads=1` and `threads=8` are indistinguishable. The shipped configuration is
+already at the fast end.
+
+### Encoding cost depends on content far more than on configuration
+
+Note the gap between the sweep and the probe at the same resolution: 15 ms versus
+56–114 ms at 4K. Same encoder, same settings. The difference is the *content*:
+
+- The sweep paints a large high-entropy region. Motion estimation finds no
+  matches and gives up quickly.
+- The probe encodes a real, mostly-static desktop. Motion estimation has endless
+  plausible matches to evaluate across 8.3 Mpx and searches exhaustively.
+
+**`OpenH264` is slowest on exactly the content a remote desktop produces.** Any
+encoder benchmark for this project that does not use real screen captures is
+measuring the wrong thing, and any quoted encode figure is meaningless without
+saying what it encoded.
+
+### Measurement noise, and how to get past it
+
+An earlier non-interleaved version of `encoder_tune` measured each configuration
+once, in order. Identical configurations differed by up to **4x** between runs
+(the shipped baseline measured 8.3 ms, 11.5 ms, 14.0 ms and 36 ms on different
+runs), and position within the run predicted the result better than the setting
+did — background processes stealing cores on a 4-core machine. The fix was to
+interleave rounds and report the minimum, which collapsed the spread to the 6%
+above. Mean-of-one-pass benchmarking on a busy desktop is not measurement.
+
+## Bug found by measuring at 4K
+
+The 4K sweep failed outright with:
+
+```text
+Error: Backend("Invalid staging texture: format must match the frame")
+```
+
+`Session::open` sized the reusable staging texture from
+`duplication_desc().ModeDesc.Format`, assuming the texture handed back by
+`acquire_next_frame` would match. On the 4K display it did not, and
+`buffer_with` rejected it, killing the capture. The risk was noted in the
+original implementation and the fallback deliberately skipped; that was the wrong
+call.
+
+`grab_once` now compares the staging texture's description against the acquired
+frame's and rebuilds when they disagree, trusting the frame rather than the mode
+description. Cost is one `CreateTexture2D` on the rare frame that changes shape.
+This would have shown up the first time anyone shared a 4K monitor.
 
 ## Correction: NASM, and a ten-fold encoder regression
 

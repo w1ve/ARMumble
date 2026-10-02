@@ -137,25 +137,47 @@ mod probe {
         }
     }
 
-    /// Stage 1: enumerate monitors and select the primary.
-    fn stage_monitors(capturer: &mut dyn ScreenCapturer) -> Result<MonitorInfo, Box<dyn Error>> {
+    /// Stage 1: enumerate monitors and select one.
+    ///
+    /// `pick` is an optional **1-based index into the backend's own enumeration**,
+    /// not a monitor id: ids are backend-specific (`xcap` reports Windows monitor
+    /// handles, `DxgiCapturer` reports display numbers), so an index is the only
+    /// selector that means the same thing to both. `None` selects the primary.
+    fn stage_monitors(
+        capturer: &mut dyn ScreenCapturer,
+        pick: Option<usize>,
+    ) -> Result<MonitorInfo, Box<dyn Error>> {
         println!("[1] Enumerating monitors");
         let monitors = capturer.monitors()?;
         if monitors.is_empty() {
             return Err("no monitors reported".into());
         }
-        for m in &monitors {
+        for (i, m) in monitors.iter().enumerate() {
             println!(
-                "    id={:<10} {:<28} {:>5}x{:<5} primary={}",
-                m.id, m.name, m.width, m.height, m.primary
+                "    [{}] id={:<10} {:<28} {:>5}x{:<5} primary={}",
+                i + 1,
+                m.id,
+                m.name,
+                m.width,
+                m.height,
+                m.primary
             );
         }
-        let target = monitors
-            .iter()
-            .find(|m| m.primary)
-            .unwrap_or(&monitors[0])
-            .clone();
-        println!("    -> using monitor id={} ({})\n", target.id, target.name);
+        let target = match pick {
+            Some(n) => monitors
+                .get(n.saturating_sub(1))
+                .ok_or_else(|| format!("no monitor at index {n}; {} available", monitors.len()))?
+                .clone(),
+            None => monitors
+                .iter()
+                .find(|m| m.primary)
+                .unwrap_or(&monitors[0])
+                .clone(),
+        };
+        println!(
+            "    -> using id={} ({}) {}x{}\n",
+            target.id, target.name, target.width, target.height
+        );
         capturer.select_monitor(target.id)?;
         Ok(target)
     }
@@ -344,12 +366,14 @@ mod probe {
     pub(crate) fn run_backend(
         label: &'static str,
         capturer: &mut dyn ScreenCapturer,
+        pick: Option<usize>,
     ) -> Result<Report, Box<dyn Error>> {
         println!("================================================");
         println!("Backend: {label}");
         println!("================================================\n");
 
-        let _target = stage_monitors(capturer)?;
+        let target = stage_monitors(capturer, pick)?;
+        let _ = target;
         let frame = stage_capture(capturer)?;
         let (mut encoder, enc_w, enc_h) = stage_codec(capturer, &frame)?;
         let report = stage_sustained(label, capturer, &mut encoder, enc_w, enc_h)?;
@@ -480,9 +504,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 /// encode timings measured in the same loop. The wait is then subtracted via
 /// `last_wait`, so blocking costs the measurement nothing.
 #[cfg(all(windows, feature = "dxgi-capture"))]
-fn probe_dxgi(reports: &mut Vec<probe::Report>) -> Result<(), Box<dyn std::error::Error>> {
+fn probe_dxgi(
+    reports: &mut Vec<probe::Report>,
+    pick: Option<usize>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut dxgi = rr_capture::DxgiCapturer::new()?;
-    reports.push(probe::run_backend("DXGI Desktop Duplication", &mut dxgi)?);
+    reports.push(probe::run_backend(
+        "DXGI Desktop Duplication",
+        &mut dxgi,
+        pick,
+    )?);
     Ok(())
 }
 
@@ -491,15 +522,21 @@ fn probe_dxgi(reports: &mut Vec<probe::Report>) -> Result<(), Box<dyn std::error
     not(all(windows, feature = "dxgi-capture")),
     any(feature = "real-capture", all(windows, feature = "dxgi-capture"))
 ))]
-fn probe_dxgi(_reports: &mut Vec<probe::Report>) -> Result<(), Box<dyn std::error::Error>> {
+fn probe_dxgi(
+    _reports: &mut Vec<probe::Report>,
+    _pick: Option<usize>,
+) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
 /// Probe the portable `xcap` backend.
 #[cfg(feature = "real-capture")]
-fn probe_xcap(reports: &mut Vec<probe::Report>) -> Result<(), Box<dyn std::error::Error>> {
+fn probe_xcap(
+    reports: &mut Vec<probe::Report>,
+    pick: Option<usize>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut xcap = rr_capture::XcapCapturer::new();
-    reports.push(probe::run_backend("xcap (GDI baseline)", &mut xcap)?);
+    reports.push(probe::run_backend("xcap (GDI baseline)", &mut xcap, pick)?);
     Ok(())
 }
 
@@ -508,17 +545,30 @@ fn probe_xcap(reports: &mut Vec<probe::Report>) -> Result<(), Box<dyn std::error
     not(feature = "real-capture"),
     any(feature = "real-capture", all(windows, feature = "dxgi-capture"))
 ))]
-fn probe_xcap(_reports: &mut Vec<probe::Report>) -> Result<(), Box<dyn std::error::Error>> {
+fn probe_xcap(
+    _reports: &mut Vec<probe::Report>,
+    _pick: Option<usize>,
+) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
 #[cfg(any(feature = "real-capture", all(windows, feature = "dxgi-capture")))]
 fn run() -> Result<(), Box<dyn std::error::Error>> {
+    // Optional 1-based monitor index, so a second display (often a different
+    // resolution, which is what actually moves these numbers) can be measured
+    // without recompiling.
+    let pick = std::env::args()
+        .nth(1)
+        .and_then(|a| a.parse::<usize>().ok());
+    if let Some(n) = pick {
+        println!("Selecting monitor #{n} from each backend's enumeration.\n");
+    }
+
     let mut reports = Vec::new();
     // DXGI first: it is the backend the Station will actually use on Windows,
     // and `print_comparison` reads the first entry as the candidate.
-    probe_dxgi(&mut reports)?;
-    probe_xcap(&mut reports)?;
+    probe_dxgi(&mut reports, pick)?;
+    probe_xcap(&mut reports, pick)?;
     if reports.len() > 1 {
         probe::print_comparison(&reports);
     }

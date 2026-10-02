@@ -316,6 +316,27 @@ impl Engine {
         let captured_at = Instant::now();
         let wait = captured_at.saturating_duration_since(wait_start);
 
+        // The staging texture is built from the duplication's declared mode, but
+        // the texture actually handed over can differ — observed on a 4K display,
+        // where it produced "Invalid staging texture: format must match the
+        // frame" and killed the capture outright. Trust the frame, not the mode
+        // description, and rebuild when they disagree. This costs one
+        // `CreateTexture2D` on the rare frame that changes shape, and nothing
+        // otherwise.
+        let want = *frame.texture_desc();
+        let have = staging.desc();
+        if have.Width != want.Width || have.Height != want.Height || have.Format != want.Format {
+            warn!(
+                from_w = have.Width,
+                from_h = have.Height,
+                to_w = want.Width,
+                to_h = want.Height,
+                "rebuilding staging texture to match the acquired frame"
+            );
+            *staging = StagingTexture::new(frame.device(), want.Width, want.Height, want.Format)
+                .map_err(backend_err)?;
+        }
+
         let mut buffer = frame.buffer_with(staging).map_err(dup_err)?;
         let width = buffer.width();
         let height = buffer.height();
