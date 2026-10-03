@@ -1,4 +1,4 @@
-import { CloseIcon, MoonIcon, ShieldCheckIcon, UserFilledIcon } from "../../icons";
+import { CloseIcon, MoonIcon, RadioIcon, ShieldCheckIcon, UserFilledIcon } from "../../icons";
 /**
  * Full-height right-side panel showing a user's full profile.
  *
@@ -15,6 +15,7 @@ import type { UserEntry, FancyProfile, UserMode } from "../../types";
 import { parseComment } from "../../profileFormat";
 import { useUserAvatar, useUserComment } from "../../lazyBlobs";
 import { getPreferences } from "../../preferencesStorage";
+import { useStationNames, isStationName } from "../../stationIdentity";
 import { useUserStats } from "../../hooks/useUserStats";
 import { formatDuration } from "../../utils/format";
 import UserInfoPanel from "./UserInfoPanel";
@@ -131,6 +132,9 @@ function UserProfilePanel({
 
   const isExpert = userMode !== "normal";
 
+  const stationNames = useStationNames();
+  const isStation = isStationName(user.name, stationNames);
+
   // Load user mode preference on mount.
   useEffect(() => {
     getPreferences().then((p) => setUserMode(p.userMode));
@@ -224,7 +228,9 @@ function UserProfilePanel({
                 className={styles.avatarImg}
               />
             ) : (
-              <span className={styles.avatarPlaceholder}><UserFilledIcon width={48} height={48} /></span>
+              <span className={styles.avatarPlaceholder}>
+                {isStation ? <RadioIcon width={48} height={48} /> : <UserFilledIcon width={48} height={48} />}
+              </span>
             )}
             {decoration && decoration.id !== "none" && (
               <span className={styles.decoration}>{decoration.preview}</span>

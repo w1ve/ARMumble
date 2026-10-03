@@ -246,6 +246,7 @@
     "useDefaultName": "← Use my default name ({{name}})"
   },
   "wizard": {
+    "stationNameHint": "Choose a station name that reflects the radio name or location name that is easy for users to identify.",
     "expert": {
       "step0": {
         "title": "Server address",
@@ -277,6 +278,14 @@
     }
   },
   "title": "Welcome",
+  "welcomeTagline": "Stereo audio for remote amateur radio",
+  "welcomeRoleLabel": "I'm setting this up as",
+  "welcomeRoleOperator": "Operator",
+  "welcomeRoleOperatorHint": "I operate a station remotely",
+  "welcomeRoleStation": "Station",
+  "welcomeRoleStationHint": "This PC is at the radio",
+  "welcomeNameLabelOperator": "Your operator callsign",
+  "welcomeNameLabelStation": "Your station name",
   "username": "Username",
   "usernamePlaceholder": "Your name",
   "interface": "Interface",

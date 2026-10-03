@@ -17,6 +17,7 @@ import { useState, useMemo, useCallback, useContext, useRef, useLayoutEffect, me
 import { useTranslation } from "react-i18next";
 import type { ChannelEntry, UserEntry } from "../../../types";
 import { colorFor, useHoverCardPosition, UserHoverCardPortal, RoleColorsContext } from "../user/UserListItem";
+import { useIsStation, StationGlyph } from "../../../stationIdentity";
 import { useUserAvatar, useUserComment } from "../../../lazyBlobs";
 import { parseComment } from "../../../profileFormat";
 import { useUserStats } from "../../../hooks/useUserStats";
@@ -93,6 +94,7 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
   });
   const roleColors = useContext(RoleColorsContext);
   const roleColor = user.user_id != null ? (roleColors.get(user.user_id) ?? null) : null;
+  const isStation = useIsStation()(user.name);
   const url = useUserAvatar(user.session, user.texture_size);
   const { showCard, cardPos, itemRef, handleEnter, handleLeave } = useHoverCardPosition(isBroadcasting);
   // Defer FancyProfile parsing until the hover card is actually shown.
@@ -148,12 +150,12 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
       >
         <div
           className={styles.memberAvatar}
-          style={{ background: url ? "transparent" : colorFor(user.name) }}
+          style={{ background: url || isStation ? "transparent" : colorFor(user.name) }}
         >
           {url ? (
             <img src={url} alt={user.name} className={styles.memberAvatarImg} />
           ) : (
-            user.name.charAt(0).toUpperCase()
+            <StationGlyph isStation={isStation} size={14} fallback={user.name.charAt(0).toUpperCase()} />
           )}
         </div>
         <span
@@ -190,6 +192,7 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
           isRegistered={user.user_id != null && user.user_id > 0}
           isBroadcasting={isBroadcasting}
           thumbnail={streamThumbnail}
+          isStation={isStation}
         />
       )}
     </>
@@ -201,16 +204,17 @@ const MemberItem = memo(MemberItemImpl);
 /** A single collapsed-avatar bubble (separate component so we can use the avatar hook). */
 function CollapsedAvatar({ user }: Readonly<{ user: UserEntry }>) {
   const url = useUserAvatar(user.session, user.texture_size);
+  const isStation = useIsStation()(user.name);
   return (
     <div
       className={styles.collapsedAvatar}
-      style={{ background: url ? "transparent" : colorFor(user.name) }}
+      style={{ background: url || isStation ? "transparent" : colorFor(user.name) }}
       title={user.name}
     >
       {url ? (
         <img src={url} alt={user.name} className={styles.collapsedAvatarImg} />
       ) : (
-        user.name.charAt(0).toUpperCase()
+        <StationGlyph isStation={isStation} size={12} fallback={user.name.charAt(0).toUpperCase()} />
       )}
     </div>
   );

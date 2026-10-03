@@ -13,6 +13,7 @@ import { memo, useState, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChannelEntry, UserEntry } from "../../../types";
 import { colorFor } from "../user/UserListItem";
+import { useIsStation, StationGlyph } from "../../../stationIdentity";
 import { useUserAvatar } from "../../../lazyBlobs";
 import { PchatBadge } from "../PchatBadge";
 import { useChannelDropTarget } from "../../../utils/userMoveDnd";
@@ -44,18 +45,19 @@ export interface ClassicChannelListProps {
 
 function StackedAvatar({ user, zIndex }: Readonly<{ user: UserEntry; zIndex: number }>) {
   const url = useUserAvatar(user.session, user.texture_size);
+  const isStation = useIsStation()(user.name);
   return (
     <div
       className={styles.stackedAvatar}
       style={{
-        background: url ? "transparent" : colorFor(user.name),
+        background: url || isStation ? "transparent" : colorFor(user.name),
         zIndex,
       }}
     >
       {url ? (
         <img src={url} alt={user.name} className={styles.stackedAvatarImg} />
       ) : (
-        user.name.charAt(0).toUpperCase()
+        <StationGlyph isStation={isStation} size={12} fallback={user.name.charAt(0).toUpperCase()} />
       )}
     </div>
   );
@@ -63,6 +65,7 @@ function StackedAvatar({ user, zIndex }: Readonly<{ user: UserEntry; zIndex: num
 
 function TooltipUser({ user }: Readonly<{ user: UserEntry }>) {
   const url = useUserAvatar(user.session, user.texture_size);
+  const isStation = useIsStation()(user.name);
   return (
     <div className={styles.tooltipUser}>
       {url ? (
@@ -70,9 +73,9 @@ function TooltipUser({ user }: Readonly<{ user: UserEntry }>) {
       ) : (
         <div
           className={styles.tooltipAvatar}
-          style={{ background: colorFor(user.name) }}
+          style={isStation ? undefined : { background: colorFor(user.name) }}
         >
-          {user.name.charAt(0).toUpperCase()}
+          <StationGlyph isStation={isStation} size={14} fallback={user.name.charAt(0).toUpperCase()} />
         </div>
       )}
       <span>{user.name}</span>

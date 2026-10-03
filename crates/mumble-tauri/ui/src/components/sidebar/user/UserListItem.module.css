@@ -99,6 +99,19 @@
   object-fit: cover;
 }
 
+/* Station identities get a rounded SQUARE badge in a distinct colour, so an
+   operator can tell a radio station apart from a person at a glance.
+   The compound selectors (0-2-0 specificity) beat the base `.avatar`/
+   `.avatarImg` `border-radius: 50%` rules regardless of source order. */
+.avatar.avatarStation,
+.avatarImg.avatarStation {
+  border-radius: 7px;
+}
+
+.avatar.avatarStation {
+  background: linear-gradient(135deg, #4668ff 0%, #8a4dff 100%);
+}
+
 .onlineDot {
   position: absolute;
   bottom: -1px;

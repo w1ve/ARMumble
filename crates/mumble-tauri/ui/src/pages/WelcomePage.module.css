@@ -41,6 +41,12 @@
   letter-spacing: -0.01em;
 }
 
+.welcomeSubtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary, #8a90b0);
+}
+
 /* --- Form fields ------------------------------------------------ */
 
 .field {

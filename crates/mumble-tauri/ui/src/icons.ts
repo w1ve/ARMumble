@@ -73,6 +73,7 @@ export {
   Plus as PlusIcon,
   ChartBar as PollIcon,
   Quote as QuoteIcon,
+  Antenna as RadioIcon,
   Disc as RecordIcon,
   RefreshCw as RefreshCwIcon,
   RotateCw as RefreshIcon,

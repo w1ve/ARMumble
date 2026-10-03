@@ -15,6 +15,7 @@ import { useState, useMemo, useCallback, useContext, useRef, useLayoutEffect, me
 import { useTranslation } from "react-i18next";
 import type { ChannelEntry, UserEntry } from "../../../types";
 import { colorFor, useHoverCardPosition, UserHoverCardPortal, RoleColorsContext } from "../user/UserListItem";
+import { useIsStation, StationGlyph } from "../../../stationIdentity";
 import { useUserAvatar, useUserComment, useChannelDescription } from "../../../lazyBlobs";
 import { parseComment } from "../../../profileFormat";
 import { useUserStats } from "../../../hooks/useUserStats";
@@ -119,6 +120,7 @@ function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMen
   });
   const roleColors = useContext(RoleColorsContext);
   const roleColor = user.user_id != null ? (roleColors.get(user.user_id) ?? null) : null;
+  const isStation = useIsStation()(user.name);
   const url = useUserAvatar(user.session, user.texture_size);
   const { showCard, cardPos, itemRef, handleEnter, handleLeave } = useHoverCardPosition(isBroadcasting);
   // Defer FancyProfile parsing (and the bio fetch) until the card is shown.
@@ -171,12 +173,12 @@ function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMen
       >
         <div
           className={styles.memberAvatar}
-          style={{ background: url ? "transparent" : colorFor(user.name) }}
+          style={{ background: url || isStation ? "transparent" : colorFor(user.name) }}
         >
           {url ? (
             <img src={url} alt={user.name} className={styles.memberAvatarImg} />
           ) : (
-            user.name.charAt(0).toUpperCase()
+            <StationGlyph isStation={isStation} size={14} fallback={user.name.charAt(0).toUpperCase()} />
           )}
         </div>
         <span
@@ -213,6 +215,7 @@ function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMen
           isRegistered={user.user_id != null && user.user_id > 0}
           isBroadcasting={isBroadcasting}
           thumbnail={streamThumbnail}
+          isStation={isStation}
         />
       )}
     </>

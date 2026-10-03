@@ -4,7 +4,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { initEventListeners, useAppStore } from "./store";
 import { getPreferences, getSavedAudioSettings, isFirstRun, getNotificationSounds } from "./preferencesStorage";
-import { setKlipyApiKey } from "./components/chat/gif/klipyConfig";
 import { loadShortcuts, applyAllGlobalShortcuts } from "./pages/settings/shortcutHelpers";
 import {
   loadUserShortcuts,
@@ -32,7 +31,6 @@ const SettingsPage = lazy(() => import("./pages/settings"));
 const AdminPanel = lazy(() => import("./pages/admin"));
 const RoleEditorPage = lazy(() => import("./pages/admin/RoleEditorPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
-const FriendsPage = lazy(() => import("./pages/FriendsPage"));
 const MarketplacePluginPage = lazy(() => import("./pages/marketplace/PluginPage"));
 const TranslationPickerOverlay = lazy(() => import("./components/translation/TranslationPickerOverlay"));
 const OnboardingModal = lazy(() => import("./components/onboarding/OnboardingModal"));
@@ -168,9 +166,14 @@ function MainApp() {
     // Under e2e automation, skip the first-run welcome flow so tests land
     // straight on the connect page with a deterministic DOM.
     if (isE2E()) setFirstRun(false);
-    else isFirstRun().then(setFirstRun);
+    // If the preference store cannot be read (e.g. a storage/IPC failure),
+    // fall back to "not first run" so the app still reaches the connect page
+    // instead of hanging on the loading splash forever.
+    else isFirstRun().then(setFirstRun).catch((e) => {
+      console.error("isFirstRun failed; defaulting to connect page", e);
+      setFirstRun(false);
+    });
     getPreferences().then((prefs) => {
-      setKlipyApiKey(prefs.klipyApiKey);
       useAppStore.setState({ disableLinkPreviews: prefs.disableLinkPreviews ?? false });
       useAppStore.setState({ enableExternalEmbeds: prefs.enableExternalEmbeds ?? false });
       useAppStore.setState({ streamerMode: prefs.streamerMode ?? false });
@@ -349,7 +352,6 @@ function MainApp() {
             <>
               <Route path="/" element={<ConnectPage />} />
               <Route path="/chat" element={<ChatPage />} />
-              <Route path="/friends" element={<FriendsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/admin" element={<AdminPanel />} />
               <Route path="/admin/role/:groupName" element={<RoleEditorPage />} />

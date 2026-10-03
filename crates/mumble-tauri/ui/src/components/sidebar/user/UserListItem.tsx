@@ -1,4 +1,4 @@
-import { HeadphonesOffIcon, MicOffIcon, ScreenShareIcon, ShieldCheckIcon, StarIcon, VolumeIcon } from "../../../icons";
+import { HeadphonesOffIcon, MicOffIcon, RadioIcon, ScreenShareIcon, ShieldCheckIcon, StarIcon, VolumeIcon } from "../../../icons";
 import { memo, useState, useMemo, useCallback, useEffect, useRef, createContext, useContext } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -9,6 +9,7 @@ import { useUserAvatar, useUserComment } from "../../../lazyBlobs";
 import { ProfilePreviewCard } from "../../../pages/settings/ProfilePreviewCard";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { colorFor } from "../../../utils/format";
+import { useStationNames, isStationName } from "../../../stationIdentity";
 import { isMobile } from "../../../utils/platform";
 import { PERM_MOVE as PERM_MOVE_BIT } from "../../../utils/permissions";
 import { useUserDrag } from "../../../utils/userMoveDnd";
@@ -183,6 +184,8 @@ interface UserHoverCardPortalProps {
   readonly thumbnail: string | null;
   /** ACL groups this user belongs to, shown as chips on the card. */
   readonly groups?: readonly RoleChip[];
+  /** Whether this user is a radio station (radio icon instead of person). */
+  readonly isStation?: boolean;
 }
 
 /** Portal overlay that renders the profile card + optional stream preview thumbnail. */
@@ -198,6 +201,7 @@ export function UserHoverCardPortal({
   isBroadcasting,
   thumbnail,
   groups,
+  isStation,
 }: Readonly<UserHoverCardPortalProps>) {
   return createPortal(
     <div
@@ -224,6 +228,7 @@ export function UserHoverCardPortal({
         idlesecs={idlesecs}
         isRegistered={isRegistered}
         groups={groups}
+        isStation={isStation}
       />
     </div>,
     document.body,
@@ -301,6 +306,15 @@ export const UserListItem = memo(function UserListItem({
   const stats = useUserStats(user.session, showCard);
   const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
 
+  // Station vs operator hint: a station gets a square badge in a distinct
+  // colour. See `stationIdentity.ts` — a best-effort match until the Fancy
+  // plugin-data role broadcast replaces it.
+  const stationNames = useStationNames();
+  const isStation = useMemo(
+    () => isStationName(user.name, stationNames),
+    [user.name, stationNames],
+  );
+
   const url = useUserAvatar(user.session, user.texture_size);
   // Defer FancyProfile parsing (and the live bio fetch) until the hover card is
   // shown.  Offline entries get their bio via `onRequestComment` (below), so the
@@ -363,7 +377,15 @@ export const UserListItem = memo(function UserListItem({
     >
       <div className={`${styles.avatarWrap} ${isTalking ? styles.avatarTalking : ""}`}>
         {url ? (
-          <img src={url} alt={user.name} className={styles.avatarImg} />
+          <img
+            src={url}
+            alt={user.name}
+            className={`${styles.avatarImg} ${isStation ? styles.avatarStation : ""}`}
+          />
+        ) : isStation ? (
+          <div className={`${styles.avatar} ${styles.avatarStation}`}>
+            <RadioIcon width={16} height={16} />
+          </div>
         ) : (
           <div
             className={styles.avatar}
@@ -436,6 +458,7 @@ export const UserListItem = memo(function UserListItem({
           isBroadcasting={isBroadcasting}
           thumbnail={streamThumbnail}
           groups={userGroups.length > 0 ? userGroups : undefined}
+          isStation={isStation}
         />
       )}
     </button>

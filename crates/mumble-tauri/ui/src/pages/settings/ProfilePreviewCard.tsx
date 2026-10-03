@@ -1,4 +1,4 @@
-import { MoonIcon, ShieldCheckIcon, UserFilledIcon } from "../../icons";
+import { MoonIcon, RadioIcon, ShieldCheckIcon, UserFilledIcon } from "../../icons";
 import type { FancyProfile } from "../../types";
 import { useTranslation } from "react-i18next";
 import { SafeHtml } from "../../components/elements/SafeHtml";
@@ -26,6 +26,9 @@ interface ProfilePreviewCardProps {
   isRegistered?: boolean;
   /** ACL role chips to display at the bottom of the card. */
   groups?: readonly { name: string; color: string | null }[];
+  /** When true (a radio station), the no-avatar placeholder is a radio icon
+   *  instead of the generic person icon. */
+  isStation?: boolean;
 }
 
 interface CardBgResult {
@@ -95,6 +98,7 @@ export function ProfilePreviewCard({
   idlesecs,
   isRegistered,
   groups,
+  isStation,
 }: Readonly<ProfilePreviewCardProps>) {
   const { t } = useTranslation("settings");
   const nameStyle = profile.nameStyle ?? {};
@@ -151,7 +155,9 @@ export function ProfilePreviewCard({
               className={styles.previewAvatarImg}
             />
           ) : (
-            <span className={styles.previewAvatarPlaceholder}><UserFilledIcon width={48} height={48} /></span>
+            <span className={styles.previewAvatarPlaceholder}>
+              {isStation ? <RadioIcon width={48} height={48} /> : <UserFilledIcon width={48} height={48} />}
+            </span>
           )}
           {decoration && decoration.id !== "none" && (
             <span className={styles.previewDecoration}>

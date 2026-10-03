@@ -18,6 +18,7 @@ import { parseComment } from "../../../profileFormat";
 import { useUserAvatar, useUserComment } from "../../../lazyBlobs";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { colorFor } from "../../../utils/format";
+import { useIsStation, StationGlyph } from "../../../stationIdentity";
 import { useStreamThumbnail } from "../../chat/stream/useStreamPreview";
 import { useHoverCardPosition, UserHoverCardPortal, RoleGroupsContext } from "./UserListItem";
 import styles from "./UserHoverCard.module.css";
@@ -48,6 +49,7 @@ export default function UserHoverCard({ user, children, className }: UserHoverCa
     [showCard, user.comment, liveComment],
   );
   const isRegistered = user.user_id != null && user.user_id > 0;
+  const isStation = useIsStation()(user.name);
 
   return (
     <>
@@ -64,7 +66,9 @@ export default function UserHoverCard({ user, children, className }: UserHoverCa
           <span className={styles.default}>
             {url
               ? <img src={url} alt="" className={styles.avatar} />
-              : <span className={styles.avatarFallback} style={{ background: colorFor(user.name) }}>{user.name.charAt(0).toUpperCase()}</span>}
+              : <span className={styles.avatarFallback} style={isStation ? undefined : { background: colorFor(user.name) }}>
+                  <StationGlyph isStation={isStation} size={14} fallback={user.name.charAt(0).toUpperCase()} />
+                </span>}
             <span className={styles.name}>{user.name}</span>
           </span>
         )}
@@ -82,6 +86,7 @@ export default function UserHoverCard({ user, children, className }: UserHoverCa
           isBroadcasting={isBroadcasting}
           thumbnail={streamThumbnail}
           groups={userGroups.length > 0 ? userGroups : undefined}
+          isStation={isStation}
         />
       )}
     </>

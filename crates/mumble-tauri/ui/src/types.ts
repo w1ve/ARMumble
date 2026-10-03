@@ -181,6 +181,19 @@ export interface ServerInfo {
 }
 
 /** A saved server connection stored persistently. */
+/**
+ * Which side of a remote-radio link this connection represents.
+ *
+ * - `operator`: the person operating remotely. Identified by their callsign;
+ *   their microphone is the uplink. Round avatar.
+ * - `station`: the physical radio site. Identified by a station/rig name; its
+ *   receiver audio is the downlink and it transmits continuously. Square avatar.
+ *
+ * Absent in configs saved before this field existed; treat `undefined` as
+ * `operator` (the historical behaviour).
+ */
+export type ClientRole = "operator" | "station";
+
 export interface SavedServer {
   /** Unique id (crypto.randomUUID). */
   id: string;
@@ -193,6 +206,8 @@ export interface SavedServer {
   cert_label: string | null;
   /** Whether this server is pinned as a favourite (shown at the top). */
   favorite?: boolean;
+  /** Operator (default) or station role for this connection. */
+  role?: ClientRole;
 }
 
 /** Result of pinging a server via TCP + UDP. */
@@ -206,19 +221,6 @@ export interface ServerPingResult {
   max_user_count: number | null;
   /** Server version string (e.g. "1.5.634"), null if unavailable. */
   server_version: string | null;
-}
-
-// --- Public Server List -------------------------------------------
-
-/** A public Mumble server from the official directory. */
-export interface PublicServer {
-  name: string;
-  country: string;
-  country_code: string;
-  ip: string;
-  port: number;
-  region: string;
-  url: string;
 }
 
 // --- User Preferences ---------------------------------------------
@@ -584,8 +586,8 @@ export interface UserPreferences {
   hasCompletedSetup: boolean;
   /** Default username pre-filled when adding a new server. */
   defaultUsername: string;
-  /** Custom Klipy API key (expert mode). When empty/undefined, the built-in key is used. */
-  klipyApiKey?: string;
+  /** Default connection role (operator or station) pre-selected on sign-in. */
+  defaultRole?: ClientRole;
   /** Preferred time format for message timestamps. */
   timeFormat: TimeFormat;
   /** Convert UTC timestamps to the local timezone before displaying. */

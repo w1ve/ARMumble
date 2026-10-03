@@ -61,7 +61,7 @@ export function IdentitiesPanel({
     try {
       const destPath = await save({
         defaultPath: `${label}.fmid`,
-        filters: [{ name: "Fancy Mumble Identity", extensions: ["fmid"] }],
+        filters: [{ name: "Remote.Radio Mumble Identity", extensions: ["fmid"] }],
       });
       if (!destPath) return;
       await invoke("export_certificate", { label, destPath });
@@ -75,7 +75,7 @@ export function IdentitiesPanel({
     try {
       const selected = await open({
         multiple: false,
-        filters: [{ name: "Fancy Mumble Identity", extensions: ["fmid"] }],
+        filters: [{ name: "Remote.Radio Mumble Identity", extensions: ["fmid"] }],
       });
       if (!selected) return;
       await invoke("import_certificate", { srcPath: selected });

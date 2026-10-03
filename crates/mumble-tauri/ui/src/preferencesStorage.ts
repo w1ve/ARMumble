@@ -6,6 +6,7 @@
 import { load } from "./utils/store";
 import type {
   AudioSettings,
+  ClientRole,
   NotificationSoundSettings,
   RegisteredUser,
   UserMode,
@@ -20,7 +21,7 @@ const DEFAULTS: UserPreferences = {
   userMode: "normal",
   hasCompletedSetup: false,
   defaultUsername: "",
-  klipyApiKey: "",
+  defaultRole: "operator",
   timeFormat: "auto",
   convertToLocalTime: true,
   dateFormat: "auto",
@@ -132,14 +133,17 @@ export async function getDefaultUsername(): Promise<string> {
   return prefs.defaultUsername;
 }
 
-/** Finalise first-run setup by storing mode, default username, and marking complete. */
+/** Finalise first-run setup by storing mode, default username, default role,
+ *  and marking complete. */
 export async function completeSetup(
   mode: UserMode,
   defaultUsername: string,
+  defaultRole: ClientRole = "operator",
 ): Promise<void> {
   await updatePreferences({
     userMode: mode,
     defaultUsername,
+    defaultRole,
     hasCompletedSetup: true,
   });
 }
