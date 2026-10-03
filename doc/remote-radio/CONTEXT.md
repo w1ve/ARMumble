@@ -2276,8 +2276,25 @@ the next backend pass (grep the fork for the client-version/user-agent constant)
   code** (not imported/rendered anywhere) — left untouched. Other locales (de/fr/zh)
   fall back to English for the renamed activation keys, same as the rest of the pivot.
 - **Stereo routing UI + playback** (needs backend stereo plumbing first).
-- **Finish §14 backend audio** (stereo plumbing, bitrate/force_channels, HF
-  defaults) + tests + live MacPro verify.
+- ✅ **DONE — §14 backend stereo plumbing** (commit `057cb42a`, LIVE-VERIFIED).
+  `AudioFormat::STEREO_48KHZ_F32` added; the inbound mixer is built stereo at all
+  three `state/audio.rs` sites (a stereo decoder upmixes mono senders, so mono
+  traffic is unaffected — the free fallback). The three mono-sample mixer
+  constants are channel-aware now: the per-speaker buffer cap scales by channels,
+  and the cold-start fade + boundary crossfade advance **per audio frame** so L
+  and R get equal gain (the §14b bug). The **rodio** backend (default) yields
+  interleaved L R and declares `channels()=2`; the **cpal** fallback folds L+R→mono
+  for its mono-fan output (documented limitation — true stereo is on rodio).
+  Capture stays mono. Local: clippy 0 on both crates, mixer 20 / opus_channels 8 /
+  mumble-tauri audio 35 pass. **Live on the Fancy 1.6 server
+  (`newyork.remote.radio:54736`, 192 kbps):** `stereo_live --sweep` PASS — relayed
+  byte-for-byte, left-only = digital silence in the right channel at every bitrate,
+  tones separation 28 dB @72k → 58/75 dB @96k (the cliff). **User confirmed by ear
+  on the built `rrmumble.exe`:** clean L/R separation, two hard-panned tones at
+  96 kbps. Still TODO from §14: the radio-mode **profile** (≥96 kbps default,
+  filters off, `Audio` application) and bitrate/`force_channels` UI exposure.
+- **Stereo routing UI + playback** (CURRENT) — backend now produces stereo;
+  wire the per-output-channel L/R routing UI on top.
 - **Serial PTT** (`rr-ptt`) + the authoritative role broadcast that replaces the
   station name-match placeholder.
 - **Silence the 9 unused-extern warnings** in the rrmumble build.
