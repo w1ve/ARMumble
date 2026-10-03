@@ -2245,9 +2245,19 @@ the next backend pass (grep the fork for the client-version/user-agent constant)
 - ✅ **DONE — committed this UI batch** in 5 logical commits (see the table at
   the top of §18g). Grouped branding / removals / sign-in / welcome+role+avatar /
   build-fixes. pwsh no-BOM writer, local only, `vitest` re-run green first.
-- **Per-server audio settings** — key the TS audio store by `ServerId`, pass
-  serverId to `get/set_audio_settings`, AudioPanel server dropdown. Backend
-  `AudioSettings` already lives per-SharedState; fix the global save/restore.
+- ✅ **DONE — per-server audio settings** (commit `4faa3b4b`). `get/set_audio_settings`
+  gained an optional `serverId`; `AppState::audio_settings_for` /
+  `set_audio_settings_for` resolve the target `SharedState` from the registry
+  (fallback = active session), and only report a pipeline/force-TCP restart when
+  the target IS the active session. TS persistence is now a
+  `Record<"host:port", AudioSettings>` with a reserved default bucket
+  (`AUDIO_DEFAULT_KEY`) that seeds new servers; legacy single-blob values migrate
+  into it on first read. SettingsPage tracks the edited server (defaults to
+  active), reloads on switch without tripping the debounced autosave, and keys the
+  invoke (serverId) + persistence (host:port) by it. AudioPanel got a "Settings
+  for" dropdown. ChatPage's activation-mode toggle passes the active serverId.
+  New `AudioSettingsStorage.test.ts` (6 tests); UI 982 pass; backend clippy clean
+  (only the 3 pre-existing updater `doc_markdown` warnings). LOCAL only.
 - **Activation-mode gating + copy** — Station = Continuous only ("Continuously
   transmit the station receiver audio."); Operator "Voice Activation (VOX)" + "See
   Advanced to trigger station-side PTT"; PTT card copy. Wire `ActivationModeSelector`
