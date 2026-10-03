@@ -1,7 +1,7 @@
 {
-  "productName": "RemoteRadioClient",
+  "productName": "Remote.Radio Mumble",
   "version": "0.3.0",
-  "identifier": "com.remoteradio.client",
+  "identifier": "com.remoteradio.mumble",
   "build": {
     "frontendDist": "../mumble-tauri/ui/dist",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "RemoteRadio Client",
+        "title": "Remote.Radio Mumble",
         "width": 1280,
         "height": 800,
         "resizable": true,

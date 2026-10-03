@@ -1,8 +1,8 @@
 ﻿{
-  "brand": "RemoteRadio",
-  "brandClient": "RemoteRadio Client",
+  "brand": "Remote.Radio Mumble",
+  "brandClient": "Remote.Radio Mumble",
   "brandStation": "RemoteRadio Station",
-  "brandMumble": "RemoteRadioMumble",
+  "brandMumble": "Remote.Radio Mumble",
   "actions": {
     "minimize": "Minimize",
     "maximize": "Maximize",
