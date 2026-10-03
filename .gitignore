@@ -24,6 +24,8 @@ crates/mumble-tauri/ui/yarn-error.log*
 crates/mumble-tauri/ui/pnpm-debug.log*
 
 # ---- Tauri / desktop runtime artifacts ----
+# Generated ACL/permission schemas (regenerated per binary at build time from capabilities/)
+crates/*/gen/schemas/
 **/*.pdb
 **/*.dSYM/
 **/*.ilk
