@@ -1,0 +1,26 @@
+[package]
+name = "rr-ptt"
+version = "0.1.0"
+edition = "2021"
+description = "RemoteRadio rig PTT: safe RS-232 control-line keying (DTR/RTS) and footswitch sensing (CTS/DSR/CD/RI), behind a mandatory fail-safe watchdog (deadman + max-transmit timeout, release on drop/error)."
+license = "MIT"
+
+[dependencies]
+thiserror = "2"
+tracing = "0.1"
+
+# RS-232 control-line I/O. Cross-platform, MIT/Apache, pure safe Rust API, so no
+# `unsafe` reaches this crate. Optional because the watchdog, intent and
+# arbitration logic — the parts that decide whether a transmitter keys at all —
+# are worth testing on a headless CI box that has no serial port present, and
+# because the Client/Operator role senses a footswitch while the Station drives
+# the key line; only one of those is ever a real serial port on a given machine.
+serialport = { version = "4", optional = true }
+
+[features]
+default = []
+# Enable real serial PTT I/O (SerialPttSink / SerialPttSource + port enumeration).
+serial = ["serialport"]
+
+[lints]
+workspace = true
