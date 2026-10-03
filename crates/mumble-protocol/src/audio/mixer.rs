@@ -120,7 +120,7 @@ pub fn apply_stereo_mode(buf: &mut [f32], mode: StereoOutMode, left_gain: f32, r
     if mode == StereoOutMode::Stereo && unity {
         return;
     }
-    for frame in buf.chunks_exact_mut(2) {
+    for frame in buf.as_chunks_mut::<2>().0 {
         let l = frame[0] * left_gain;
         let r = frame[1] * right_gain;
         match mode {
