@@ -45,6 +45,7 @@ function makeSettings(overrides: Partial<AudioSettings> = {}): AudioSettings {
     max_gain_db: 15,
     noise_gate_close_ratio: 0.8,
     hold_frames: 15,
+    transmit_mode: "voice_activity",
     push_to_talk: false,
     push_to_talk_key: null,
     bitrate_bps: 72000,

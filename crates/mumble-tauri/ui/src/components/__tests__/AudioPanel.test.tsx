@@ -51,6 +51,7 @@ function makeSettings(overrides: Partial<AudioSettings> = {}): AudioSettings {
     max_gain_db: 15,
     noise_gate_close_ratio: 0.8,
     hold_frames: 15,
+    transmit_mode: "voice_activity",
     push_to_talk: false,
     push_to_talk_key: null,
     bitrate_bps: 72000,
@@ -67,7 +68,11 @@ function makeSettings(overrides: Partial<AudioSettings> = {}): AudioSettings {
   };
 }
 
-function renderPanel(overrides: Partial<AudioSettings> = {}, isExpert = false) {
+function renderPanel(
+  overrides: Partial<AudioSettings> = {},
+  isExpert = false,
+  role: "operator" | "station" = "operator",
+) {
   const onChange = vi.fn();
   const onToggleAudioBackend = vi.fn();
   const settings = makeSettings(overrides);
@@ -83,6 +88,7 @@ function renderPanel(overrides: Partial<AudioSettings> = {}, isExpert = false) {
       servers={[]}
       selectedServer={null}
       onSelectServer={vi.fn()}
+      role={role}
     />,
   );
   return { onChange, settings, ...result };
@@ -101,87 +107,102 @@ beforeEach(() => {
 describe("Activation Mode selector", () => {
   it("renders three activation mode radio buttons", () => {
     renderPanel();
-    expect(screen.getByLabelText("Voice Activation")).toBeTruthy();
+    expect(screen.getByLabelText("Voice Activation (VOX)")).toBeTruthy();
     expect(screen.getByLabelText("Continuous")).toBeTruthy();
     expect(screen.getByLabelText("Push to Talk")).toBeTruthy();
   });
 
-  it("selects Voice Activation when noise_suppression=true and push_to_talk=false", () => {
-    renderPanel({ noise_suppression: true, push_to_talk: false });
+  it("selects Voice Activation for transmit_mode=voice_activity", () => {
+    renderPanel({ transmit_mode: "voice_activity", push_to_talk: false });
     expect(
-      (screen.getByLabelText("Voice Activation") as HTMLInputElement).checked,
+      (screen.getByLabelText("Voice Activation (VOX)") as HTMLInputElement).checked,
     ).toBe(true);
   });
 
-  it("selects Continuous when noise_suppression=false and push_to_talk=false", () => {
-    renderPanel({ noise_suppression: false, push_to_talk: false });
+  it("selects Continuous for transmit_mode=continuous", () => {
+    renderPanel({ transmit_mode: "continuous", push_to_talk: false });
     expect(
       (screen.getByLabelText("Continuous") as HTMLInputElement).checked,
     ).toBe(true);
   });
 
-  it("selects Push to Talk when push_to_talk=true", () => {
-    renderPanel({ push_to_talk: true });
+  it("selects Push to Talk for transmit_mode=push_to_talk", () => {
+    renderPanel({ transmit_mode: "push_to_talk", push_to_talk: true });
     expect(
       (screen.getByLabelText("Push to Talk") as HTMLInputElement).checked,
     ).toBe(true);
   });
 
-  it("switches to Continuous mode", () => {
-    const { onChange } = renderPanel({ noise_suppression: true });
+  it("reconciles the legacy push_to_talk flag to PTT", () => {
+    // transmit_mode still at its migration default but push_to_talk set.
+    renderPanel({ transmit_mode: "voice_activity", push_to_talk: true });
+    expect(
+      (screen.getByLabelText("Push to Talk") as HTMLInputElement).checked,
+    ).toBe(true);
+  });
+
+  it("switches to Continuous mode without touching noise suppression", () => {
+    const { onChange } = renderPanel({ transmit_mode: "voice_activity" });
     fireEvent.click(screen.getByLabelText("Continuous"));
     expect(onChange).toHaveBeenCalledWith({
+      transmit_mode: "continuous",
       push_to_talk: false,
-      noise_suppression: false,
       auto_input_sensitivity: false,
     });
   });
 
   it("switches to Push to Talk mode", () => {
-    const { onChange } = renderPanel({ noise_suppression: true });
+    const { onChange } = renderPanel({ transmit_mode: "voice_activity" });
     fireEvent.click(screen.getByLabelText("Push to Talk"));
     expect(onChange).toHaveBeenCalledWith({
+      transmit_mode: "push_to_talk",
       push_to_talk: true,
-      noise_suppression: false,
       auto_input_sensitivity: false,
     });
   });
 
   it("switches back to Voice Activation mode", () => {
-    const { onChange } = renderPanel({ noise_suppression: false });
-    fireEvent.click(screen.getByLabelText("Voice Activation"));
+    const { onChange } = renderPanel({ transmit_mode: "continuous" });
+    fireEvent.click(screen.getByLabelText("Voice Activation (VOX)"));
     expect(onChange).toHaveBeenCalledWith({
+      transmit_mode: "voice_activity",
       push_to_talk: false,
-      noise_suppression: true,
     });
   });
 
+  it("offers a Station Continuous only", () => {
+    renderPanel({ transmit_mode: "continuous" }, false, "station");
+    expect(screen.getByLabelText("Continuous")).toBeTruthy();
+    expect(screen.queryByLabelText("Voice Activation (VOX)")).toBeNull();
+    expect(screen.queryByLabelText("Push to Talk")).toBeNull();
+  });
+
   it("shows Voice Activation settings only in VA mode", () => {
-    renderPanel({ noise_suppression: true, push_to_talk: false });
+    renderPanel({ transmit_mode: "voice_activity", push_to_talk: false });
     expect(screen.getByText("Activation Mode", { selector: "h3" })).toBeTruthy();
     expect(screen.getByLabelText("Auto Calibrate")).toBeTruthy();
     expect(screen.getByLabelText("Manual Calibrate")).toBeTruthy();
   });
 
   it("hides Voice Activation settings in Continuous mode", () => {
-    renderPanel({ noise_suppression: false, push_to_talk: false });
+    renderPanel({ transmit_mode: "continuous", push_to_talk: false });
     expect(screen.queryByLabelText("Auto Calibrate")).toBeNull();
   });
 
   it("hides Voice Activation settings in PTT mode", () => {
-    renderPanel({ push_to_talk: true });
+    renderPanel({ transmit_mode: "push_to_talk", push_to_talk: true });
     expect(screen.queryByLabelText("Auto Calibrate")).toBeNull();
   });
 
   it("shows PTT shortcut hint only in PTT mode", () => {
     // The PTT key binding itself lives in the Shortcuts tab; AudioPanel
     // just shows a pointer to it when push-to-talk is enabled.
-    renderPanel({ push_to_talk: true });
+    renderPanel({ transmit_mode: "push_to_talk", push_to_talk: true });
     expect(screen.getByText(/Shortcuts/, { selector: "strong" })).toBeTruthy();
   });
 
   it("hides PTT shortcut hint in Voice Activation mode", () => {
-    renderPanel({ noise_suppression: true, push_to_talk: false });
+    renderPanel({ transmit_mode: "voice_activity", push_to_talk: false });
     expect(screen.queryByText(/configured in the/)).toBeNull();
   });
 });

@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { load } from "../../utils/store";
-import type { AudioDevice, AudioSettings, FancyProfile, ServerId, UserMode, TimeFormat, DateFormat, NumberFormat, WelcomeMessageDisplay } from "../../types";
+import type { AudioDevice, AudioSettings, ClientRole, FancyProfile, ServerId, UserMode, TimeFormat, DateFormat, NumberFormat, WelcomeMessageDisplay } from "../../types";
+import { getSavedServers } from "../../serverStorage";
 import { getPreferences, updatePreferences, getSavedAudioSettings, saveAudioSettings, AUDIO_DEFAULT_KEY } from "../../preferencesStorage";
 import { serializeProfile, dataUrlToBytes } from "../../profileFormat";
 import { useAppStore } from "../../store";
@@ -51,6 +52,7 @@ const DEFAULT_AUDIO: AudioSettings = {
   max_gain_db: 15,
   noise_gate_close_ratio: 0.8,
   hold_frames: 15,
+  transmit_mode: "voice_activity",
   push_to_talk: false,
   push_to_talk_key: null,
   bitrate_bps: 72000,
@@ -186,6 +188,15 @@ export default function SettingsPage() {
     ? `${selectedSession.host}:${selectedSession.port}`
     : AUDIO_DEFAULT_KEY;
 
+  // Role of the server being edited, so the activation-mode UI can offer a
+  // Station only Continuous. Resolved from the saved server (keyed host:port);
+  // the shared-default bucket uses the user's default role.
+  const [savedServerRoles, setSavedServerRoles] = useState<Record<string, ClientRole>>({});
+  const [defaultRole, setDefaultRole] = useState<ClientRole>("operator");
+  const selectedAudioRole: ClientRole = selectedSession
+    ? (savedServerRoles[selectedAudioKey] ?? "operator")
+    : defaultRole;
+
   // Preferences
   const [userMode, setUserMode] = useState<UserMode>("normal");
   const [defaultUsername, setDefaultUsername] = useState("");
@@ -235,9 +246,26 @@ export default function SettingsPage() {
 
   // Refresh the connected-session list on mount and default the audio
   // panel's selection to the active server, so it opens showing the
-  // settings of whatever the user is currently connected to.
+  // settings of whatever the user is currently connected to. Also load
+  // the saved-server roles + default role for activation-mode gating.
   useEffect(() => {
     void refreshSessions();
+    (async () => {
+      try {
+        const [servers, prefs] = await Promise.all([
+          getSavedServers(),
+          getPreferences(),
+        ]);
+        const roles: Record<string, ClientRole> = {};
+        for (const s of servers) {
+          roles[`${s.host}:${s.port}`] = s.role ?? "operator";
+        }
+        setSavedServerRoles(roles);
+        setDefaultRole(prefs.defaultRole ?? "operator");
+      } catch {
+        /* keep defaults */
+      }
+    })();
   }, [refreshSessions]);
   const defaultedAudioServer = useRef(false);
   useEffect(() => {
@@ -430,6 +458,26 @@ export default function SettingsPage() {
     // selectedAudioKey is derived from selectedAudioServer + sessions; keying
     // the effect on it reloads if the chosen server's host:port resolves.
   }, [selectedAudioServer, selectedAudioKey]);
+
+  // -- Normalise a Station to Continuous transmit ------------------
+  // A Station transmits its receiver audio continuously; if a stale saved
+  // config says otherwise, force it. This flows through patchAudio so the
+  // debounced autosave persists it for the selected server.
+
+  useEffect(() => {
+    if (!initialLoadDone.current) return;
+    if (audioLoadInFlight.current) return;
+    if (selectedAudioRole !== "station") return;
+    if (audioSettings.transmit_mode === "continuous" && !audioSettings.push_to_talk) {
+      return;
+    }
+    setAudioSettings((prev) => ({
+      ...prev,
+      transmit_mode: "continuous",
+      push_to_talk: false,
+      auto_input_sensitivity: false,
+    }));
+  }, [selectedAudioRole, audioSettings.transmit_mode, audioSettings.push_to_talk]);
 
   // -- Auto-save audio settings (debounced) ------------------------
 
@@ -870,6 +918,7 @@ export default function SettingsPage() {
               servers={sessions}
               selectedServer={selectedAudioServer}
               onSelectServer={setSelectedAudioServer}
+              role={selectedAudioRole}
             />
           )}
 

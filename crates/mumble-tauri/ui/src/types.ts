@@ -726,6 +726,13 @@ export interface AudioDevice {
   is_default: boolean;
 }
 
+/** When the outbound pipeline transmits.
+ *  Mirrors `mumble_tauri::state::types::TransmitMode` (serde snake_case):
+ *  - `continuous`    always transmit, no voice gate (a radio Station)
+ *  - `voice_activity` transmit above the VAD threshold (the historical default)
+ *  - `push_to_talk`  transmit only while the PTT key is held */
+export type TransmitMode = "continuous" | "voice_activity" | "push_to_talk";
+
 export interface AudioSettings {
   /** Selected input device name (null = system default). */
   selected_device: string | null;
@@ -739,7 +746,12 @@ export interface AudioSettings {
   noise_gate_close_ratio: number;
   /** Frames to hold the gate open after audio drops below threshold (expert). */
   hold_frames: number;
-  /** Use push-to-talk instead of voice activation. */
+  /** When the outbound pipeline transmits (continuous / VAD / PTT).
+   *  Source of truth for transmit policy; supersedes `push_to_talk`. */
+  transmit_mode: TransmitMode;
+  /** Use push-to-talk instead of voice activation.
+   *  Legacy flag kept in step with `transmit_mode` for the self-mute PTT
+   *  path and older saved configs. Prefer `transmit_mode`. */
   push_to_talk: boolean;
   /** Global shortcut string for PTT, e.g. "Alt+T". */
   push_to_talk_key: string | null;  /** Opus encoder bitrate in bits/s (e.g. 72000). */

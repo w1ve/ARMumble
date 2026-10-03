@@ -6,6 +6,7 @@ import type {
   AudioDevice,
   AudioSettings,
   CryptoStats,
+  ClientRole,
   NoiseSuppressionAlgorithm,
   PacketStats,
   ServerId,
@@ -139,6 +140,7 @@ export function AudioPanel({
   servers,
   selectedServer,
   onSelectServer,
+  role,
 }: Readonly<{
   devices: AudioDevice[];
   outputDevices: AudioDevice[];
@@ -153,6 +155,8 @@ export function AudioPanel({
   selectedServer: ServerId | null;
   /** Change the server being edited. */
   onSelectServer: (id: ServerId | null) => void;
+  /** Role of the server being edited; a Station is offered Continuous only. */
+  role: ClientRole;
 }>) {
   const { t } = useTranslation("settings");
   const tStr = t as (key: string) => string;
@@ -168,7 +172,13 @@ export function AudioPanel({
       .catch(() => { /* keep the conservative default */ });
   }, []);
 
-  const isVoiceGate = !settings.push_to_talk && settings.noise_suppression;
+  // The voice-gate calibration UI applies only in Voice-Activation mode.
+  // Reconcile the legacy push_to_talk flag the same way the backend does.
+  const effectiveMode =
+    settings.transmit_mode === "voice_activity" && settings.push_to_talk
+      ? "push_to_talk"
+      : settings.transmit_mode;
+  const isVoiceGate = effectiveMode === "voice_activity";
 
   return (
     <>
@@ -270,8 +280,8 @@ export function AudioPanel({
         <p className={styles.fieldHint}>
           {t("audio.activationModeHint")}
         </p>
-        <ActivationModeSelector settings={settings} onChange={onChange} />
-        {settings.push_to_talk && (
+        <ActivationModeSelector settings={settings} onChange={onChange} role={role} />
+        {effectiveMode === "push_to_talk" && (
           <p
             className={styles.fieldHint}
             dangerouslySetInnerHTML={{ __html: t("audio.pttHint", { tab: t("audio.shortcutsTab") }) }}

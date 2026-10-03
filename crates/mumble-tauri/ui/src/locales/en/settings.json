@@ -340,12 +340,13 @@
     "bgPreviewAlt": "Chat background preview"
   },
   "activation": {
-    "voice": "Voice Activation",
-    "voiceDesc": "Transmits while you talk. The mic opens when audio crosses the threshold and closes when it drops back below.",
+    "voice_activity": "Voice Activation (VOX)",
+    "voice_activityDesc": "Transmits while you talk. The mic opens when audio crosses the threshold and closes when it drops back below. See Advanced to trigger station-side PTT.",
     "continuous": "Continuous",
     "continuousDesc": "Always transmits. Best when you are alone in a quiet room or want zero clipping at the start of words.",
-    "ptt": "Push to Talk",
-    "pttDesc": "Transmits only while a hotkey is held. Set the key under the Shortcuts tab."
+    "continuousStationDesc": "Continuously transmit the station receiver audio.",
+    "push_to_talk": "Push to Talk",
+    "push_to_talkDesc": "Transmit only when a hotkey or serial PTT footswitch (see Advanced) is pressed."
   },
   "calibration": {
     "autoMode": "Auto Calibrate",
