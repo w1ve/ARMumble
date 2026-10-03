@@ -8,6 +8,8 @@ import type {
   CryptoStats,
   NoiseSuppressionAlgorithm,
   PacketStats,
+  ServerId,
+  SessionMeta,
 } from "../../types";
 import {
   ActivityIcon,
@@ -134,6 +136,9 @@ export function AudioPanel({
   isExpert,
   useRodioBackend,
   onToggleAudioBackend,
+  servers,
+  selectedServer,
+  onSelectServer,
 }: Readonly<{
   devices: AudioDevice[];
   outputDevices: AudioDevice[];
@@ -142,6 +147,12 @@ export function AudioPanel({
   isExpert: boolean;
   useRodioBackend: boolean;
   onToggleAudioBackend: () => void;
+  /** Connected sessions the user can scope audio settings to. */
+  servers: readonly SessionMeta[];
+  /** Which server is being edited (`null` = the shared default profile). */
+  selectedServer: ServerId | null;
+  /** Change the server being edited. */
+  onSelectServer: (id: ServerId | null) => void;
 }>) {
   const { t } = useTranslation("settings");
   const tStr = t as (key: string) => string;
@@ -162,6 +173,30 @@ export function AudioPanel({
   return (
     <>
       <h2 className={styles.panelTitle}>{t("audio.panelTitle")}</h2>
+
+      {/* -- Which server these settings apply to ----------- */}
+      <section className={styles.section}>
+        <h3 className={styles.sectionTitle}>{t("audio.appliesTo")}</h3>
+        <select
+          className={styles.select}
+          value={selectedServer ?? ""}
+          onChange={(e) =>
+            onSelectServer(e.target.value === "" ? null : (e.target.value as ServerId))
+          }
+        >
+          <option value="">{t("audio.defaultProfile")}</option>
+          {servers.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+        <p className={styles.fieldHint}>
+          {selectedServer === null
+            ? t("audio.defaultProfileHint")
+            : t("audio.serverProfileHint")}
+        </p>
+      </section>
 
       {/* -- Input & Output Devices (side by side) ---------- */}
       <section className={styles.section}>

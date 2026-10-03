@@ -4,8 +4,8 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { load } from "../../utils/store";
-import type { AudioDevice, AudioSettings, FancyProfile, UserMode, TimeFormat, DateFormat, NumberFormat, WelcomeMessageDisplay } from "../../types";
-import { getPreferences, updatePreferences, getSavedAudioSettings, saveAudioSettings } from "../../preferencesStorage";
+import type { AudioDevice, AudioSettings, FancyProfile, ServerId, UserMode, TimeFormat, DateFormat, NumberFormat, WelcomeMessageDisplay } from "../../types";
+import { getPreferences, updatePreferences, getSavedAudioSettings, saveAudioSettings, AUDIO_DEFAULT_KEY } from "../../preferencesStorage";
 import { serializeProfile, dataUrlToBytes } from "../../profileFormat";
 import { useAppStore } from "../../store";
 import {
@@ -166,6 +166,26 @@ export default function SettingsPage() {
     useState<AudioSettings>(DEFAULT_AUDIO);
   const initialLoadDone = useRef(false);
 
+  // Per-server audio settings: which server the Audio panel is editing.
+  // `null` edits the shared default profile (what nothing-connected / new
+  // servers inherit). Options come from the live connected sessions.
+  const sessions = useAppStore((s) => s.sessions);
+  const activeServerId = useAppStore((s) => s.activeServerId);
+  const refreshSessions = useAppStore((s) => s.refreshSessions);
+  const [selectedAudioServer, setSelectedAudioServer] =
+    useState<ServerId | null>(null);
+  // Guards the debounced autosave from firing on the programmatic state
+  // write that a server-switch load performs. Set when a load starts,
+  // cleared once that load's setAudioSettings has been committed.
+  const audioLoadInFlight = useRef(false);
+
+  // The persistence key ("host:port") for the selected server, or the
+  // shared-default bucket when editing defaults / nothing is connected.
+  const selectedSession = sessions.find((s) => s.id === selectedAudioServer);
+  const selectedAudioKey = selectedSession
+    ? `${selectedSession.host}:${selectedSession.port}`
+    : AUDIO_DEFAULT_KEY;
+
   // Preferences
   const [userMode, setUserMode] = useState<UserMode>("normal");
   const [defaultUsername, setDefaultUsername] = useState("");
@@ -213,16 +233,43 @@ export default function SettingsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
 
+  // Refresh the connected-session list on mount and default the audio
+  // panel's selection to the active server, so it opens showing the
+  // settings of whatever the user is currently connected to.
+  useEffect(() => {
+    void refreshSessions();
+  }, [refreshSessions]);
+  const defaultedAudioServer = useRef(false);
+  useEffect(() => {
+    if (defaultedAudioServer.current) return;
+    if (activeServerId) {
+      defaultedAudioServer.current = true;
+      setSelectedAudioServer(activeServerId);
+    }
+  }, [activeServerId]);
+
   // -- Load everything on mount ------------------------------------
 
   useEffect(() => {
     (async () => {
       try {
+        // Load for whatever server is active right now. Read the store's
+        // state directly (not the closure) so this is correct even when
+        // activeServerId resolved between render and this effect running.
+        const active = useAppStore.getState().activeServerId;
+        const activeSession = useAppStore
+          .getState()
+          .sessions.find((s) => s.id === active);
+        const key = activeSession
+          ? `${activeSession.host}:${activeSession.port}`
+          : AUDIO_DEFAULT_KEY;
+        const serverId = active ?? undefined;
+        audioLoadInFlight.current = true;
         const [devs, outDevs, cfg, saved] = await Promise.all([
           invoke<AudioDevice[]>("get_audio_devices"),
           invoke<AudioDevice[]>("get_output_devices"),
-          invoke<AudioSettings>("get_audio_settings"),
-          getSavedAudioSettings(),
+          invoke<AudioSettings>("get_audio_settings", { serverId }),
+          getSavedAudioSettings(key),
         ]);
         setDevices(devs);
         setOutputDevices(outDevs);
@@ -231,7 +278,7 @@ export default function SettingsPage() {
         setAudioSettings(merged);
         // Push merged settings to the backend so it picks up persisted values.
         if (saved) {
-          invoke("set_audio_settings", { settings: merged }).catch((e) =>
+          invoke("set_audio_settings", { settings: merged, serverId }).catch((e) =>
             console.error("Restore audio settings error:", e),
           );
         }
@@ -324,6 +371,7 @@ export default function SettingsPage() {
       // Mark initial load as done *after* state has settled.
       requestAnimationFrame(() => {
         initialLoadDone.current = true;
+        audioLoadInFlight.current = false;
       });
     })();
   }, []);
@@ -349,22 +397,59 @@ export default function SettingsPage() {
     };
   }, []);
 
+  // -- Reload audio settings when the selected server changes ------
+  // Skips the very first run (the mount effect already loaded the active
+  // server). Loads the chosen server's live backend settings merged over
+  // its persisted profile, without triggering the autosave below.
+
+  useEffect(() => {
+    if (!initialLoadDone.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        audioLoadInFlight.current = true;
+        const serverId = selectedAudioServer ?? undefined;
+        const [cfg, saved] = await Promise.all([
+          invoke<AudioSettings>("get_audio_settings", { serverId }),
+          getSavedAudioSettings(selectedAudioKey),
+        ]);
+        if (cancelled) return;
+        setAudioSettings(saved ? { ...cfg, ...saved } : cfg);
+        // Release the autosave guard after state settles.
+        requestAnimationFrame(() => {
+          audioLoadInFlight.current = false;
+        });
+      } catch (e) {
+        console.error("Load audio settings for server error:", e);
+        audioLoadInFlight.current = false;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // selectedAudioKey is derived from selectedAudioServer + sessions; keying
+    // the effect on it reloads if the chosen server's host:port resolves.
+  }, [selectedAudioServer, selectedAudioKey]);
+
   // -- Auto-save audio settings (debounced) ------------------------
 
   useEffect(() => {
     if (!initialLoadDone.current) return;
+    if (audioLoadInFlight.current) return;
+    const serverId = selectedAudioServer ?? undefined;
+    const key = selectedAudioKey;
     const timer = setTimeout(async () => {
       try {
         await Promise.all([
-          invoke("set_audio_settings", { settings: audioSettings }),
-          saveAudioSettings(audioSettings),
+          invoke("set_audio_settings", { settings: audioSettings, serverId }),
+          saveAudioSettings(audioSettings, key),
         ]);
       } catch (e) {
         console.error("Auto-save audio settings error:", e);
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [audioSettings]);
+  }, [audioSettings, selectedAudioServer, selectedAudioKey]);
 
   // -- Auto-save personalization (debounced) -----------------------
 
@@ -782,6 +867,9 @@ export default function SettingsPage() {
               isExpert={userMode !== "normal"}
               useRodioBackend={useRodioBackend}
               onToggleAudioBackend={handleToggleAudioBackend}
+              servers={sessions}
+              selectedServer={selectedAudioServer}
+              onSelectServer={setSelectedAudioServer}
             />
           )}
 

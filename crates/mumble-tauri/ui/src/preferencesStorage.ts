@@ -148,20 +148,71 @@ export async function completeSetup(
   });
 }
 
-// -- Audio settings persistence ------------------------------------
+// -- Audio settings persistence (per-server) -----------------------
 
-/** Return persisted audio settings, or null if none saved yet. */
-export async function getSavedAudioSettings(): Promise<AudioSettings | null> {
+/**
+ * Audio settings are stored per server, keyed by server address
+ * ("host:port"), so each rig/station can have its own device, bitrate,
+ * stereo and transmit-mode configuration.  The reserved key
+ * {@link AUDIO_DEFAULT_KEY} holds the settings edited while nothing is
+ * connected - these are the defaults the backend stamps onto every new
+ * session (see `AppState::fresh_session_state`).
+ *
+ * Legacy single-blob values (stored directly under `AUDIO_KEY` before
+ * settings became per-server) are migrated into the default bucket on
+ * first read.
+ */
+type AudioSettingsMap = Record<string, AudioSettings>;
+
+/** Reserved per-server key for the "no server connected" default profile. */
+export const AUDIO_DEFAULT_KEY = "__default__";
+
+async function readAudioMap(): Promise<AudioSettingsMap> {
   const store = await getStore();
-  return (await store.get<AudioSettings>(AUDIO_KEY)) ?? null;
+  const map = (await store.get<AudioSettingsMap>(AUDIO_KEY)) ?? {};
+  // Migrate a legacy single-blob value: before per-server settings, the
+  // whole AudioSettings object lived directly under AUDIO_KEY.  Detect it
+  // by a known scalar field and fold it into the default bucket.
+  if (
+    map &&
+    typeof map === "object" &&
+    typeof (map as unknown as AudioSettings).bitrate_bps === "number" &&
+    !(AUDIO_DEFAULT_KEY in map)
+  ) {
+    const legacy = map as unknown as AudioSettings;
+    const migrated: AudioSettingsMap = { [AUDIO_DEFAULT_KEY]: legacy };
+    await store.set(AUDIO_KEY, migrated);
+    return migrated;
+  }
+  return map;
 }
 
-/** Persist audio settings to disk. */
+/**
+ * Return the persisted audio settings for a server (`host:port`), or for
+ * the shared default when `serverKey` is omitted.  Falls back to the
+ * default-bucket settings when a server has none of its own yet, so a
+ * freshly-added server inherits the user's defaults.  Returns null when
+ * nothing is saved at all.
+ */
+export async function getSavedAudioSettings(
+  serverKey: string = AUDIO_DEFAULT_KEY,
+): Promise<AudioSettings | null> {
+  const map = await readAudioMap();
+  return map[serverKey] ?? map[AUDIO_DEFAULT_KEY] ?? null;
+}
+
+/**
+ * Persist audio settings for a server (`host:port`), or for the shared
+ * default when `serverKey` is omitted.
+ */
 export async function saveAudioSettings(
   settings: AudioSettings,
+  serverKey: string = AUDIO_DEFAULT_KEY,
 ): Promise<void> {
   const store = await getStore();
-  await store.set(AUDIO_KEY, settings);
+  const map = await readAudioMap();
+  map[serverKey] = settings;
+  await store.set(AUDIO_KEY, map);
 }
 
 // -- Dismissed persistence banners ---------------------------------

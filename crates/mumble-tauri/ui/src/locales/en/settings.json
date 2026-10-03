@@ -45,6 +45,10 @@
   },
   "audio": {
     "panelTitle": "Voice",
+    "appliesTo": "Settings for",
+    "defaultProfile": "Default (new servers)",
+    "defaultProfileHint": "These settings apply while nothing is connected and seed every new server.",
+    "serverProfileHint": "These settings apply only to this server.",
     "inputDevice": "Input Device",
     "outputDevice": "Output Device",
     "systemDefault": "System default",

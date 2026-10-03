@@ -13,35 +13,77 @@ use super::AppState;
 // -- Shared methods (all platforms) --------------------------------
 
 impl AppState {
-    /// Get current audio settings.
-    pub fn audio_settings(&self) -> super::types::AudioSettings {
-        self.inner.snapshot()
+    /// Resolve the per-session [`SharedState`] a settings command should
+    /// target.  `Some(id)` selects that specific server from the registry;
+    /// `None` (or an unknown id) falls back to the currently-active session.
+    ///
+    /// When no server is connected, the active snapshot is `default_inner`,
+    /// which is exactly the "global default" audio settings that seed every
+    /// new session via [`AppState::fresh_session_state`] - so editing audio
+    /// settings while disconnected edits those defaults, which is intended.
+    fn resolve_audio_target(
+        &self,
+        server_id: Option<super::ServerId>,
+    ) -> std::sync::Arc<std::sync::Mutex<super::SharedState>> {
+        server_id
+            .and_then(|id| self.registry.session(id))
+            .unwrap_or_else(|| self.inner.snapshot())
+    }
+
+    /// Get the audio settings for a specific server (or the active session
+    /// when `server_id` is `None`).
+    pub fn audio_settings_for(
+        &self,
+        server_id: Option<super::ServerId>,
+    ) -> super::types::AudioSettings {
+        self.resolve_audio_target(server_id)
             .lock()
             .map(|s| s.audio.settings.clone())
             .unwrap_or_default()
     }
 
-    /// Update audio settings.
+    /// Update audio settings for the active session.
     ///
     /// If any pipeline-relevant setting changed while voice is active,
     /// the outbound pipeline is automatically restarted.
     /// Volume changes are applied live via atomic handles (no restart).
     pub fn set_audio_settings(&self, settings: super::types::AudioSettings) -> Option<(bool, bool, bool)> {
+        self.set_audio_settings_for(None, settings)
+    }
+
+    /// Update the audio settings for a specific server (or the active
+    /// session when `server_id` is `None`).  Returns which pipelines need
+    /// restarting; the caller restarts only the active session's pipeline,
+    /// so a pipeline restart is reported only when the target *is* the
+    /// active session.
+    pub fn set_audio_settings_for(
+        &self,
+        server_id: Option<super::ServerId>,
+        settings: super::types::AudioSettings,
+    ) -> Option<(bool, bool, bool)> {
+        let target = self.resolve_audio_target(server_id);
+        // A pipeline restart only makes sense for the session the live
+        // audio loop is bound to - the active one.  Writing settings to a
+        // background (non-active) session must never restart audio.
+        let is_active = std::sync::Arc::ptr_eq(&target, &self.inner.snapshot());
+
         let (old_settings, voice_active) = {
-            let __session = self.inner.snapshot();
-            let state = __session.lock().ok()?;
+            let state = target.lock().ok()?;
             (
                 state.audio.settings.clone(),
                 state.audio.voice_state == VoiceState::Active,
             )
         };
 
-        let restart_outbound = voice_active && old_settings.needs_pipeline_restart(&settings);
-        let restart_inbound = voice_active && old_settings.needs_inbound_restart(&settings);
-        let force_tcp_changed = old_settings.force_tcp_audio != settings.force_tcp_audio;
+        let restart_outbound =
+            is_active && voice_active && old_settings.needs_pipeline_restart(&settings);
+        let restart_inbound =
+            is_active && voice_active && old_settings.needs_inbound_restart(&settings);
+        let force_tcp_changed =
+            is_active && old_settings.force_tcp_audio != settings.force_tcp_audio;
 
         // Update live volume handles (no pipeline restart needed).
-        if let Ok(state) = self.inner.snapshot().lock() {
+        if let Ok(state) = target.lock() {
             use std::sync::atomic::Ordering;
             if let Some(ref h) = state.audio.input_volume_handle {
                 h.store(settings.input_volume.to_bits(), Ordering::Relaxed);
@@ -51,7 +93,7 @@ impl AppState {
             }
         }
 
-        if let Ok(mut state) = self.inner.snapshot().lock() {
+        if let Ok(mut state) = target.lock() {
             state.audio.settings = settings;
         }
 

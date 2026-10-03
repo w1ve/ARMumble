@@ -87,9 +87,16 @@ pub(crate) fn get_output_devices() -> Vec<AudioDevice> {
 }
 
 /// Get current audio settings.
+///
+/// When `server_id` is supplied, returns that specific server's settings;
+/// otherwise returns the active session's (which is the global default
+/// while nothing is connected).
 #[tauri::command]
-pub(crate) fn get_audio_settings(state: tauri::State<'_, AppState>) -> AudioSettings {
-    state.audio_settings()
+pub(crate) fn get_audio_settings(
+    state: tauri::State<'_, AppState>,
+    server_id: Option<state::ServerId>,
+) -> AudioSettings {
+    state.audio_settings_for(server_id)
 }
 
 /// List the tunable knobs the given denoiser algorithm exposes.
@@ -120,10 +127,11 @@ pub(crate) fn get_available_denoiser_algorithms()
 pub(crate) async fn set_audio_settings(
     state: tauri::State<'_, AppState>,
     settings: AudioSettings,
+    server_id: Option<state::ServerId>,
 ) -> Result<(), String> {
     let force_tcp = settings.force_tcp_audio;
     let (needs_outbound, needs_inbound, force_tcp_changed) = state
-        .set_audio_settings(settings)
+        .set_audio_settings_for(server_id, settings)
         .unwrap_or((false, false, false));
 
     if needs_outbound {

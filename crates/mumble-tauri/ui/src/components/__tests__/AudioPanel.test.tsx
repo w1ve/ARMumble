@@ -80,6 +80,9 @@ function renderPanel(overrides: Partial<AudioSettings> = {}, isExpert = false) {
       isExpert={isExpert}
       useRodioBackend={false}
       onToggleAudioBackend={onToggleAudioBackend}
+      servers={[]}
+      selectedServer={null}
+      onSelectServer={vi.fn()}
     />,
   );
   return { onChange, settings, ...result };

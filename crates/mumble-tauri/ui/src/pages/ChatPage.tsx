@@ -192,14 +192,16 @@ export default function ChatPage() {
 
   const handleToggleActivationMode = useCallback(async () => {
     try {
-      const settings = await invoke<{ push_to_talk: boolean }>("get_audio_settings");
+      const serverId = activeServerId ?? undefined;
+      const settings = await invoke<{ push_to_talk: boolean }>("get_audio_settings", { serverId });
       await invoke("set_audio_settings", {
         settings: { ...settings, push_to_talk: !settings.push_to_talk },
+        serverId,
       });
     } catch {
       // Silently ignore if not connected
     }
-  }, []);
+  }, [activeServerId]);
 
   // Depth-first traversal of the channel tree, respecting each level's
   // `position` order, so Alt+Up/Down follows the visual sidebar order.
