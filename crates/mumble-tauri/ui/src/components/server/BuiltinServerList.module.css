@@ -1,0 +1,154 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.heading {
+  font-size: 0.82rem;
+  color: var(--text-secondary, #9aa);
+}
+
+.addLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--accent, #5b8cff);
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 2px 4px;
+}
+
+.addLink:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Quick-select dropdown. */
+.dropdown {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #e8ebff);
+  font-size: 0.95rem;
+  appearance: auto;
+}
+
+.dropdown:disabled {
+  opacity: 0.6;
+}
+
+/* Search box. */
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-secondary, #8a90b0);
+  pointer-events: none;
+}
+
+.search {
+  width: 100%;
+  padding: 11px 12px 11px 36px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #e8ebff);
+  font-size: 0.95rem;
+}
+
+.search::placeholder {
+  color: var(--text-secondary, #8a90b0);
+}
+
+/* Card list. */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-secondary, #8a90b0);
+  font-size: 0.9rem;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.card:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.card:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Square city badge, per the mockup (gradient, rounded square). */
+.badge {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(135deg, #4668ff 0%, #8a4dff 100%);
+}
+
+.cardText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cardHost {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary, #e8ebff);
+}
+
+.cardName {
+  font-size: 0.82rem;
+  color: var(--text-secondary, #8a90b0);
+}

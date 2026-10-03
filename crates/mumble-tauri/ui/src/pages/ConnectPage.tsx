@@ -11,16 +11,19 @@ import {
   setServerPassword,
 } from "../serverStorage";
 import { getPreferences } from "../preferencesStorage";
-import type { SavedServer, ServerPingResult, UserMode } from "../types";
+import type { SavedServer, ServerPingResult, UserMode, ClientRole } from "../types";
+import { RR_PORT, RR_PASSWORD, type BuiltinServer } from "../builtinServers";
+import { notifyServersChanged } from "../stationIdentity";
 import ServerList from "../components/server/ServerList";
+import BuiltinServerList from "../components/server/BuiltinServerList";
 import ServerEditSheet from "../components/server/ServerEditSheet";
-import PublicServerList from "../components/server/PublicServerList";
 import BrandLogo from "../components/elements/BrandLogo";
 import PasswordDialog from "../components/server/PasswordDialog";
+import { InfoFilledIcon, CheckIcon } from "../icons";
 import { TID } from "../testids";
 import styles from "./ConnectPage.module.css";
 
-type View = "loading" | "servers" | "wizard" | "public";
+type View = "loading" | "servers" | "wizard";
 
 /** Module-level cache: "host:port" -> epoch-ms of last ping invocation. */
 const pingCache = new Map<string, number>();
@@ -53,6 +56,7 @@ export default function ConnectPage() {
   /* -- user mode ------------------------------------------------- */
   const [userMode, setUserMode] = useState<UserMode>("normal");
   const [defaultUsername, setDefaultUsername] = useState("");
+  const [defaultRole, setDefaultRole] = useState<ClientRole>("operator");
   const tStr = t as (key: string) => string;
   const STEPS = useMemo<StepDef[]>(() => {
     const mode = userMode === "normal" ? "normal" : "expert";
@@ -107,8 +111,13 @@ export default function ConnectPage() {
       setUserMode(prefs.userMode);
       setDefaultUsername(prefs.defaultUsername);
       setUsername(prefs.defaultUsername);
+      setDefaultRole(prefs.defaultRole ?? "operator");
+      setRole(prefs.defaultRole ?? "operator");
       setSavedServers(list);
-      setView(list.length > 0 ? "servers" : "wizard");
+      // Always land on the server list: even with no saved servers the
+      // built-in Remote Radio network is shown there, so the wizard is only
+      // reached by explicitly choosing "Add Server".
+      setView("servers");
       if (list.length > 0) pingServers(list);
     });
   }, [pingServers]);
@@ -142,8 +151,10 @@ export default function ConnectPage() {
   const [step, setStep] = useState(0);
   const [label, setLabel] = useState("");
   const [host, setHost] = useState("");
-  const [port, setPort] = useState("64738");
+  const [port, setPort] = useState(String(RR_PORT));
   const [username, setUsername] = useState("");
+  /** Operator (default) or station role for the server being added. */
+  const [role, setRole] = useState<ClientRole>("operator");
   /** Normal-mode only: whether the user is using their stored default name. */
   const [usingDefaultName, setUsingDefaultName] = useState(true);
 
@@ -151,8 +162,9 @@ export default function ConnectPage() {
     setStep(0);
     setLabel("");
     setHost("");
-    setPort("64738");
+    setPort(String(RR_PORT));
     setUsername(defaultUsername);
+    setRole(defaultRole);
     setUsingDefaultName(true);
     setCertLabel("default");
     setCreatingCert(false);
@@ -185,7 +197,7 @@ export default function ConnectPage() {
 
   const handleConnectAndSave = async () => {
     if (!host || !username) return;
-    const p = Number.parseInt(port) || 64738;
+    const p = Number.parseInt(port) || RR_PORT;
     const resolvedCert = certLabel || null;
     const entry = await addServer({
       label: label || host,
@@ -193,16 +205,39 @@ export default function ConnectPage() {
       port: p,
       username,
       cert_label: resolvedCert,
+      role,
     });
     setSavedServers((prev) => [entry, ...prev]);
+    notifyServersChanged();
     await connect(host, p, username, resolvedCert);
   };
 
   const handleQuickConnectForm = async () => {
     if (!host || !username) return;
-    const p = Number.parseInt(port) || 64738;
+    const p = Number.parseInt(port) || RR_PORT;
     await connect(host, p, username, certLabel || null);
   };
+
+  /**
+   * Connect to a built-in Remote Radio server. The server is not persisted as
+   * a saved entry (the list is part of the product), but we must still supply
+   * the shared password and a username. Operators pick their callsign as the
+   * default username; if none is set yet we fall back to the host so the
+   * connect dialog can prompt.
+   */
+  const handleBuiltinConnect = useCallback(
+    async (server: BuiltinServer) => {
+      const name = (defaultUsername || "").trim();
+      await connect(
+        server.host,
+        RR_PORT,
+        name || server.abbr,
+        null,
+        RR_PASSWORD,
+      );
+    },
+    [connect, defaultUsername],
+  );
 
   const handleQuickConnect = async (server: SavedServer) => {
     setConnectingServerId(server.id);
@@ -227,9 +262,10 @@ export default function ConnectPage() {
 
   const handleDelete = async (id: string) => {
     await removeServer(id);
+    notifyServersChanged();
     setSavedServers((prev) => {
       const next = prev.filter((s) => s.id !== id);
-      if (next.length === 0) setView("wizard");
+      if (next.length === 0) setView("servers");
       return next;
     });
   };
@@ -247,6 +283,7 @@ export default function ConnectPage() {
     setSavedServers((prev) =>
       prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
     );
+    notifyServersChanged();
     setEditingServer(null);
   };
 
@@ -313,19 +350,6 @@ export default function ConnectPage() {
     setView("wizard");
   };
 
-  const handleShowPublic = () => {
-    setView("public");
-  };
-
-  const handlePublicConnect = (pubHost: string, pubPort: number) => {
-    // Pre-fill the wizard with the public server's address
-    resetWizard();
-    setHost(pubHost);
-    setPort(String(pubPort));
-    setStep(1); // skip to username step
-    setView("wizard");
-  };
-
   const handleBackToServers = () => {
     setView(savedServers.length > 0 ? "servers" : "wizard");
     resetWizard();
@@ -337,7 +361,7 @@ export default function ConnectPage() {
 
   if (view === "loading") return null;
 
-  const cardClass = [styles.card, view === "public" && styles.cardWide].filter(Boolean).join(" ");
+  const cardClass = styles.card;
 
   return (
     <div className={styles.page}>
@@ -345,11 +369,9 @@ export default function ConnectPage() {
         {/* Logo - always visible */}
         <div className={styles.logo}>
           <BrandLogo size={64} className={styles.logoIcon} />
-          <h1 className={styles.title}>Fancy Mumble</h1>
+          <h1 className={styles.title}>{t("common:brand")}</h1>
           <p className={styles.subtitle}>
-            {view === "servers" || view === "public"
-              ? t("chooseServer")
-              : currentStep.subtitle}
+            {view === "servers" ? t("chooseServer") : currentStep.subtitle}
           </p>
         </div>
 
@@ -364,28 +386,26 @@ export default function ConnectPage() {
         {/* -------- Server list view (happy path) -------- */}
         {view === "servers" && (
           <>
-            <ServerList
-              servers={savedServers}
-              pings={pings}
-              onConnect={handleQuickConnect}
-              onDelete={handleDelete}
-              onToggleFavorite={handleToggleFavorite}
-              onEdit={handleEditServer}
+            <BuiltinServerList
+              onConnect={handleBuiltinConnect}
               onAddNew={handleShowWizard}
-              onCancelConnect={handleCancelConnect}
               disabled={isConnecting}
-              connectingId={connectingServerId}
-              connectingMessage={bootstrapStage}
             />
-            <button
-              className={styles.publicLink}
-              onClick={handleShowPublic}
-              disabled={isConnecting}
-              type="button"
-            >
-              {t("publicServersLink")}
-            </button>
-
+            {savedServers.length > 0 && (
+              <ServerList
+                servers={savedServers}
+                pings={pings}
+                onConnect={handleQuickConnect}
+                onDelete={handleDelete}
+                onToggleFavorite={handleToggleFavorite}
+                onEdit={handleEditServer}
+                onAddNew={handleShowWizard}
+                onCancelConnect={handleCancelConnect}
+                disabled={isConnecting}
+                connectingId={connectingServerId}
+                connectingMessage={bootstrapStage}
+              />
+            )}
             {editingServer && (
               <ServerEditSheet
                 server={editingServer}
@@ -394,15 +414,6 @@ export default function ConnectPage() {
               />
             )}
           </>
-        )}
-
-        {/* -------- Public server list ------------------- */}
-        {view === "public" && (
-          <PublicServerList
-            onConnect={handlePublicConnect}
-            onBack={handleBackToServers}
-            disabled={isConnecting}
-          />
         )}
 
         {/* -------- Multi-step wizard -------------------- */}
@@ -440,6 +451,33 @@ export default function ConnectPage() {
               {/* -- Step 0: Server address ---------------- */}
               {step === 0 && (
                 <>
+                  <div className={styles.field}>
+                    <label className={styles.label}>I am connecting as</label>
+                    <div className={styles.roleToggle} role="radiogroup" aria-label="Connection role">
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={role === "operator"}
+                        className={`${styles.roleOption} ${role === "operator" ? styles.roleOptionActive : ""}`}
+                        onClick={() => setRole("operator")}
+                        disabled={isConnecting}
+                      >
+                        <span className={styles.roleOptionTitle}>Operator</span>
+                        <span className={styles.roleOptionHint}>I operate a station remotely</span>
+                      </button>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={role === "station"}
+                        className={`${styles.roleOption} ${role === "station" ? styles.roleOptionActive : ""}`}
+                        onClick={() => setRole("station")}
+                        disabled={isConnecting}
+                      >
+                        <span className={styles.roleOptionTitle}>Station</span>
+                        <span className={styles.roleOptionHint}>This PC is at the radio</span>
+                      </button>
+                    </div>
+                  </div>
                   <div className={styles.field}>
                     <label className={styles.label}>{t("fields.host")}</label>
                     <input
@@ -539,7 +577,9 @@ export default function ConnectPage() {
                   {userMode === "normal" && defaultUsername && usingDefaultName ? (
                     <div className={styles.usernameSummary}>
                       <div className={styles.usernameConfirm}>
-                        <span className={styles.usernameCheckmark}>?</span>
+                        <span className={styles.usernameCheckmark} aria-hidden="true">
+                          <CheckIcon width={16} height={16} />
+                        </span>
                         <span className={styles.usernameValue}>{defaultUsername}</span>
                       </div>
                       <button
@@ -556,12 +596,14 @@ export default function ConnectPage() {
                     </div>
                   ) : (
                     <div className={styles.field}>
-                      <label className={styles.label}>{t("fields.username")}</label>
+                      <label className={styles.label}>
+                        {role === "station" ? "Station Name" : "Operator Callsign"}
+                      </label>
                       <input
                         className={styles.input}
                         data-testid={TID.connectUsernameInput}
                         type="text"
-                        placeholder={t("fields.usernamePlaceholder")}
+                        placeholder={role === "station" ? "Elecraft-K3, etc" : "W1VE, etc"}
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         disabled={isConnecting}
@@ -603,8 +645,14 @@ export default function ConnectPage() {
 
               {/* Hint card */}
               <div className={styles.hint}>
-                <span className={styles.hintIcon}>??</span>
-                <span>{currentStep.hint}</span>
+                <span className={styles.hintIcon} aria-hidden="true">
+                  <InfoFilledIcon width={16} height={16} />
+                </span>
+                <span>
+                  {step === 1 && role === "station"
+                    ? t("wizard.stationNameHint")
+                    : currentStep.hint}
+                </span>
               </div>
 
               {/* Action buttons */}
