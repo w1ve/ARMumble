@@ -2258,11 +2258,23 @@ the next backend pass (grep the fork for the client-version/user-agent constant)
   for" dropdown. ChatPage's activation-mode toggle passes the active serverId.
   New `AudioSettingsStorage.test.ts` (6 tests); UI 982 pass; backend clippy clean
   (only the 3 pre-existing updater `doc_markdown` warnings). LOCAL only.
-- **Activation-mode gating + copy** — Station = Continuous only ("Continuously
-  transmit the station receiver audio."); Operator "Voice Activation (VOX)" + "See
-  Advanced to trigger station-side PTT"; PTT card copy. Wire `ActivationModeSelector`
-  to the real `transmit_mode` enum (it still writes legacy booleans). Role comes
-  from the active session's SavedServer role.
+- ✅ **DONE — activation-mode gating + copy** (commit `c5c8806d`). TS `AudioSettings`
+  gained `transmit_mode` (`continuous`/`voice_activity`/`push_to_talk`, matching the
+  backend serde). `ActivationModeSelector` now reads/writes `transmit_mode`
+  directly (keeping `push_to_talk` in step for the legacy self-mute path) and
+  **no longer touches `noise_suppression`** — the §14c decoupling is now reflected
+  in the UI. It takes a `role` prop: a **Station is offered Continuous only** with
+  station copy ("Continuously transmit the station receiver audio."); Operator gets
+  "Voice Activation (VOX)" (+ "See Advanced to trigger station-side PTT") and the
+  PTT card ("Transmit only when a hotkey or serial PTT footswitch (see Advanced) is
+  pressed."). AudioPanel computes the effective mode from `transmit_mode` for the
+  voice-gate/PTT-hint visibility. SettingsPage resolves the edited server's role
+  (saved-server role by host:port, else the user's `defaultRole`) and normalises a
+  Station to Continuous. AudioPanel activation tests rewritten (+Station-only and
+  legacy-reconcile cases). UI 984 pass. LOCAL only.
+  ⚠️ `VoicePanel.tsx` still toggles the raw `push_to_talk` bool, but it is **dead
+  code** (not imported/rendered anywhere) — left untouched. Other locales (de/fr/zh)
+  fall back to English for the renamed activation keys, same as the rest of the pivot.
 - **Stereo routing UI + playback** (needs backend stereo plumbing first).
 - **Finish §14 backend audio** (stereo plumbing, bitrate/force_channels, HF
   defaults) + tests + live MacPro verify.
