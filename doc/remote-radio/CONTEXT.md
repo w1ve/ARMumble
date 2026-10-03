@@ -2310,7 +2310,20 @@ the next backend pass (grep the fork for the client-version/user-agent constant)
   current playback mixes all speakers into one shared stereo stream.
 - **Serial PTT** (`rr-ptt`) + the authoritative role broadcast that replaces the
   station name-match placeholder.
-- **Silence the 9 unused-extern warnings** in the rrmumble build.
+- ✅ **DONE — silenced the 9 unused-extern warnings** (commit `c4618f35`).
+  `crates/app-client/src/main.rs` binds each plugin dep as `use
+  tauri_plugin_x as _;` (they are direct deps only for ACL-schema resolution,
+  used by the shared lib). The `rrmumble` build is now warning-free. Also fixed a
+  `chunks_exact_to_as_chunks` clippy lint in the new `apply_stereo_mode`.
+- ⬜ **Serial PTT (`rr-ptt`) + authoritative role broadcast** — NOT STARTED, the
+  one remaining MVP item (§18e.14 + §14d/§14e). Big enough for its own session:
+  new `crates/rr-ptt` (safe, `serialport` 4.x), `PttSource`/`PttSink`/`SerialPtt`/
+  `RecordingPtt` + a watchdog decorator (§14e safety first), the hidden
+  plugin-data PTT channel (§18b.1), and the plugin-data **role broadcast** that
+  replaces the station name-match placeholder (§18g step 8). Also still open from
+  §14: the **radio-mode profile** (default ≥96 kbps for the dual-RX stereo cliff,
+  filters off, `Audio` application, continuous transmit) and bitrate/`force_channels`
+  UI exposure.
 
 **NEW FILES this session (so `git add` catches them):**
 `ui/src/builtinServers.ts`, `ui/src/stationIdentity.tsx`,
