@@ -1998,3 +1998,269 @@ the install and `usermod -aG docker gerry` steps.
 
 Still to do from §14: the server relay test is now DONE (§16c); the transitional
 `ForceChannels` test and the broadband spectrally-separable test remain.
+
+---
+
+## 18. PIVOT — "Remote.Radio Mumble" (dedicated stereo Mumble client)
+
+> **User decision (big tack change).** The remote-desktop work (P1–P3, P7, the
+> `rr-*` crates, `StationControl`) is **parked in git as-is**. The focus moves to
+> turning the **Client variant** into a standalone product: a stereo Mumble
+> client purpose-built for remote amateur-radio operating. Remote desktop resumes
+> *after* this. There is no stereo Mumble client in existence (the Mumble authors
+> judged stereo useless for gamers); it is essential for amateur radio —
+> **SO2R** (one radio per ear) and modern rigs' main/sub receivers (sub in one
+> ear, main in the other).
+
+### 18a. Identity
+- Product name **`Remote.Radio Mumble`** (with the dot). Exe **`rrmumble`**.
+- This is the **Client** binary (`crates/app-client`), `Mode::Client`. The
+  Station binary keeps the parked remote-desktop role.
+- The brand strings resolve so Client/Android show "Remote.Radio Mumble"; the
+  neutral `brand` key also becomes "Remote.Radio Mumble" (this is the only
+  shipping desktop product now).
+
+### 18b. Confirmed decisions
+1. **PTT signalling rides hidden Mumble messages** (text-message / plugin-data),
+   **not** the `rr-control` WebRTC channel (that belongs to the parked
+   remote-desktop stack and needs no server for plain Mumble). The PTT key/unkey
+   and the operator-command keying both use this channel, and these messages are
+   **hidden from the chat display**. (Chosen over a new Fancy server message type
+   to avoid a server dependency for PTT.)
+2. **Station PTT output triggers on BOTH**: audio-detected VOX on the received
+   Mumble stream (works even with a stock client) **and** an explicit operator
+   key/unkey command arriving over the hidden-message channel.
+3. The 7 built-in servers use password **`Demo!`** (free, OK to ship in the exe).
+4. Live tests: **MacPro == `big-linux`**, Fancy 1.6 server, port **54736**,
+   password **`Demo!`**.
+
+### 18c. The 7 hardcoded Remote Radio servers
+All `*.remote.radio:54736`, Fancy 1.6, password `Demo!`. Shown as a built-in
+group **above** saved servers on the sign-in screen; no browse-public anywhere.
+New York (`newyork.remote.radio`), Toronto (`toronto.remote.radio`), London
+(`london.remote.radio`), Los Angeles (`la.remote.radio`), South Africa
+(`africa.remote.radio`), Winnipeg (`winnipeg.remote.radio`), Frankfurt
+(`frankfurt.remote.radio`).
+
+### 18d. Station vs Operator mode (per saved server / per session)
+A radio choice on sign-in sets the role:
+- **Operator** — username label "Operator Callsign", hint "W1VE, etc". Round
+  avatar (circle + initial), as today.
+- **Station** — username label "Station Name", hint "Elecraft-K3, etc". **Square**
+  avatar in a different theme colour + initial. Everywhere the UI says "user" →
+  "Station" for station identities.
+
+### 18e. MVP task list (UI first, then serial PTT)
+1. Rebrand Client → `Remote.Radio Mumble` / `rrmumble`; wire per-mode brand
+   through TitleBar, `index.html`, and the ConnectPage `<h1>` (was "Fancy Mumble").
+2. Remove **browse-public-servers** (keep `fetch_file_server_capabilities`,
+   `ping_server`).
+3. Remove **Friends** (frontend-only; untangle `dmStorage` friend-keying).
+4. Remove **Klipy/GIF** (strip the built-in API key).
+5. **Hardcoded server group** + mockup sign-in layout (`signin-mockup.png`).
+6. Add-server default port **54736** (old ports still supported).
+7. **Station/Operator** role on sign-in → label/hint changes, persisted.
+8. **"Station" terminology + square avatar** for station identities.
+9. **Per-server audio settings** (key by `ServerId`; AudioPanel server dropdown).
+10. **Activation-mode gating**: Station = Continuous only ("Continuously transmit
+    the station receiver audio."); Operator "Voice Activation (VOX)" + "See
+    Advanced to trigger station-side PTT"; PTT card "Transmit only when a hotkey
+    or serial PTT footswitch (see Advanced) is pressed." Wire to real
+    `transmit_mode`.
+11. **Stereo routing UI + playback**: single-server (L→left/R→right, or mixed;
+    separate L/R volume when split) and multi-server (each physical out channel =
+    a `[Server]-Left/[Server]-Right` dropdown). Stop mono-summing in the mixer.
+12. **Finish §14 backend audio** (stereo plumbing, bitrate/`force_channels`, HF
+    defaults) with tests + live MacPro verification.
+13. **PAUSE for user review of all UI changes.**
+14. **Serial PTT** (after review): `rr-ptt` crate (`serialport` 4.x, no unsafe).
+    Operator = serial **input** (DSR/CTS going low → PTT). Station = serial
+    **output** (drive DTR/RTS low to key TX). Dynamic alphabetical COM-port list,
+    "(none)" first, PnP hot-plug aware, sticky selection. Advanced-settings UI per
+    role. Key/unkey over the hidden-message channel (18b.1).
+
+### 18f. Removals rationale
+No public Mumble servers ever (amateur-radio-only app). Friends and Klipy are
+gamer/social features irrelevant to the use case and are frontend-only, so cheap
+to remove. HF receive audio must **not** be distorted by speech processing —
+default to minimal/no noise suppression for the radio profile.
+
+### 18g. Session progress — UI pivot DONE through MVP step 8 (uncommitted)
+
+> **✅ COMMITTED (this batch).** The UI pivot (MVP steps 1–9 below) is now
+> committed locally in 5 logical commits on `feature/remote-radio-p0`, on top of
+> the already-landed §14f.1 sample-rate fix (`4696bbec` resampler + `98409e17`
+> rate-relabel) and the §10 doc commit `8ce234e2`. **Still LOCAL only — NOT on
+> big-linux** (mumble-tauri cannot build there: no ALSA). The app runs via
+> `tauri dev` and all UI changes were visually reviewed and approved by the user.
+>
+> | commit | subject |
+> |---|---|
+> | `a89b1376` | `feat(brand)`: rebrand Client to Remote.Radio Mumble / rrmumble |
+> | `a6fc8ac0` | `feat(ui)`: remove gamer/social features (public servers, Friends, Klipy/GIF) |
+> | `0a40681d` | `feat(ui)`: hardcoded server group + Operator/Station role on sign-in |
+> | `e98cd1ac` | `feat(ui)`: first-run role, persisted default role, Station iconography |
+> | `209a822d` | `fix(app-client)`: resolve ACL capabilities so the app clears the splash |
+>
+> Pre-commit verification (local Windows): `npm run build` (tsc+vite) clean;
+> `vitest run` **976 passed / 82 files, 0 fail**; `cargo check -p mumble-tauri`
+> clean; `cargo check -p app-client` clean except the expected 9 unused-extern
+> warnings (MVP task #7). Commit messages written BOM-free via
+> `UTF8Encoding($false)`. `crates/*/gen/schemas/` is now gitignored (generated
+> per-binary ACL output; app-station never tracked it either).
+
+**DONE and user-approved (MVP steps 1–8 + welcome role + station iconography):**
+
+1. **Branding → "Remote.Radio Mumble" / exe `rrmumble`.**
+   - `crates/app-client/tauri.conf.json`: `productName "Remote.Radio Mumble"`,
+     `identifier "com.remoteradio.mumble"`, window `title "Remote.Radio Mumble"`.
+     (The dot in productName is accepted by tauri-build.)
+   - `crates/app-client/Cargo.toml`: `[[bin]] name = "rrmumble"`, `default-run`.
+   - `ui/src/locales/en/common.json`: `brand`/`brandClient`/`brandMumble` =
+     "Remote.Radio Mumble"; `brandStation` kept "RemoteRadio Station".
+   - `ui/index.html` title; ConnectPage `<h1>` → `t("common:brand")`;
+     IdentitiesPanel `.fmid` filter label. TitleBar already used `t("brand")`.
+
+2. **Removed browse-public-servers.** Deleted `components/server/PublicServerList.{tsx,module.css}`
+   + its test. ConnectPage: removed the "public" view/handlers/link. `types.ts`:
+   removed `PublicServer`. `commands/public_servers.rs`: rewritten to keep ONLY
+   `fetch_file_server_capabilities` (removed `fetch_public_servers` + XML parser +
+   tests); unregistered from `lib.rs`. Removed now-unused `quick-xml` dep from
+   `mumble-tauri/Cargo.toml`. Orphan `publicServersLink` locale keys left (dead).
+
+3. **Removed Friends** (frontend-only; DMs kept — they key off user hash).
+   Deleted `pages/FriendsPage.{tsx,module.css}`, `friendsStorage.ts`. Stripped
+   friend-toggle from `UserContextMenu`, the `/friends` route + lazy import in
+   `App.tsx`, the friends tab in `ServerTabsBar`, the friends row in
+   `AddServerPopover`. `dmStorage.ts` untouched. Orphan i18n keys left (dead).
+
+4. **Removed Klipy/GIF.** Deleted `components/chat/gif/{GifPicker.tsx,
+   GifPicker.module.css,klipyConfig.ts}` and `pages/settings/KlipyGifBrowser.{tsx,
+   module.css}`. ChatComposer: removed GIF button + picker + `onGifSelect` prop.
+   ChatView/useChatSend: removed `handleGifSelect`. AvatarEditorModal +
+   BannerEditorModal rewritten to drop the gif tab (Avatar = image only; Banner =
+   color + image). SettingsPage/AdvancedPanel: removed the Klipy API-key field.
+   `types.ts`/`preferencesStorage.ts`: removed `klipyApiKey`. `App.tsx`: removed
+   `setKlipyApiKey`. `media.ts` `fetchAsDataUrl` kept (now unused, harmless).
+
+5. **Hardcoded 7-server sign-in group.** NEW `ui/src/builtinServers.ts`
+   (`RR_PORT = 54736`, `RR_PASSWORD = "Demo!"`, `BUILTIN_SERVERS` with
+   name/host/abbr for NYC/TOR/LON/LA/ZA/WPG/FRA, `filterBuiltinServers`). NEW
+   `components/server/BuiltinServerList.{tsx,module.css}` matching the mockup
+   (heading + "+ Add Server", quick-select dropdown, search, cards with a square
+   gradient city badge). ConnectPage renders it above the saved `ServerList`
+   (which now only shows when there are saved servers); initial view is always
+   "servers" so the built-in list shows even with zero saved.
+
+6. **Add-server default port 54736** (was 64738): ConnectPage state, resetWizard,
+   both `Number.parseInt(port) || RR_PORT` fallbacks.
+
+7. **Operator/Station role.** `types.ts`: `ClientRole = "operator" | "station"`,
+   `SavedServer.role?`. ConnectPage wizard step 0 has an Operator/Station radio
+   (`.roleToggle`/`.roleOption` CSS); step-1 username label/placeholder is
+   role-aware; station step-1 hint overridden with
+   `wizard.stationNameHint`. `handleConnectAndSave` persists `role`.
+   `handleBuiltinConnect` connects with `RR_PASSWORD`, username = defaultUsername
+   or the abbr, no cert, not persisted.
+
+8. **"Station" iconography.** NEW `ui/src/stationIdentity.tsx` (`.tsx` because it
+   has JSX): `useStationNames()` (set of lower-cased usernames of saved servers
+   with `role === "station"`), `isStationName`, `useIsStation()`, `StationGlyph`
+   (returns `<RadioIcon>` when station else the fallback), `notifyServersChanged()`
+   fires `"rr:servers-changed"`. ConnectPage calls `notifyServersChanged()` on
+   add/edit/delete. The station glyph is wired EVERYWHERE a user appears:
+   `UserListItem` (gradient SQUARE badge via `.avatar.avatarStation` compound
+   selector + icon), `ProfilePreviewCard`, `UserProfileView`, `UserHoverCard`,
+   `ChannelIconList` (modern), `ModernChannelList` (flat member + CollapsedAvatar),
+   `ClassicChannelList` (StackedAvatar + TooltipUser). All pass `isStation` through
+   `UserHoverCardPortal` too. NOT YET wired: the bottom-left self-identity chip.
+
+   **⚠️ Station detection is a PLACEHOLDER (option b):** name-match of a channel
+   user against saved `station`-role usernames. The AUTHORITATIVE design (agreed):
+   broadcast each client's role over the Fancy **plugin-data** channel (the same
+   hidden channel used for PTT), visible to all clients. Deferred to the serial-PTT
+   phase since they share transport. `stationIdentity.tsx` header documents this.
+
+9. **Welcome screen (first-run) reworked (option 2).** `WelcomePage` now has an
+   Operator/Station role toggle that sets the persisted default role; brand header
+   `t("common:brand")` + `welcomeTagline`; role-aware name label. `types.ts`
+   `UserPreferences.defaultRole?`; `preferencesStorage` DEFAULTS `defaultRole:
+   "operator"` + `completeSetup(mode, name, role)`. ConnectPage reads
+   `prefs.defaultRole` into its role state and `resetWizard` uses it. New
+   `en/server.json` welcome keys (`welcomeTagline`, `welcomeRole*`,
+   `welcomeNameLabel*`). (de/fr/zh fall back to key names — English is default.)
+
+**ICON:** stations use `RadioIcon`, aliased in `ui/src/icons.ts` to lucide
+**`Antenna`** (the dipole/mast — user's final choice after trying RadioReceiver
+and RadioTower). To change the station icon globally, change that one alias.
+
+**ICONS GENERATED:** `npx tauri icon RemoteRadioClient.svg` produced the full set
+into `crates/app-client/icons/`. Installed `@tauri-apps/cli` as a UI devDep to do
+it. These are PLACEHOLDER icons from the generic client SVG — swap when the real
+Remote.Radio Mumble logo exists, then regenerate.
+
+**⚠️ CRITICAL BUILD FIX — app-client capabilities were empty (`{}`).** This caused
+the app to hang on the loading splash: with no ACL, every Tauri plugin IPC
+(store, notification, …) was denied, so `isFirstRun()`'s store read rejected and
+`firstRun` stayed `null` forever. **Root cause:** Tauri resolves capabilities per
+*binary* from a `capabilities/` dir next to the config, and can only resolve a
+plugin's permission schema when that plugin is a **direct dependency** of the
+binary. `app-client` had neither. **Fix:** (a) added
+`crates/app-client/capabilities/*.json` (the 5 files copied from
+`mumble-tauri/capabilities/`), and (b) added the Tauri plugin crates as direct
+deps in `crates/app-client/Cargo.toml` (`store, opener, notification, dialog,
+deep-link, global-shortcut, window-state, updater, process`). Generated
+`capabilities.json` went from `{}` (2 bytes) → ~2.6 KB. Also added a safety net:
+`App.tsx` `isFirstRun().then(setFirstRun).catch(() => setFirstRun(false))`.
+The 9 "unused extern crate" warnings in the `rrmumble` build come from those
+plugin deps (used for ACL, not `use`d) — harmless, TODO silence with
+`use tauri_plugin_x as _;` lines (MVP task #7).
+
+**HOW TO RUN / DEV (both scripts in `E:\devtools\`):**
+- **`tauri-dev.cmd`** — `tauri dev` with the MSVC+nasm+protoc env; Vite on :1420 +
+  hot reload. UI edits reload live; Rust edits incrementally rebuild. **Use this
+  for UI iteration — do NOT do a full `tauri build` for every tweak.**
+- **`tauri-build.cmd`** — production `tauri build --no-bundle`; standalone exe at
+  `target/release/rrmumble.exe` with the frontend embedded (no dev server). ~10 min.
+- ⚠️ **A plain `cargo run`/debug build loads from `devUrl` (localhost:1420) and the
+  fork auto-spawns Vite.** A *stale* Vite server on :1420 serving an old bundle was
+  the first (red-herring) cause of a hang; always kill :1420 before launching.
+  Standalone review = `tauri build`; live iteration = `tauri dev`.
+- First-run was reset this session by deleting
+  `%APPDATA%\com.remoteradio.mumble\preferences.json` to show the welcome screen.
+
+**VERIFIED:** UI `tsc --noEmit` clean after every change; `npm run build` clean;
+full `vitest run` = **976 passed / 82 files, 0 fail** (before the station-glyph
+spread; re-run before commit). `mumble-tauri` `cargo check` clean. app-client
+`tauri build` succeeds and the standalone exe launches past the splash.
+**mumble-tauri does NOT build on big-linux (no ALSA)** — it is desktop/Android
+only, so verify UI/app-client work LOCALLY on Windows; big-linux stays for the
+headless RemoteRadio crates + mumble-protocol.
+
+**KNOWN LEFTOVER BRANDING LEAK:** the right-side profile panel shows client
+**Version "FancyMumble 0.3.0"** — a Rust-side version/agent string, not UI. Fix in
+the next backend pass (grep the fork for the client-version/user-agent constant).
+
+**MVP REMAINING (next session), in order:**
+- ✅ **DONE — committed this UI batch** in 5 logical commits (see the table at
+  the top of §18g). Grouped branding / removals / sign-in / welcome+role+avatar /
+  build-fixes. pwsh no-BOM writer, local only, `vitest` re-run green first.
+- **Per-server audio settings** — key the TS audio store by `ServerId`, pass
+  serverId to `get/set_audio_settings`, AudioPanel server dropdown. Backend
+  `AudioSettings` already lives per-SharedState; fix the global save/restore.
+- **Activation-mode gating + copy** — Station = Continuous only ("Continuously
+  transmit the station receiver audio."); Operator "Voice Activation (VOX)" + "See
+  Advanced to trigger station-side PTT"; PTT card copy. Wire `ActivationModeSelector`
+  to the real `transmit_mode` enum (it still writes legacy booleans). Role comes
+  from the active session's SavedServer role.
+- **Stereo routing UI + playback** (needs backend stereo plumbing first).
+- **Finish §14 backend audio** (stereo plumbing, bitrate/force_channels, HF
+  defaults) + tests + live MacPro verify.
+- **Serial PTT** (`rr-ptt`) + the authoritative role broadcast that replaces the
+  station name-match placeholder.
+- **Silence the 9 unused-extern warnings** in the rrmumble build.
+
+**NEW FILES this session (so `git add` catches them):**
+`ui/src/builtinServers.ts`, `ui/src/stationIdentity.tsx`,
+`ui/src/components/server/BuiltinServerList.{tsx,module.css}`,
+`crates/app-client/capabilities/*.json`, `crates/app-client/icons/*`.
