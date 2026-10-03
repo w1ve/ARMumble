@@ -2293,8 +2293,21 @@ the next backend pass (grep the fork for the client-version/user-agent constant)
   on the built `rrmumble.exe`:** clean L/R separation, two hard-panned tones at
   96 kbps. Still TODO from §14: the radio-mode **profile** (≥96 kbps default,
   filters off, `Audio` application) and bitrate/`force_channels` UI exposure.
-- **Stereo routing UI + playback** (CURRENT) — backend now produces stereo;
-  wire the per-output-channel L/R routing UI on top.
+- ✅ **DONE — stereo routing UI (layer 1)** (commit `ac6b8956`). An operator
+  "Stereo Output" card picks how the decoded stereo maps to the device:
+  **Stereo** (L→left/R→right, default; + independent L/R gain sliders), **Mono**
+  (sum both to both ears), or **Swap L/R**. `AudioSettings` gained
+  `playback_stereo_mode` (`StereoMode` enum) + `left_volume`/`right_volume`
+  (serde defaults, old configs unchanged). Backend: `mixer::apply_stereo_mode`
+  (interleaved in-place fold, no-op fast path) + a lock-free `StereoControl`
+  handle wired through `create_mixing_playback` into both backends and
+  live-updated in `set_audio_settings_for` (no pipeline restart); rodio applies
+  it in `refill_chunk`, cpal before its mono fold, Android ignores it (deferred).
+  ⚠️ `voice_replay` now duplicates its mono mic recording to L/R so replay plays
+  at correct speed. Tests: mixer 25 (+5), AudioPanel +4, UI 988, clippy 0.
+  **DEFERRED to its own session: the multi-server physical-output-channel
+  routing matrix (layer 2)** — a larger per-server output-routing layer; the
+  current playback mixes all speakers into one shared stereo stream.
 - **Serial PTT** (`rr-ptt`) + the authoritative role broadcast that replaces the
   station name-match placeholder.
 - **Silence the 9 unused-extern warnings** in the rrmumble build.
