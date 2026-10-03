@@ -16,6 +16,12 @@ use mumble_protocol::audio::resample::LinearResampler;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
 
+/// Channel count of the inbound mixer's interleaved speaker buffers. The
+/// rodio backend plays these back in stereo; this cpal fallback folds them
+/// to mono (summing L+R per frame), so stereo separation is only available
+/// on the default rodio backend. Kept correct, not feature-complete.
+const SRC_CHANNELS: usize = 2;
+
 // -- Capture --------------------------------------------------------
 
 /// Captures microphone input via cpal and makes it available as
@@ -293,10 +299,14 @@ pub(super) fn batch_drain_speakers(
     bufs: &mut HashMap<u32, VecDeque<f32>>,
     speaker_vols: &HashMap<u32, f32>,
     mixed_buf: &mut Vec<f32>,
-    mono_needed: usize,
+    samples_needed: usize,
 ) -> (bool, usize, usize) {
+    // The sum is a plain element-wise add, so this is correct whether the
+    // per-speaker buffers hold mono or interleaved stereo samples - the
+    // caller just asks for frames*channels samples. Interleaved positions
+    // line up because every speaker buffer uses the same channel layout.
     mixed_buf.clear();
-    mixed_buf.resize(mono_needed, 0.0_f32);
+    mixed_buf.resize(samples_needed, 0.0_f32);
     let mut any = false;
     let mut max_drained: usize = 0;
     let mut max_buf_before: usize = 0;
@@ -308,7 +318,7 @@ pub(super) fn batch_drain_speakers(
         any = true;
         max_buf_before = max_buf_before.max(buf.len());
         let vol = speaker_vols.get(session).copied().unwrap_or(1.0);
-        let n = buf.len().min(mono_needed);
+        let n = buf.len().min(samples_needed);
         max_drained = max_drained.max(n);
         let (a, b) = buf.as_slices();
         let from_a = n.min(a.len());
@@ -358,9 +368,10 @@ fn try_drain_speakers_checked(
     speaker_volumes: &mumble_protocol::audio::mixer::SpeakerVolumes,
     primed_cb: &AtomicBool,
     mixed_buf: &mut Vec<f32>,
-    mono_needed: usize,
+    samples_needed: usize,
 ) -> Option<(bool, usize, usize)> {
-    const PRE_BUFFER_SAMPLES: usize = 4800;
+    // ~100 ms, scaled by the interleaved channel count of the speaker buffers.
+    const PRE_BUFFER_SAMPLES: usize = 4800 * SRC_CHANNELS;
     let Ok(mut bufs) = buffers.lock() else { return None };
     if !primed_cb.load(Ordering::Relaxed) {
         let max_available = bufs.values().map(VecDeque::len).max().unwrap_or(0);
@@ -376,7 +387,7 @@ fn try_drain_speakers_checked(
     let sv_guard = speaker_volumes.try_lock().ok();
     let empty = HashMap::new();
     let sv = sv_guard.as_deref().unwrap_or(&empty);
-    Some(batch_drain_speakers(&mut bufs, sv, mixed_buf, mono_needed))
+    Some(batch_drain_speakers(&mut bufs, sv, mixed_buf, samples_needed))
 }
 
 /// Apply a short anti-pop ramp when exiting an underrun, then return
@@ -400,12 +411,14 @@ fn apply_underrun_ramp(sample: f32, state: &mut PlaybackState) -> f32 {
     }
 }
 
-/// Linearly interpolate one sample from `mixed_buf` at the fractional
-/// position given by `out_index * src_ratio`. Returns `None` if the
-/// computed source index falls outside `valid_count`.
+/// Linearly interpolate one mono sample from the interleaved stereo
+/// `mixed_buf` at the fractional source *frame* position given by
+/// `out_index * src_ratio`. The two channels of each source frame are
+/// averaged into one mono value (this cpal fallback is mono-out).
+/// Returns `None` if the computed source frame falls outside `valid_frames`.
 fn resample_linear(
     mixed_buf: &[f32],
-    valid_count: usize,
+    valid_frames: usize,
     drained: bool,
     out_index: usize,
     src_ratio: f64,
@@ -415,12 +428,21 @@ fn resample_linear(
     }
     let src_pos = out_index as f64 * src_ratio;
     let idx = src_pos as usize;
-    if idx >= valid_count {
+    if idx >= valid_frames {
         return None;
     }
     let frac = (src_pos - idx as f64) as f32;
-    let s0 = mixed_buf[idx];
-    let s1 = if idx + 1 < valid_count { mixed_buf[idx + 1] } else { s0 };
+    // Average the interleaved L/R of each source frame into mono.
+    let mono_at = |frame: usize| -> f32 {
+        let base = frame * SRC_CHANNELS;
+        let mut sum = 0.0;
+        for ch in 0..SRC_CHANNELS {
+            sum += mixed_buf.get(base + ch).copied().unwrap_or(0.0);
+        }
+        sum / SRC_CHANNELS as f32
+    };
+    let s0 = mono_at(idx);
+    let s1 = if idx + 1 < valid_frames { mono_at(idx + 1) } else { s0 };
     Some(s0 + (s1 - s0) * frac)
 }
 
@@ -573,8 +595,10 @@ impl super::MixingPlayback for CpalMixingPlayback {
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     let vol = f32::from_bits(volume.load(Ordering::Relaxed));
                     let out_frames = data.len() / out_channels;
-                    let src_needed =
+                    // Source frames needed, then samples (interleaved stereo).
+                    let src_frames_needed =
                         ((out_frames as f64 * src_ratio).ceil() as usize).max(1);
+                    let src_needed = src_frames_needed * SRC_CHANNELS;
 
                     diag.callbacks += 1;
 
@@ -613,9 +637,10 @@ impl super::MixingPlayback for CpalMixingPlayback {
                     }
                     diag.log_if_due(src_needed, valid_count, out_frames, src_ratio);
 
+                    let valid_frames = valid_count / SRC_CHANNELS;
                     for (i, frame) in data.chunks_exact_mut(out_channels).enumerate() {
                         let sample_opt = resample_linear(
-                            &mixed_buf, valid_count, drained, i, src_ratio,
+                            &mixed_buf, valid_frames, drained, i, src_ratio,
                         );
                         if let Some(s) = &sample_opt {
                             diag.peak = diag.peak.max(s.abs());
@@ -809,7 +834,9 @@ mod tests {
 
     #[test]
     fn try_drain_primes_when_buffer_sufficient() {
-        let bufs = make_speaker_buffers(HashMap::from([(1, VecDeque::from(vec![1.0; 5000]))]));
+        // Buffers are interleaved stereo now, so the prime threshold is
+        // 4800*SRC_CHANNELS (9600) samples. 10000 clears it.
+        let bufs = make_speaker_buffers(HashMap::from([(1, VecDeque::from(vec![1.0; 10000]))]));
         let vols = make_speaker_volumes(HashMap::new());
         let primed = AtomicBool::new(false);
         let mut mixed = Vec::new();
@@ -824,7 +851,7 @@ mod tests {
 
     #[test]
     fn try_drain_stays_primed_when_empty() {
-        let bufs = make_speaker_buffers(HashMap::from([(1, VecDeque::from(vec![1.0; 5000]))]));
+        let bufs = make_speaker_buffers(HashMap::from([(1, VecDeque::from(vec![1.0; 10000]))]));
         let vols = make_speaker_volumes(HashMap::new());
         let primed = AtomicBool::new(false);
         let mut mixed = Vec::new();
@@ -866,23 +893,39 @@ mod tests {
 
     #[test]
     fn resample_linear_returns_none_when_not_drained() {
+        // Interleaved stereo buffer (5 frames); not drained -> None.
         let buf = vec![1.0_f32; 10];
-        assert!(resample_linear(&buf, 10, false, 0, 1.0).is_none());
+        assert!(resample_linear(&buf, 5, false, 0, 1.0).is_none());
     }
 
     #[test]
     fn resample_linear_identity_at_ratio_one() {
-        let buf = vec![0.0, 0.25, 0.5, 0.75, 1.0];
-        for i in 0..5 {
-            let s = resample_linear(&buf, 5, true, i, 1.0).unwrap();
-            assert!((s - buf[i]).abs() < 1e-6, "index {i}: expected {}, got {s}", buf[i]);
+        // Interleaved stereo: each frame is (L, R); the resampler returns
+        // the per-frame L+R average. Here L==R so the average == the value.
+        let frames = [0.0, 0.25, 0.5, 0.75, 1.0];
+        let mut buf = Vec::new();
+        for &v in &frames {
+            buf.push(v); // L
+            buf.push(v); // R
+        }
+        for (i, &expected) in frames.iter().enumerate() {
+            let s = resample_linear(&buf, frames.len(), true, i, 1.0).unwrap();
+            assert!((s - expected).abs() < 1e-6, "frame {i}: expected {expected}, got {s}");
         }
     }
 
     #[test]
+    fn resample_linear_averages_stereo_frame_to_mono() {
+        // One frame L=0.2, R=0.8 -> mono average 0.5.
+        let buf = vec![0.2, 0.8];
+        let s = resample_linear(&buf, 1, true, 0, 1.0).unwrap();
+        assert!((s - 0.5).abs() < 1e-6, "got {s}");
+    }
+
+    #[test]
     fn resample_linear_upsamples() {
-        // 2 source samples, ratio 0.5 (device at 2x source rate)
-        let buf = vec![0.0, 1.0];
+        // 2 source frames (L==R): frame0=0.0, frame1=1.0; ratio 0.5.
+        let buf = vec![0.0, 0.0, 1.0, 1.0];
         let s0 = resample_linear(&buf, 2, true, 0, 0.5).unwrap();
         let s1 = resample_linear(&buf, 2, true, 1, 0.5).unwrap();
         assert!((s0 - 0.0).abs() < 1e-6);

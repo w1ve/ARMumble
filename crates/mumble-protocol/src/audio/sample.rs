@@ -57,6 +57,16 @@ impl AudioFormat {
         channels: 1,
         sample_format: SampleFormat::I16,
     };
+
+    /// Stereo 48 kHz 32-bit float format. Samples are interleaved L R L R.
+    /// Used on the inbound/playback path so dual-receiver radio audio keeps
+    /// its two channels separate; a stereo decoder upmixes mono senders, so
+    /// this is safe to use unconditionally on receive.
+    pub const STEREO_48KHZ_F32: Self = Self {
+        sample_rate: 48_000,
+        channels: 2,
+        sample_format: SampleFormat::F32,
+    };
 }
 
 /// A single frame of PCM audio data flowing through the pipeline.

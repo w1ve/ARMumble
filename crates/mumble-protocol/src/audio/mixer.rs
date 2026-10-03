@@ -343,11 +343,15 @@ fn insert_silence(
     if requested == 0 {
         return;
     }
+    // The cap is defined in mono samples; a stereo buffer holds twice as
+    // many interleaved f32s for the same wall-clock duration, so scale it
+    // by the channel count to keep the real cap at ~400 ms either way.
+    let cap = MAX_SPEAKER_BUFFER_SAMPLES * format.channels.max(1) as usize;
     if let Ok(mut bufs) = buffers.lock() {
         let buf = bufs
             .entry(session)
-            .or_insert_with(|| VecDeque::with_capacity(MAX_SPEAKER_BUFFER_SAMPLES));
-        let remaining = MAX_SPEAKER_BUFFER_SAMPLES.saturating_sub(buf.len());
+            .or_insert_with(|| VecDeque::with_capacity(cap));
+        let remaining = cap.saturating_sub(buf.len());
         let to_insert = requested.min(remaining);
         buf.resize(buf.len() + to_insert, 0.0);
         if to_insert < requested {
@@ -364,10 +368,13 @@ fn push_samples(
     frame: &crate::audio::sample::AudioFrame,
 ) {
     let samples = frame.as_f32_samples();
+    // Cap is in mono samples; scale by channels so a stereo (interleaved)
+    // buffer still caps at the same ~400 ms wall-clock duration.
+    let cap = MAX_SPEAKER_BUFFER_SAMPLES * frame.format.channels.max(1) as usize;
     if let Ok(mut bufs) = buffers.lock() {
         let buf = bufs
             .entry(session)
-            .or_insert_with(|| VecDeque::with_capacity(MAX_SPEAKER_BUFFER_SAMPLES));
+            .or_insert_with(|| VecDeque::with_capacity(cap));
         buf.extend(samples.iter().copied());
         // Drop oldest samples when the buffer exceeds the cap so
         // stale audio never accumulates beyond ~400 ms.  This is the
@@ -375,8 +382,8 @@ fn push_samples(
         // arriving faster than the playback can drain it (e.g. on
         // Android when the app is backgrounded); it should not happen
         // in steady state on desktop.
-        if buf.len() > MAX_SPEAKER_BUFFER_SAMPLES {
-            let excess = buf.len() - MAX_SPEAKER_BUFFER_SAMPLES;
+        if buf.len() > cap {
+            let excess = buf.len() - cap;
             tracing::debug!(
                 "push_samples: dropped {excess} oldest samples for session {session} (buffer overflow, playback falling behind)"
             );
@@ -402,21 +409,29 @@ fn apply_boundary_crossfade(
 
     let count = FRAME_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
 
+    let channels = frame.format.channels.max(1) as usize;
     if let Some(prev_val) = *prev_last_sample {
         let samples = frame.as_f32_samples_mut();
         if !samples.is_empty() {
+            // The crossfade is only armed after silence padding, whose last
+            // sample is 0.0 on every channel, so a single `prev_val` applies
+            // to all channels. Advance the cosine envelope per audio frame
+            // (i / channels) so both L and R get the same gain curve rather
+            // than the envelope running twice as fast across interleaved
+            // stereo.
             let correction = prev_val - samples[0];
             if correction.abs() > 0.002 {
                 let corrected = CORRECTED_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
-                let cf_len = CROSSFADE_LEN.min(samples.len());
+                let cf_frames = CROSSFADE_LEN.min(samples.len() / channels);
+                let cf_len = cf_frames * channels;
                 if count.is_multiple_of(100) {
                     tracing::debug!(
-                        "crossfade: frame={count}, corrected={corrected}/{count} ({:.0}%), delta={correction:.4}, cf_len={cf_len}",
+                        "crossfade: frame={count}, corrected={corrected}/{count} ({:.0}%), delta={correction:.4}, cf_frames={cf_frames}, channels={channels}",
                         corrected as f64 / count as f64 * 100.0,
                     );
                 }
                 for (i, sample) in samples.iter_mut().take(cf_len).enumerate() {
-                    let t = i as f32 / cf_len as f32;
+                    let t = (i / channels) as f32 / cf_frames as f32;
                     let decay = 0.5 * (1.0 + (std::f32::consts::PI * t).cos());
                     *sample += correction * decay;
                 }
@@ -445,10 +460,16 @@ fn apply_cold_start_fade_in(frame: &mut crate::audio::sample::AudioFrame) {
     /// below the click range.
     const FADE_LEN: usize = 240;
 
+    let channels = frame.format.channels.max(1) as usize;
     let samples = frame.as_f32_samples_mut();
-    let n = FADE_LEN.min(samples.len());
+    // Advance the fade envelope once per audio frame (i / channels) and
+    // apply it to every channel of that frame, so L and R are faded by the
+    // same gain curve. Interleaved stereo otherwise ran the envelope twice
+    // as fast and gave L and R different gains.
+    let fade_frames = FADE_LEN.min(samples.len() / channels);
+    let n = fade_frames * channels;
     for (i, sample) in samples.iter_mut().take(n).enumerate() {
-        let t = i as f32 / n as f32;
+        let t = (i / channels) as f32 / fade_frames as f32;
         // Equal-power cosine fade: 0.5 - 0.5*cos(pi*t) goes 0 -> 1
         // with zero derivative at both endpoints.
         let w = 0.5 - 0.5 * (std::f32::consts::PI * t).cos();

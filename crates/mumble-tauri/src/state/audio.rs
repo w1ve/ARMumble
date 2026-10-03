@@ -188,7 +188,9 @@ mod voice_pipeline {
                 let state = __session.lock().map_err(|e| e.to_string())?;
                 state.audio.speaker_volumes.clone()
             };
-            let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
+            // Inbound is stereo so dual-receiver radio audio stays separated; a
+    // stereo decoder upmixes mono senders, so mono traffic is unaffected.
+    let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::STEREO_48KHZ_F32);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),
@@ -359,7 +361,9 @@ mod voice_pipeline {
                 let state = __session.lock().map_err(|e| e.to_string())?;
                 state.audio.speaker_volumes.clone()
             };
-            let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
+            // Inbound is stereo so dual-receiver radio audio stays separated; a
+    // stereo decoder upmixes mono senders, so mono traffic is unaffected.
+    let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::STEREO_48KHZ_F32);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),
@@ -493,7 +497,9 @@ mod voice_pipeline {
                 let state = __session.lock().map_err(|e| e.to_string())?;
                 state.audio.speaker_volumes.clone()
             };
-            let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
+            // Inbound is stereo so dual-receiver radio audio stays separated; a
+    // stereo decoder upmixes mono senders, so mono traffic is unaffected.
+    let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::STEREO_48KHZ_F32);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),

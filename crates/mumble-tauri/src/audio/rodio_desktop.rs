@@ -13,6 +13,12 @@ use std::sync::Arc;
 use std::thread;
 
 const MONO_CHANNELS: NonZero<u16> = NonZero::new(1).unwrap();
+/// Playback is stereo so dual-receiver radio audio keeps its channels
+/// separate. The inbound mixer decodes to interleaved L R; a stereo decoder
+/// upmixes mono senders, so mono traffic plays identically on both channels.
+const STEREO_CHANNELS: NonZero<u16> = NonZero::new(2).unwrap();
+/// Output channel count the mixer source produces (interleaved).
+const PLAYBACK_CHANNELS: usize = 2;
 const SAMPLE_RATE_48K: NonZero<u32> = NonZero::new(48_000).unwrap();
 
 use mumble_protocol::audio::capture::AudioCapture;
@@ -262,10 +268,15 @@ fn capture_thread(
 
 // -- Custom Source for Mumble audio mixing --------------------------
 
-/// Number of mono samples to mix per refill (20 ms at 48 kHz).
+/// Number of audio frames to mix per refill (20 ms at 48 kHz). One frame is
+/// `PLAYBACK_CHANNELS` interleaved samples, so the mixed buffer holds
+/// `MIX_CHUNK_SIZE * PLAYBACK_CHANNELS` f32s.
 const MIX_CHUNK_SIZE: usize = 960;
-/// Minimum buffered samples before playback begins (~100 ms).
-const PRE_BUFFER_SAMPLES: usize = 4800;
+/// Interleaved sample count mixed per refill (frames * channels).
+const MIX_CHUNK_SAMPLES: usize = MIX_CHUNK_SIZE * PLAYBACK_CHANNELS;
+/// Minimum buffered samples before playback begins (~100 ms). Scaled by the
+/// playback channel count because the speaker buffers are interleaved.
+const PRE_BUFFER_SAMPLES: usize = 4800 * PLAYBACK_CHANNELS;
 /// Refill back-off (in mono samples) when a refill returns no data.
 /// 5 ms keeps the speaker buffer mutex contention bounded (max
 /// ~200 lock attempts/s per source) while letting a transient jitter
@@ -336,7 +347,7 @@ impl MumbleMixerSource {
             buffers,
             speaker_volumes,
             volume,
-            mixed_chunk: vec![0.0; MIX_CHUNK_SIZE],
+            mixed_chunk: vec![0.0; MIX_CHUNK_SAMPLES],
             chunk_pos: 0,
             chunk_valid: 0,
             primed: false,
@@ -392,7 +403,7 @@ impl MumbleMixerSource {
         let sv = sv_guard.as_deref().unwrap_or(&empty);
 
         let (drained, valid_count, buf_depth) =
-            super::desktop::batch_drain_speakers(&mut bufs, sv, &mut self.mixed_chunk, MIX_CHUNK_SIZE);
+            super::desktop::batch_drain_speakers(&mut bufs, sv, &mut self.mixed_chunk, MIX_CHUNK_SAMPLES);
 
         self.diag.refills += 1;
         self.diag.max_buf_depth = self.diag.max_buf_depth.max(buf_depth);
@@ -408,7 +419,7 @@ impl MumbleMixerSource {
             self.chunk_valid = 0;
             self.underrun_cooldown = UNDERRUN_BACKOFF_SAMPLES;
         } else {
-            if valid_count < MIX_CHUNK_SIZE {
+            if valid_count < MIX_CHUNK_SAMPLES {
                 self.diag.partial_refills += 1;
             }
             self.consecutive_empty = 0;
@@ -537,7 +548,7 @@ impl Source for MumbleMixerSource {
     }
 
     fn channels(&self) -> NonZero<u16> {
-        MONO_CHANNELS
+        STEREO_CHANNELS
     }
 
     fn sample_rate(&self) -> NonZero<u32> {
