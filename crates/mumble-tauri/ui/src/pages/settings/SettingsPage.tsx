@@ -7,7 +7,6 @@ import { load } from "../../utils/store";
 import type { AudioDevice, AudioSettings, FancyProfile, UserMode, TimeFormat, DateFormat, NumberFormat, WelcomeMessageDisplay } from "../../types";
 import { getPreferences, updatePreferences, getSavedAudioSettings, saveAudioSettings } from "../../preferencesStorage";
 import { serializeProfile, dataUrlToBytes } from "../../profileFormat";
-import { setKlipyApiKey } from "../../components/chat/gif/klipyConfig";
 import { useAppStore } from "../../store";
 import {
   type ShortcutBindings,
@@ -170,7 +169,6 @@ export default function SettingsPage() {
   // Preferences
   const [userMode, setUserMode] = useState<UserMode>("normal");
   const [defaultUsername, setDefaultUsername] = useState("");
-  const [klipyApiKey, setKlipyApiKeyState] = useState("");
   const [enableNotifications, setEnableNotifications] = useState(true);
   const [welcomeMessageDisplay, setWelcomeMessageDisplay] = useState<WelcomeMessageDisplay>("once");
   const [enableDualPath, setEnableDualPath] = useState(false);
@@ -245,8 +243,6 @@ export default function SettingsPage() {
         const prefs = await getPreferences();
         setUserMode(prefs.userMode);
         setDefaultUsername(prefs.defaultUsername);
-        setKlipyApiKeyState(prefs.klipyApiKey ?? "");
-        setKlipyApiKey(prefs.klipyApiKey);
         setEnableNotifications(prefs.enableNotifications ?? true);
         setWelcomeMessageDisplay(prefs.welcomeMessageDisplay ?? "once");
         setEnableDualPath(prefs.enableDualPath ?? false);
@@ -452,12 +448,6 @@ export default function SettingsPage() {
     setUserMode(next);
     await updatePreferences({ userMode: next });
   }, [userMode]);
-
-  const handleKlipyApiKeyChange = useCallback(async (key: string) => {
-    setKlipyApiKeyState(key);
-    setKlipyApiKey(key);
-    await updatePreferences({ klipyApiKey: key });
-  }, []);
 
   const handleChangeShortcut = useCallback(
     async (key: keyof ShortcutBindings, value: string) => {
@@ -872,7 +862,6 @@ export default function SettingsPage() {
           {tab === "advanced" && (
             <AdvancedPanel
               userMode={userMode}
-              klipyApiKey={klipyApiKey}
               logLevel={logLevel}
               logToFile={logToFile}
               terminalLogging={terminalLogging}
@@ -882,7 +871,6 @@ export default function SettingsPage() {
               persistDms={persistDms}
               showDisconnectWarning={showDisconnectWarning}
               onToggleMode={handleToggleMode}
-              onKlipyApiKeyChange={handleKlipyApiKeyChange}
               onLogLevelChange={handleLogLevelChange}
               onToggleLogToFile={handleToggleLogToFile}
               onToggleTerminalLogging={handleToggleTerminalLogging}

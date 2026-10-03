@@ -8,7 +8,6 @@ import styles from "./SettingsPage.module.css";
 
 registerSettings("advanced")
   .add("advanced.expertMode", ["expert"])
-  .add("advanced.klipyApiKey", ["gif", "klipy", "api key"])
   .add("advanced.developerMode", ["developer", "debug"])
   .add("advanced.logLevel", ["logging", "log"])
   .add("advanced.logToFile", ["logging", "log", "file"])
@@ -24,7 +23,6 @@ registerSettings("advanced")
 
 export function AdvancedPanel({
   userMode,
-  klipyApiKey,
   logLevel,
   logToFile,
   terminalLogging,
@@ -34,7 +32,6 @@ export function AdvancedPanel({
   persistDms,
   showDisconnectWarning,
   onToggleMode,
-  onKlipyApiKeyChange,
   onLogLevelChange,
   onToggleLogToFile,
   onToggleTerminalLogging,
@@ -47,7 +44,6 @@ export function AdvancedPanel({
   onReset,
 }: Readonly<{
   userMode: UserMode;
-  klipyApiKey: string;
   logLevel: string;
   logToFile: boolean;
   terminalLogging: boolean;
@@ -57,7 +53,6 @@ export function AdvancedPanel({
   persistDms: boolean;
   showDisconnectWarning: boolean;
   onToggleMode: () => void;
-  onKlipyApiKeyChange: (key: string) => void;
   onLogLevelChange: (level: string) => void;
   onToggleLogToFile: () => void;
   onToggleTerminalLogging: () => void;
@@ -123,33 +118,6 @@ export function AdvancedPanel({
           <Toggle checked={userMode !== "normal"} onChange={onToggleMode} />
         </div>
       </section>
-
-      {userMode !== "normal" && (
-        <section className={styles.section}>
-          <h3 className={styles.sectionTitle}>{t("advanced.klipyApiKey")}</h3>
-          <p className={styles.fieldHint}>
-            {t("advanced.klipyApiKeyHintBefore")}{" "}
-            <a
-              href="https://klipy.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: "var(--accent)" }}
-            >
-              Klipy
-            </a>{" "}
-            {t("advanced.klipyApiKeyHintAfter")}
-          </p>
-          <input
-            type="password"
-            className={styles.input}
-            value={klipyApiKey}
-            onChange={(e) => onKlipyApiKeyChange(e.target.value)}
-            placeholder="klipy_xxxxxxxx..."
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </section>
-      )}
 
       {userMode !== "normal" && (
         <section className={styles.section}>

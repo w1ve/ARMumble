@@ -432,17 +432,5 @@ export function useChatSend({ pendingQuotes, clearQuotes, draft, clearDraft, edi
     return () => document.removeEventListener("paste", onDocPaste);
   }, [stageImagesFrom, readClipboardImage]);
 
-  const handleGifSelect = useCallback(
-    async (url: string, alt: string) => {
-      const html = `<img src="${url}" alt="${alt}" />`;
-      if (isDmMode && selectedDmUser !== null) {
-        await sendDm(selectedDmUser, html);
-      } else if (selectedChannel !== null) {
-        await sendMessage(selectedChannel, html);
-      }
-    },
-    [isDmMode, selectedDmUser, selectedChannel, sendMessage, sendDm],
-  );
-
-  return { sending, handleSend, sendMediaFile, sendMediaGallery, handlePaste, handleGifSelect };
+  return { sending, handleSend, sendMediaFile, sendMediaGallery, handlePaste };
 }

@@ -1,8 +1,7 @@
-import { AttachIcon, CloseIcon, EditIcon, FileIcon, FileTextIcon, GifIcon, ImageIcon, SendIcon } from "../../icons";
-import { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspense, type ClipboardEvent } from "react";
+import { AttachIcon, CloseIcon, EditIcon, FileIcon, FileTextIcon, ImageIcon, SendIcon } from "../../icons";
+import { useState, useRef, useCallback, useEffect, useMemo, type ClipboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import MarkdownInput, { type MarkdownInputApi } from "./markdown/MarkdownInput";
-const GifPicker = lazy(() => import("./gif/GifPicker"));
 import MentionAutocomplete, { type MentionCandidate, handleMentionKey, candidateInsertText } from "./mention/MentionAutocomplete";
 import { useMentionCandidates } from "./mention/useMentionCandidates";
 import styles from "./ChatView.module.css";
@@ -21,7 +20,6 @@ interface ChatComposerProps {
   readonly onPaste: (e: ClipboardEvent) => void;
   /** Stage one or more picked image/video files into the attachment tray. */
   readonly onFilesSelected: (files: File[]) => void;
-  readonly onGifSelect: (url: string, alt: string) => Promise<void>;
   /** Open the native file picker and upload via the file-server plugin.
    *  When omitted, the file-server attach button is hidden. */
   readonly onAttachFile?: () => Promise<void> | void;
@@ -40,7 +38,6 @@ export default function ChatComposer({
   onSend,
   onPaste,
   onFilesSelected,
-  onGifSelect,
   onAttachFile,
   onOpenLiveDoc,
   disabled = false,
@@ -48,7 +45,6 @@ export default function ChatComposer({
   isEditing = false,
   onCancelEdit,
 }: ChatComposerProps) {
-  const [showGifPicker, setShowGifPicker] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const { t } = useTranslation("chat");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -280,14 +276,6 @@ export default function ChatComposer({
           </button>
         </div>
       )}
-      {showGifPicker && (
-        <Suspense fallback={null}>
-          <GifPicker
-            onSelect={onGifSelect}
-            onClose={() => setShowGifPicker(false)}
-          />
-        </Suspense>
-      )}
       <div className={styles.composer}>
         <input
           ref={fileInputRef}
@@ -335,16 +323,6 @@ export default function ChatComposer({
             </div>
           )}
         </div>
-
-        <button
-          type="button"
-          className={`${styles.attachBtn} ${showGifPicker ? styles.attachBtnActive : ""}`}
-          onClick={() => setShowGifPicker((s) => !s)}
-          disabled={disabled}
-          title={t("composer.gifPickerTooltip")}
-        >
-          <GifIcon width={20} height={20} />
-        </button>
 
         <div className={styles.composerInputWrap} data-testid={TID.chatComposerInput}>
           {slashOpen && (

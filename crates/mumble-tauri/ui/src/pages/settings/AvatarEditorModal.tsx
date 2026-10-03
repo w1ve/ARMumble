@@ -1,22 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { KlipyGifBrowser } from "./KlipyGifBrowser";
 import { ImageEditor } from "./ImageEditor";
 import { FileDropZone } from "../../components/elements/FileDropZone";
-import { fetchAsDataUrl } from "../../utils/media";
 import styles from "./BannerEditorModal.module.css";
 import settingsStyles from "./SettingsPage.module.css";
-
-type AvatarTab = "image" | "gif";
-
-function isKlipyUrl(url: string | undefined): boolean {
-  return !!url && url.includes("klipy.com");
-}
-
-function detectInitialTab(avatar: string | null): AvatarTab {
-  if (avatar && isKlipyUrl(avatar)) return "gif";
-  return "image";
-}
 
 interface AvatarEditorModalProps {
   avatar: string | null;
@@ -29,25 +16,15 @@ export function AvatarEditorModal({
   onConfirm,
   onCancel,
 }: Readonly<AvatarEditorModalProps>) {
-  const initialTab = detectInitialTab(avatar);
-  const [tab, setTab] = useState<AvatarTab>(initialTab);
-
-  const [localImage, setLocalImage] = useState<string | undefined>(
-    initialTab === "image" && avatar ? avatar : undefined,
-  );
-  const [klipyGif, setKlipyGif] = useState<string | undefined>(
-    initialTab === "gif" && avatar ? avatar : undefined,
-  );
+  const [localImage, setLocalImage] = useState<string | undefined>(avatar ?? undefined);
 
   const [editorImage, setEditorImage] = useState<string | null>(null);
   const [showUnsavedHint, setShowUnsavedHint] = useState(false);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const activeImage = tab === "gif" ? klipyGif : localImage;
-
   const hasChanges = useCallback(() => {
-    return (activeImage ?? null) !== (avatar ?? null);
-  }, [avatar, activeImage]);
+    return (localImage ?? null) !== (avatar ?? null);
+  }, [avatar, localImage]);
 
   const tryClose = useCallback(() => {
     if (!hasChanges()) {
@@ -87,14 +64,8 @@ export function AvatarEditorModal({
     setEditorImage(null);
   }, []);
 
-  const handleGifSelect = useCallback((url: string) => {
-    fetchAsDataUrl(url)
-      .then((dataUrl) => setKlipyGif(dataUrl))
-      .catch((err) => console.error("Failed to fetch Klipy GIF:", err));
-  }, []);
-
   const handleApply = () => {
-    onConfirm(activeImage ?? null);
+    onConfirm(localImage ?? null);
   };
 
   const { t } = useTranslation("settings");
@@ -113,51 +84,27 @@ export function AvatarEditorModal({
 
         {/* Preview */}
         <div className={styles.avatarPreview}>
-          {activeImage ? (
-            <img src={activeImage} alt={t("avatarEditor.previewAlt")} />
+          {localImage ? (
+            <img src={localImage} alt={t("avatarEditor.previewAlt")} />
           ) : (
             <span className={styles.avatarPlaceholder}>{t("avatarEditor.noImage")}</span>
           )}
         </div>
 
-        {/* Tabs */}
-        <div className={styles.tabs}>
-          <button
-            type="button"
-            className={`${styles.tab} ${tab === "image" ? styles.tabActive : ""}`}
-            onClick={() => setTab("image")}
-          >
-            {t("avatarEditor.tabImage")}
-          </button>
-          <button
-            type="button"
-            className={`${styles.tab} ${tab === "gif" ? styles.tabActive : ""}`}
-            onClick={() => setTab("gif")}
-          >
-            {t("avatarEditor.tabKlipy")}
-          </button>
-        </div>
-
-        {/* Tab content */}
+        {/* Image picker */}
         <div className={styles.tabContent}>
-          {tab === "image" && (
-            <FileDropZone
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              onFile={handleFileSelect}
-              label={t("avatarEditor.dropLabel")}
-              shape="circle"
-              preview={
-                localImage ? (
-                  <img src={localImage} alt={t("avatarEditor.imgAlt")} />
-                ) : undefined
-              }
-              onRemove={localImage ? handleRemoveImage : undefined}
-            />
-          )}
-
-          {tab === "gif" && (
-            <KlipyGifBrowser onSelect={handleGifSelect} />
-          )}
+          <FileDropZone
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            onFile={handleFileSelect}
+            label={t("avatarEditor.dropLabel")}
+            shape="circle"
+            preview={
+              localImage ? (
+                <img src={localImage} alt={t("avatarEditor.imgAlt")} />
+              ) : undefined
+            }
+            onRemove={localImage ? handleRemoveImage : undefined}
+          />
         </div>
 
         {/* Actions */}

@@ -325,8 +325,8 @@ function escapeAttr(s: string): string {
 
 /**
  * Fetch a remote URL and return its contents as a data URL.
- * Useful for converting external image URLs (e.g. Klipy) into
- * self-contained data URIs that can be sent as binary.
+ * Useful for converting an external image URL into a self-contained
+ * data URI that can be sent as binary.
  */
 export async function fetchAsDataUrl(url: string): Promise<string> {
   const res = await fetch(url);

@@ -692,7 +692,7 @@ macro_rules! all_command_handlers {
             commands::channels::create_channel,
             commands::channels::delete_channel,
             commands::server::ping_server,
-            commands::public_servers::fetch_public_servers,
+
             commands::public_servers::fetch_file_server_capabilities,
             commands::audio::get_audio_devices,
             commands::audio::get_output_devices,

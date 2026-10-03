@@ -7,7 +7,6 @@ import { getPreferences, updatePreferences } from "../../preferencesStorage";
 import type { ServerId, SessionMeta } from "../../types";
 import ConfirmDialog from "../elements/ConfirmDialog";
 import AddServerPopover from "./AddServerPopover";
-import { UsersGroupIcon } from "../../icons";
 import styles from "./ServerTabsBar.module.css";
 
 // Pre-store location of the tab order. Read once on first run to migrate
@@ -411,23 +410,6 @@ export default function ServerTabsBar() {
     </button>
   );
 
-  const friendsActive = location.pathname === "/friends";
-  const renderFriendsTab = () => (
-    <button
-      type="button"
-      className={`${styles.tab} ${friendsActive ? styles.tabActive : ""}`}
-      onClick={() => navigate("/friends")}
-      title={t("tabsBar.friends")}
-      aria-label={t("tabsBar.friends")}
-      aria-current={friendsActive ? "page" : undefined}
-    >
-      <span className={styles.statusDot}>
-        <UsersGroupIcon width={12} height={12} />
-      </span>
-      <span className={styles.label}>{t("tabsBar.friends")}</span>
-    </button>
-  );
-
   const popover = addOpen ? (
     <AddServerPopover anchor={addBtnRef.current} onClose={() => setAddOpen(false)} />
   ) : null;
@@ -436,7 +418,6 @@ export default function ServerTabsBar() {
     return (
       <>
         <div className={styles.bar} data-tauri-drag-region>
-          {renderFriendsTab()}
           {renderAddButton()}
         </div>
         {popover}
@@ -447,7 +428,6 @@ export default function ServerTabsBar() {
   return (
     <>
       <div className={styles.bar} role="tablist" aria-label={t("tabsBar.connectedServersAriaLabel")} data-tauri-drag-region>
-        {renderFriendsTab()}
         {orderedSessions.map((meta) => {
           const isActive = !newTabActive && meta.id === activeServerId;
           const unreadTotal = isActive ? 0 : (sessionUnreadTotals[meta.id] ?? 0);

@@ -484,7 +484,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   // shrinks every image so the whole gallery fits the server's size limit.
   const [galleryQuality, setGalleryQuality] = useState<GalleryQuality>("compressed");
 
-  const { sending, handleSend, sendMediaGallery, handlePaste, handleGifSelect } = useChatSend({
+  const { sending, handleSend, sendMediaGallery, handlePaste } = useChatSend({
     pendingQuotes,
     clearQuotes: () => setPendingQuotes([]),
     draft,
@@ -1371,7 +1371,6 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           onSend={handleSendAndResetTyping}
           onPaste={handlePaste}
           onFilesSelected={(files) => { for (const f of files) addFromFile(f); }}
-          onGifSelect={handleGifSelect}
           onAttachFile={handleAttachFile}
           onOpenLiveDoc={liveDocActive && selectedChannel !== null && !isDmMode ? handleOpenLiveDoc : undefined}
           disabled={sending || persistent.sendBlocked}

@@ -1,23 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { FancyProfile } from "../../types";
-import { KlipyGifBrowser } from "./KlipyGifBrowser";
 import { ImageEditor } from "./ImageEditor";
 import { FileDropZone } from "../../components/elements/FileDropZone";
 import styles from "./BannerEditorModal.module.css";
 import settingsStyles from "./SettingsPage.module.css";
 
-type BannerTab = "color" | "image" | "gif";
-
-function isKlipyUrl(url: string | undefined): boolean {
-  return !!url && url.includes("klipy.com");
-}
+type BannerTab = "color" | "image";
 
 function detectInitialTab(banner: FancyProfile["banner"]): BannerTab {
-  if (banner?.image) {
-    return isKlipyUrl(banner.image) ? "gif" : "image";
-  }
-  return "color";
+  return banner?.image ? "image" : "color";
 }
 
 interface BannerEditorModalProps {
@@ -35,18 +27,13 @@ export function BannerEditorModal({
   const [tab, setTab] = useState<BannerTab>(initialTab);
   const [color, setColor] = useState(banner?.color || "#1a1a2e");
 
-  const [localImage, setLocalImage] = useState<string | undefined>(
-    initialTab === "image" ? banner?.image : undefined,
-  );
-  const [klipyGif, setKlipyGif] = useState<string | undefined>(
-    initialTab === "gif" ? banner?.image : undefined,
-  );
+  const [localImage, setLocalImage] = useState<string | undefined>(banner?.image);
 
   const [editorImage, setEditorImage] = useState<string | null>(null);
   const [showUnsavedHint, setShowUnsavedHint] = useState(false);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const activeImage = tab === "gif" ? klipyGif : tab === "image" ? localImage : undefined;
+  const activeImage = tab === "image" ? localImage : undefined;
 
   const hasChanges = useCallback(() => {
     const origColor = banner?.color || "#1a1a2e";
@@ -94,10 +81,6 @@ export function BannerEditorModal({
     setEditorImage(null);
   }, []);
 
-  const handleGifSelect = useCallback((url: string) => {
-    setKlipyGif(url);
-  }, []);
-
   const handleApply = () => {
     onConfirm({ color, image: activeImage });
   };
@@ -141,13 +124,6 @@ export function BannerEditorModal({
           >
             {t("bannerEditor.tabImage")}
           </button>
-          <button
-            type="button"
-            className={`${styles.tab} ${tab === "gif" ? styles.tabActive : ""}`}
-            onClick={() => setTab("gif")}
-          >
-            {t("bannerEditor.tabKlipy")}
-          </button>
         </div>
 
         {/* Tab content */}
@@ -176,10 +152,6 @@ export function BannerEditorModal({
               }
               onRemove={localImage ? handleRemoveImage : undefined}
             />
-          )}
-
-          {tab === "gif" && (
-            <KlipyGifBrowser onSelect={handleGifSelect} />
           )}
         </div>
 
