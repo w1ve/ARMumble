@@ -11,6 +11,7 @@ import type {
   PacketStats,
   ServerId,
   SessionMeta,
+  StereoMode,
 } from "../../types";
 import {
   ActivityIcon,
@@ -161,6 +162,26 @@ export function AudioPanel({
   const { t } = useTranslation("settings");
   const tStr = t as (key: string) => string;
   const denoiserOptions = buildDenoiserOptions(tStr);
+  const stereoOptions: RadioCardOption<StereoMode>[] = [
+    {
+      value: "stereo",
+      label: tStr("audio.stereoModeStereo"),
+      description: tStr("audio.stereoModeStereoDesc"),
+      Icon: AudioWaveformIcon,
+    },
+    {
+      value: "mono",
+      label: tStr("audio.stereoModeMono"),
+      description: tStr("audio.stereoModeMonoDesc"),
+      Icon: ActivityIcon,
+    },
+    {
+      value: "swap_lr",
+      label: tStr("audio.stereoModeSwap"),
+      description: tStr("audio.stereoModeSwapDesc"),
+      Icon: SlidersIcon,
+    },
+  ];
   const [availableAlgorithms, setAvailableAlgorithms] = useState<
     NoiseSuppressionAlgorithm[]
   >(["none", "omlsa_imcra", "spectral_subtraction"]);
@@ -272,6 +293,40 @@ export function AudioPanel({
             />
           </div>
         </div>
+      </section>
+
+      {/* -- Stereo Output ------------------------------------------ */}
+      <section className={styles.section}>
+        <h3 className={styles.sectionTitle}>{t("audio.stereoOutput")}</h3>
+        <p className={styles.fieldHint}>{t("audio.stereoOutputHint")}</p>
+        <RadioCardGroup
+          name="playback_stereo_mode"
+          options={stereoOptions}
+          value={settings.playback_stereo_mode}
+          onChange={(playback_stereo_mode) => onChange({ playback_stereo_mode })}
+        />
+        {settings.playback_stereo_mode === "stereo" && (
+          <>
+            <SliderField
+              label={t("audio.leftVolume")}
+              min={0}
+              max={2}
+              step={0.01}
+              value={settings.left_volume}
+              onChange={(v) => onChange({ left_volume: v })}
+              format={(v) => `${Math.round(v * 100)}%`}
+            />
+            <SliderField
+              label={t("audio.rightVolume")}
+              min={0}
+              max={2}
+              step={0.01}
+              value={settings.right_volume}
+              onChange={(v) => onChange({ right_volume: v })}
+              format={(v) => `${Math.round(v * 100)}%`}
+            />
+          </>
+        )}
       </section>
 
       {/* -- Activation Mode + Voice Gate ---------------------------- */}

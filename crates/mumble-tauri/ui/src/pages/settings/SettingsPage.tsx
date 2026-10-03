@@ -65,6 +65,9 @@ const DEFAULT_AUDIO: AudioSettings = {
   output_volume: 1,
   auto_input_sensitivity: false,
   force_tcp_audio: false,
+  playback_stereo_mode: "stereo",
+  left_volume: 1,
+  right_volume: 1,
 };
 
 const PERSONALIZATION_DEFAULTS: PersonalizationData = {

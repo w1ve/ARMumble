@@ -24,7 +24,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use mumble_protocol::audio::capture::AudioCapture;
-use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes};
+use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes, StereoControl};
 use mumble_protocol::error::Result;
 
 #[cfg(not(target_os = "android"))]
@@ -95,6 +95,7 @@ pub trait AudioDeviceFactory {
         volume: Arc<AtomicU32>,
         buffers: SpeakerBuffers,
         speaker_volumes: SpeakerVolumes,
+        stereo: Arc<StereoControl>,
     ) -> std::result::Result<Box<dyn MixingPlayback>, String>;
 }
 
@@ -136,14 +137,15 @@ impl AudioDeviceFactory for PlatformAudioFactory {
         volume: Arc<AtomicU32>,
         buffers: SpeakerBuffers,
         speaker_volumes: SpeakerVolumes,
+        stereo: Arc<StereoControl>,
     ) -> std::result::Result<Box<dyn MixingPlayback>, String> {
         if USE_RODIO_BACKEND.load(Ordering::Relaxed) {
             rodio_desktop::RodioAudioFactory::create_mixing_playback(
-                device_name, volume, buffers, speaker_volumes,
+                device_name, volume, buffers, speaker_volumes, stereo,
             )
         } else {
             desktop::CpalAudioFactory::create_mixing_playback(
-                device_name, volume, buffers, speaker_volumes,
+                device_name, volume, buffers, speaker_volumes, stereo,
             )
         }
     }

@@ -97,6 +97,9 @@ pub(super) struct AudioPipelineState {
     pub outbound_task_handle: Option<tokio::task::JoinHandle<()>>,
     pub input_volume_handle: Option<Arc<AtomicU32>>,
     pub output_volume_handle: Option<Arc<AtomicU32>>,
+    /// Live playback stereo-fold / per-channel-gain control, shared with the
+    /// active output backend. `None` when no playback is running.
+    pub stereo_control: Option<Arc<mumble_protocol::audio::mixer::StereoControl>>,
     pub speaker_volumes: SpeakerVolumes,
     pub mic_test_handle: Option<tauri::async_runtime::JoinHandle<()>>,
     pub latency_test_handle: Option<tauri::async_runtime::JoinHandle<()>>,

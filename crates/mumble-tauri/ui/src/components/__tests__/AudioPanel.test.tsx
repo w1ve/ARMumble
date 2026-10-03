@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Regression tests for AudioPanel features:
  * - Mic test start/stop flow
  * - VU meter rendering
@@ -63,7 +63,7 @@ function makeSettings(overrides: Partial<AudioSettings> = {}): AudioSettings {
     input_volume: 1,
     output_volume: 1,
     auto_input_sensitivity: false,
-    force_tcp_audio: false,
+    force_tcp_audio: false,    playback_stereo_mode: "stereo",    left_volume: 1,    right_volume: 1,
     ...overrides,
   };
 }
@@ -204,6 +204,35 @@ describe("Activation Mode selector", () => {
   it("hides PTT shortcut hint in Voice Activation mode", () => {
     renderPanel({ transmit_mode: "voice_activity", push_to_talk: false });
     expect(screen.queryByText(/configured in the/)).toBeNull();
+  });
+});
+
+// -- Stereo output -------------------------------------------------
+
+describe("Stereo output", () => {
+  it("renders the three stereo mode cards", () => {
+    renderPanel();
+    expect(screen.getByLabelText("Stereo")).toBeTruthy();
+    expect(screen.getByLabelText("Mono")).toBeTruthy();
+    expect(screen.getByLabelText("Swap L/R")).toBeTruthy();
+  });
+
+  it("shows L/R volume sliders only in Stereo mode", () => {
+    renderPanel({ playback_stereo_mode: "stereo" });
+    expect(screen.getByText("Left Volume")).toBeTruthy();
+    expect(screen.getByText("Right Volume")).toBeTruthy();
+  });
+
+  it("hides L/R volume sliders in Mono mode", () => {
+    renderPanel({ playback_stereo_mode: "mono" });
+    expect(screen.queryByText("Left Volume")).toBeNull();
+    expect(screen.queryByText("Right Volume")).toBeNull();
+  });
+
+  it("switches stereo mode", () => {
+    const { onChange } = renderPanel({ playback_stereo_mode: "stereo" });
+    fireEvent.click(screen.getByLabelText("Mono"));
+    expect(onChange).toHaveBeenCalledWith({ playback_stereo_mode: "mono" });
   });
 });
 

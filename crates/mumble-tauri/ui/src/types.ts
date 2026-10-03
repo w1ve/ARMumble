@@ -733,6 +733,13 @@ export interface AudioDevice {
  *  - `push_to_talk`  transmit only while the PTT key is held */
 export type TransmitMode = "continuous" | "voice_activity" | "push_to_talk";
 
+/** How the two decoded channels map to the output device.
+ *  Mirrors `mumble_tauri::state::types::StereoMode` (serde snake_case):
+ *  - `stereo`  L to the left ear, R to the right (default; dual-RX operating)
+ *  - `mono`    sum both channels to both ears (single-RX / one earphone)
+ *  - `swap_lr` swap left and right */
+export type StereoMode = "stereo" | "mono" | "swap_lr";
+
 export interface AudioSettings {
   /** Selected input device name (null = system default). */
   selected_device: string | null;
@@ -777,6 +784,12 @@ export interface AudioSettings {
   auto_input_sensitivity: boolean;
   /** Force audio to use TCP tunnel instead of UDP (e.g. behind strict NAT). */
   force_tcp_audio: boolean;
+  /** How the decoded stereo stream maps onto the output (stereo/mono/swap). */
+  playback_stereo_mode: StereoMode;
+  /** Left-channel playback gain multiplier (0.0-2.0, default 1.0). */
+  left_volume: number;
+  /** Right-channel playback gain multiplier (0.0-2.0, default 1.0). */
+  right_volume: number;
 }
 
 export type VoiceState = "inactive" | "active" | "muted";

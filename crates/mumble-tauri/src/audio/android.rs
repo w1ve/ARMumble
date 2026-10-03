@@ -203,6 +203,9 @@ impl super::AudioDeviceFactory for OboeAudioFactory {
         volume: Arc<AtomicU32>,
         buffers: mumble_protocol::audio::mixer::SpeakerBuffers,
         _speaker_volumes: mumble_protocol::audio::mixer::SpeakerVolumes,
+        // TODO(stereo): Android (Oboe) stereo playback is deferred (§14g);
+        // the stereo control is accepted for signature parity and ignored.
+        _stereo: Arc<mumble_protocol::audio::mixer::StereoControl>,
     ) -> std::result::Result<Box<dyn super::MixingPlayback>, String> {
         OboeMixingPlayback::new(volume, buffers)
             .map(|c| Box::new(c) as _)

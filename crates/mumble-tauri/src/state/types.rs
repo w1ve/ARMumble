@@ -1076,6 +1076,33 @@ pub struct AudioSettings {
     /// Force audio to use TCP tunnel instead of UDP (e.g. behind strict NAT).
     #[serde(default)]
     pub force_tcp_audio: bool,
+    /// How the two decoded channels map to the output: as-is stereo, summed
+    /// to mono on both ears, or swapped. Lets an operator collapse a
+    /// single-receiver stream or put the other receiver in the other ear.
+    #[serde(default)]
+    pub playback_stereo_mode: StereoMode,
+    /// Left-channel playback gain multiplier (0.0-2.0, default 1.0). Lets an
+    /// operator balance main vs sub receiver when they are split L/R.
+    #[serde(default = "AudioSettings::default_volume")]
+    pub left_volume: f32,
+    /// Right-channel playback gain multiplier (0.0-2.0, default 1.0).
+    #[serde(default = "AudioSettings::default_volume")]
+    pub right_volume: f32,
+}
+
+/// How the inbound stereo stream is mapped onto the output channels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum StereoMode {
+    /// Left channel to the left ear, right to the right - the default, and
+    /// what dual-receiver (main/sub RX) operating wants.
+    #[default]
+    Stereo,
+    /// Sum both channels and play the mix on both ears. Useful for a
+    /// single-receiver stream or listening on one earphone.
+    Mono,
+    /// Swap the channels (left<->right).
+    SwapLr,
 }
 
 impl AudioSettings {
@@ -1181,6 +1208,9 @@ impl Default for AudioSettings {
             output_volume: 1.0,
             auto_input_sensitivity: false,
             force_tcp_audio: false,
+            playback_stereo_mode: StereoMode::default(),
+            left_volume: 1.0,
+            right_volume: 1.0,
         }
     }
 }

@@ -61,6 +61,8 @@ pub(super) fn make_voice_replay_playback(
         output_volume,
         speaker_buffers.clone(),
         speaker_volumes,
+        // Replay is the operator's own mono mic; plain stereo (L=R) is correct.
+        Arc::new(mumble_protocol::audio::mixer::StereoControl::default()),
     )?;
     Ok((playback, speaker_buffers))
 }
@@ -171,7 +173,13 @@ async fn playback(
 
     if let Ok(mut bufs) = ctx.speaker_buffers.lock() {
         let entry = bufs.entry(VOICE_REPLAY_SESSION_KEY).or_default();
-        entry.extend(buffer.iter().copied());
+        // The playback path now reads interleaved stereo. The replay buffer
+        // is the operator's mono mic recording, so duplicate each sample to
+        // L and R - otherwise a mono buffer plays back at half speed.
+        for &s in &buffer {
+            entry.push_back(s);
+            entry.push_back(s);
+        }
     }
 
     let playback_start = Instant::now();

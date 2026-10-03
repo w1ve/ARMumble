@@ -34,6 +34,113 @@ const SPEAKER_TIMEOUT_SECS: u64 = 30;
 /// backgrounded).  Old samples are dropped from the front.
 const MAX_SPEAKER_BUFFER_SAMPLES: usize = 19_200;
 
+/// How a stereo output stream is folded onto the device channels. Mirrors
+/// `mumble_tauri::state::types::StereoMode`; kept here so both desktop
+/// backends can share [`apply_stereo_mode`] without a dependency cycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StereoOutMode {
+    /// Left to left, right to right.
+    #[default]
+    Stereo,
+    /// Sum both channels; play the mix on both.
+    Mono,
+    /// Swap left and right.
+    SwapLr,
+}
+
+/// Live, lock-free playback stereo control shared between the state layer
+/// (writer) and the output backend (reader). Updated when audio settings
+/// change without restarting the pipeline, same pattern as the volume
+/// atomics.
+#[derive(Debug)]
+pub struct StereoControl {
+    /// Mode discriminant: 0 = Stereo, 1 = Mono, 2 = `SwapLr`.
+    mode: std::sync::atomic::AtomicU8,
+    /// Left gain as `f32` bits.
+    left_gain: std::sync::atomic::AtomicU32,
+    /// Right gain as `f32` bits.
+    right_gain: std::sync::atomic::AtomicU32,
+}
+
+impl Default for StereoControl {
+    fn default() -> Self {
+        Self {
+            mode: std::sync::atomic::AtomicU8::new(0),
+            left_gain: std::sync::atomic::AtomicU32::new(1.0_f32.to_bits()),
+            right_gain: std::sync::atomic::AtomicU32::new(1.0_f32.to_bits()),
+        }
+    }
+}
+
+impl StereoControl {
+    /// Store the current mode + gains (called from the settings writer).
+    pub fn set(&self, mode: StereoOutMode, left_gain: f32, right_gain: f32) {
+        use std::sync::atomic::Ordering;
+        let m = match mode {
+            StereoOutMode::Stereo => 0,
+            StereoOutMode::Mono => 1,
+            StereoOutMode::SwapLr => 2,
+        };
+        self.mode.store(m, Ordering::Relaxed);
+        self.left_gain.store(left_gain.to_bits(), Ordering::Relaxed);
+        self.right_gain.store(right_gain.to_bits(), Ordering::Relaxed);
+    }
+
+    /// Load the current mode + gains (called from the output backend).
+    pub fn get(&self) -> (StereoOutMode, f32, f32) {
+        use std::sync::atomic::Ordering;
+        let mode = match self.mode.load(Ordering::Relaxed) {
+            1 => StereoOutMode::Mono,
+            2 => StereoOutMode::SwapLr,
+            _ => StereoOutMode::Stereo,
+        };
+        (
+            mode,
+            f32::from_bits(self.left_gain.load(Ordering::Relaxed)),
+            f32::from_bits(self.right_gain.load(Ordering::Relaxed)),
+        )
+    }
+
+    /// Apply the current control to an interleaved stereo buffer in place.
+    pub fn apply(&self, buf: &mut [f32]) {
+        let (mode, l, r) = self.get();
+        apply_stereo_mode(buf, mode, l, r);
+    }
+}
+
+/// Apply per-channel gain and a stereo-fold mode to an interleaved
+/// stereo (`L R L R ...`) buffer, in place.
+///
+/// `left_gain`/`right_gain` are applied first (per source channel), then the
+/// mode remaps the pair. A no-op fast path (`Stereo` + unity gains) leaves the
+/// buffer untouched so the common case costs nothing. Buffers whose length is
+/// not a multiple of two are left unchanged past the last whole frame.
+pub fn apply_stereo_mode(buf: &mut [f32], mode: StereoOutMode, left_gain: f32, right_gain: f32) {
+    let unity = (left_gain - 1.0).abs() < f32::EPSILON && (right_gain - 1.0).abs() < f32::EPSILON;
+    if mode == StereoOutMode::Stereo && unity {
+        return;
+    }
+    for frame in buf.chunks_exact_mut(2) {
+        let l = frame[0] * left_gain;
+        let r = frame[1] * right_gain;
+        match mode {
+            StereoOutMode::Stereo => {
+                frame[0] = l;
+                frame[1] = r;
+            }
+            StereoOutMode::Mono => {
+                let m = (l + r) * 0.5;
+                frame[0] = m;
+                frame[1] = m;
+            }
+            StereoOutMode::SwapLr => {
+                frame[0] = r;
+                frame[1] = l;
+            }
+        }
+    }
+}
+
 /// Shared per-speaker sample buffers.
 ///
 /// The mixer writes decoded samples per session, and the platform
@@ -482,6 +589,48 @@ mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
     use super::*;
     use crate::audio::sample::AudioFormat;
+
+    #[test]
+    fn stereo_mode_stereo_unity_is_a_noop() {
+        let mut buf = vec![0.1, 0.2, 0.3, 0.4];
+        apply_stereo_mode(&mut buf, StereoOutMode::Stereo, 1.0, 1.0);
+        assert_eq!(buf, vec![0.1, 0.2, 0.3, 0.4]);
+    }
+
+    #[test]
+    fn stereo_mode_applies_per_channel_gain() {
+        let mut buf = vec![1.0, 1.0];
+        apply_stereo_mode(&mut buf, StereoOutMode::Stereo, 0.5, 2.0);
+        assert!((buf[0] - 0.5).abs() < 1e-6);
+        assert!((buf[1] - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn stereo_mode_mono_sums_both_channels() {
+        let mut buf = vec![0.2, 0.8];
+        apply_stereo_mode(&mut buf, StereoOutMode::Mono, 1.0, 1.0);
+        // (0.2 + 0.8) * 0.5 = 0.5 on both.
+        assert!((buf[0] - 0.5).abs() < 1e-6);
+        assert!((buf[1] - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn stereo_mode_swap_exchanges_channels() {
+        let mut buf = vec![0.1, 0.9];
+        apply_stereo_mode(&mut buf, StereoOutMode::SwapLr, 1.0, 1.0);
+        assert!((buf[0] - 0.9).abs() < 1e-6);
+        assert!((buf[1] - 0.1).abs() < 1e-6);
+    }
+
+    #[test]
+    fn stereo_control_round_trips_mode_and_gains() {
+        let c = StereoControl::default();
+        c.set(StereoOutMode::SwapLr, 0.25, 1.75);
+        let (m, l, r) = c.get();
+        assert_eq!(m, StereoOutMode::SwapLr);
+        assert!((l - 0.25).abs() < 1e-6);
+        assert!((r - 1.75).abs() < 1e-6);
+    }
 
     fn make_buffers() -> SpeakerBuffers {
         Arc::new(Mutex::new(HashMap::new()))

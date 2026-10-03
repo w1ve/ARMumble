@@ -30,6 +30,32 @@ impl AppState {
             .unwrap_or_else(|| self.inner.snapshot())
     }
 
+    /// Build a fresh playback [`StereoControl`] initialised from `settings`.
+    fn make_stereo_control(
+        settings: &super::types::AudioSettings,
+    ) -> std::sync::Arc<mumble_protocol::audio::mixer::StereoControl> {
+        let ctrl = mumble_protocol::audio::mixer::StereoControl::default();
+        ctrl.set(
+            Self::stereo_out_mode(settings.playback_stereo_mode),
+            settings.left_volume,
+            settings.right_volume,
+        );
+        std::sync::Arc::new(ctrl)
+    }
+
+    /// Map the settings-layer [`StereoMode`](super::types::StereoMode) onto the
+    /// mixer's [`StereoOutMode`](mumble_protocol::audio::mixer::StereoOutMode).
+    fn stereo_out_mode(
+        mode: super::types::StereoMode,
+    ) -> mumble_protocol::audio::mixer::StereoOutMode {
+        use mumble_protocol::audio::mixer::StereoOutMode;
+        match mode {
+            super::types::StereoMode::Stereo => StereoOutMode::Stereo,
+            super::types::StereoMode::Mono => StereoOutMode::Mono,
+            super::types::StereoMode::SwapLr => StereoOutMode::SwapLr,
+        }
+    }
+
     /// Get the audio settings for a specific server (or the active session
     /// when `server_id` is `None`).
     pub fn audio_settings_for(
@@ -82,7 +108,7 @@ impl AppState {
         let force_tcp_changed =
             is_active && old_settings.force_tcp_audio != settings.force_tcp_audio;
 
-        // Update live volume handles (no pipeline restart needed).
+        // Update live volume + stereo handles (no pipeline restart needed).
         if let Ok(state) = target.lock() {
             use std::sync::atomic::Ordering;
             if let Some(ref h) = state.audio.input_volume_handle {
@@ -90,6 +116,13 @@ impl AppState {
             }
             if let Some(ref h) = state.audio.output_volume_handle {
                 h.store(settings.output_volume.to_bits(), Ordering::Relaxed);
+            }
+            if let Some(ref sc) = state.audio.stereo_control {
+                sc.set(
+                    Self::stereo_out_mode(settings.playback_stereo_mode),
+                    settings.left_volume,
+                    settings.right_volume,
+                );
             }
         }
 
@@ -191,11 +224,13 @@ mod voice_pipeline {
             // Inbound is stereo so dual-receiver radio audio stays separated; a
     // stereo decoder upmixes mono senders, so mono traffic is unaffected.
     let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::STEREO_48KHZ_F32);
+            let stereo_ctrl = Self::make_stereo_control(&audio_settings);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),
                 speaker_buffers,
                 speaker_volumes,
+                stereo_ctrl.clone(),
             )?;
             mixing_playback
                 .start()
@@ -208,6 +243,7 @@ mod voice_pipeline {
                 state.audio.mixing_playback = Some(mixing_playback);
                 state.audio.input_volume_handle = Some(input_vol);
                 state.audio.output_volume_handle = Some(output_vol);
+                state.audio.stereo_control = Some(stereo_ctrl);
             }
 
             // Outbound: capture -> filters -> encoder -> network.
@@ -285,6 +321,7 @@ mod voice_pipeline {
                 state.audio.mixer = None;
                 state.audio.input_volume_handle = None;
                 state.audio.output_volume_handle = None;
+                state.audio.stereo_control = None;
 
                 // Collect sessions to notify OUTSIDE the lock.
                 let sessions: Vec<(u32, tauri::AppHandle)> = state
@@ -364,11 +401,13 @@ mod voice_pipeline {
             // Inbound is stereo so dual-receiver radio audio stays separated; a
     // stereo decoder upmixes mono senders, so mono traffic is unaffected.
     let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::STEREO_48KHZ_F32);
+            let stereo_ctrl = Self::make_stereo_control(&audio_settings);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),
                 speaker_buffers,
                 speaker_volumes,
+                stereo_ctrl.clone(),
             )?;
             mixing_playback
                 .start()
@@ -380,6 +419,7 @@ mod voice_pipeline {
             state.audio.mixer = Some(mixer);
             state.audio.mixing_playback = Some(mixing_playback);
             state.audio.output_volume_handle = Some(output_vol);
+            state.audio.stereo_control = Some(stereo_ctrl);
             Ok(())
         }
 
@@ -500,11 +540,13 @@ mod voice_pipeline {
             // Inbound is stereo so dual-receiver radio audio stays separated; a
     // stereo decoder upmixes mono senders, so mono traffic is unaffected.
     let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::STEREO_48KHZ_F32);
+            let stereo_ctrl = Self::make_stereo_control(&audio_settings);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),
                 speaker_buffers,
                 speaker_volumes,
+                stereo_ctrl.clone(),
             )?;
             mixing_playback
                 .start()
@@ -517,6 +559,7 @@ mod voice_pipeline {
                 state.audio.mixer = Some(mixer);
                 state.audio.mixing_playback = Some(mixing_playback);
                 state.audio.output_volume_handle = Some(output_vol);
+                state.audio.stereo_control = Some(stereo_ctrl);
             }
 
             info!("enable_voice_muted: inbound started, sending undeafen");
@@ -1295,7 +1338,9 @@ mod voice_pipeline {
                 std::sync::Mutex::new(std::collections::HashMap::new()),
             );
             let sv: mumble_protocol::audio::mixer::SpeakerVolumes = Default::default();
-            let Ok(mut playback) = PlatformAudioFactory::create_mixing_playback(None, vol, bufs, sv)
+            let stereo = Arc::new(mumble_protocol::audio::mixer::StereoControl::default());
+            let Ok(mut playback) =
+                PlatformAudioFactory::create_mixing_playback(None, vol, bufs, sv, stereo)
             else {
                 eprintln!("Skipping: no audio output device available");
                 return;

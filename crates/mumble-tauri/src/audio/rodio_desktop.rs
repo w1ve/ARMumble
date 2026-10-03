@@ -22,7 +22,7 @@ const PLAYBACK_CHANNELS: usize = 2;
 const SAMPLE_RATE_48K: NonZero<u32> = NonZero::new(48_000).unwrap();
 
 use mumble_protocol::audio::capture::AudioCapture;
-use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes};
+use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes, StereoControl};
 use mumble_protocol::audio::resample::LinearResampler;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
@@ -297,6 +297,7 @@ struct MumbleMixerSource {
     buffers: SpeakerBuffers,
     speaker_volumes: SpeakerVolumes,
     volume: Arc<AtomicU32>,
+    stereo: Arc<StereoControl>,
     mixed_chunk: Vec<f32>,
     chunk_pos: usize,
     chunk_valid: usize,
@@ -341,12 +342,14 @@ impl MumbleMixerSource {
         buffers: SpeakerBuffers,
         speaker_volumes: SpeakerVolumes,
         volume: Arc<AtomicU32>,
+        stereo: Arc<StereoControl>,
         running: Arc<AtomicBool>,
     ) -> Self {
         Self {
             buffers,
             speaker_volumes,
             volume,
+            stereo,
             mixed_chunk: vec![0.0; MIX_CHUNK_SAMPLES],
             chunk_pos: 0,
             chunk_valid: 0,
@@ -422,6 +425,11 @@ impl MumbleMixerSource {
             if valid_count < MIX_CHUNK_SAMPLES {
                 self.diag.partial_refills += 1;
             }
+            // Apply the operator's stereo-fold / per-channel gain to the
+            // interleaved mix before it is consumed sample-by-sample below.
+            // No-op fast path when Stereo + unity gains, so the common case
+            // is free.
+            self.stereo.apply(&mut self.mixed_chunk[..valid_count]);
             self.consecutive_empty = 0;
             self.chunk_pos = 0;
             self.chunk_valid = valid_count;
@@ -575,6 +583,7 @@ pub struct RodioMixingPlayback {
     buffers: SpeakerBuffers,
     speaker_volumes: SpeakerVolumes,
     volume: Arc<AtomicU32>,
+    stereo: Arc<StereoControl>,
     device_name: Option<String>,
 }
 
@@ -584,6 +593,7 @@ impl RodioMixingPlayback {
         volume: Arc<AtomicU32>,
         buffers: SpeakerBuffers,
         speaker_volumes: SpeakerVolumes,
+        stereo: Arc<StereoControl>,
     ) -> Result<Self> {
         Ok(Self {
             _device_sink: None,
@@ -591,6 +601,7 @@ impl RodioMixingPlayback {
             buffers,
             speaker_volumes,
             volume,
+            stereo,
             device_name: device_name.map(str::to_owned),
         })
     }
@@ -650,6 +661,7 @@ impl super::MixingPlayback for RodioMixingPlayback {
             self.buffers.clone(),
             self.speaker_volumes.clone(),
             self.volume.clone(),
+            self.stereo.clone(),
             self.running.clone(),
         );
         mixer.add(source);
@@ -691,8 +703,9 @@ impl super::AudioDeviceFactory for RodioAudioFactory {
         volume: Arc<AtomicU32>,
         buffers: SpeakerBuffers,
         speaker_volumes: SpeakerVolumes,
+        stereo: Arc<StereoControl>,
     ) -> std::result::Result<Box<dyn super::MixingPlayback>, String> {
-        RodioMixingPlayback::new(device_name, volume, buffers, speaker_volumes)
+        RodioMixingPlayback::new(device_name, volume, buffers, speaker_volumes, stereo)
             .map(|c| Box::new(c) as _)
             .map_err(|e| format!("Rodio mixing playback init: {e}"))
     }
@@ -708,7 +721,8 @@ mod tests {
     fn make_source(buffers: SpeakerBuffers, speaker_volumes: SpeakerVolumes) -> MumbleMixerSource {
         let volume = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
         let running = Arc::new(AtomicBool::new(true));
-        MumbleMixerSource::new(buffers, speaker_volumes, volume, running)
+        let stereo = Arc::new(StereoControl::default());
+        MumbleMixerSource::new(buffers, speaker_volumes, volume, stereo, running)
     }
 
     #[test]

@@ -275,8 +275,9 @@ impl super::AudioDeviceFactory for CpalAudioFactory {
         volume: Arc<AtomicU32>,
         buffers: mumble_protocol::audio::mixer::SpeakerBuffers,
         speaker_volumes: mumble_protocol::audio::mixer::SpeakerVolumes,
+        stereo: Arc<mumble_protocol::audio::mixer::StereoControl>,
     ) -> std::result::Result<Box<dyn super::MixingPlayback>, String> {
-        CpalMixingPlayback::new(device_name, volume, buffers, speaker_volumes)
+        CpalMixingPlayback::new(device_name, volume, buffers, speaker_volumes, stereo)
             .map(|c| Box::new(c) as _)
             .map_err(|e| format!("Mixing playback init: {e}"))
     }
@@ -349,6 +350,7 @@ pub struct CpalMixingPlayback {
     volume: Arc<AtomicU32>,
     buffers: mumble_protocol::audio::mixer::SpeakerBuffers,
     speaker_volumes: mumble_protocol::audio::mixer::SpeakerVolumes,
+    stereo: Arc<mumble_protocol::audio::mixer::StereoControl>,
 }
 
 /// Mutable per-callback underrun tracking state for `CpalMixingPlayback`.
@@ -487,6 +489,7 @@ impl CpalMixingPlayback {
         volume: Arc<AtomicU32>,
         buffers: mumble_protocol::audio::mixer::SpeakerBuffers,
         speaker_volumes: mumble_protocol::audio::mixer::SpeakerVolumes,
+        stereo: Arc<mumble_protocol::audio::mixer::StereoControl>,
     ) -> Result<Self> {
         let host = cpal::default_host();
         let device = if let Some(name) = device_name {
@@ -512,6 +515,7 @@ impl CpalMixingPlayback {
             volume,
             buffers,
             speaker_volumes,
+            stereo,
         })
     }
 }
@@ -546,6 +550,7 @@ impl super::MixingPlayback for CpalMixingPlayback {
         let buffers = self.buffers.clone();
         let volume = self.volume.clone();
         let speaker_volumes = self.speaker_volumes.clone();
+        let stereo = self.stereo.clone();
 
         // Query the device's preferred output format. On WASAPI shared
         // mode the system mixer rate is fixed; hardcoding 48 kHz when
@@ -637,6 +642,9 @@ impl super::MixingPlayback for CpalMixingPlayback {
                     }
                     diag.log_if_due(src_needed, valid_count, out_frames, src_ratio);
 
+                    // Apply the operator's stereo-fold / per-channel gain to
+                    // the interleaved mix before it is folded to mono below.
+                    stereo.apply(&mut mixed_buf[..valid_count]);
                     let valid_frames = valid_count / SRC_CHANNELS;
                     for (i, frame) in data.chunks_exact_mut(out_channels).enumerate() {
                         let sample_opt = resample_linear(
@@ -696,7 +704,8 @@ mod tests {
         );
         let svols: mumble_protocol::audio::mixer::SpeakerVolumes =
             Arc::new(Mutex::new(HashMap::new()));
-        let Ok(_p) = CpalMixingPlayback::new(None, vol, bufs, svols) else {
+        let stereo = Arc::new(mumble_protocol::audio::mixer::StereoControl::default());
+        let Ok(_p) = CpalMixingPlayback::new(None, vol, bufs, svols, stereo) else {
             eprintln!("Skipping: no audio output device available");
             return;
         };
