@@ -23,6 +23,7 @@ function cfg(overrides: Partial<PttConfig> = {}): PttConfig {
     line: "cts",
     active_low: false,
     vox: false,
+    vox_hang_ms: 150,
     lead_in_ms: 150,
     hang_ms: 250,
     deadman_ms: 2000,

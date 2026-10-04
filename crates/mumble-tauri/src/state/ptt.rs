@@ -84,6 +84,7 @@ impl PttController {
         };
         let line = config.line;
         let hang = Duration::from_millis(u64::from(config.hang_ms));
+        let vox_hang = Duration::from_millis(u64::from(config.vox_hang_ms));
 
         // Open the serial resource up front so an open error is reported to the
         // caller synchronously, before the thread is spawned.
@@ -95,7 +96,9 @@ impl PttController {
                     .map_err(|e| format!("open PTT output: {e}"))?;
                 let handle = thread::Builder::new()
                     .name("rr-ptt-station".into())
-                    .spawn(move || station_loop(Watchdog::new(sink, wd_cfg), hang, &rx))
+                    .spawn(move || {
+                        station_loop(Watchdog::new(sink, wd_cfg), hang, vox_hang, &rx);
+                    })
                     .map_err(|e| format!("spawn PTT thread: {e}"))?;
                 Ok(Self { tx, handle: Some(handle) })
             }
@@ -135,10 +138,22 @@ impl Drop for PttController {
 
 /// Station worker: key the rig when a remote command OR VOX wants it, through
 /// the safety watchdog, honouring hang-time on release.
-fn station_loop(mut wd: Watchdog<SerialPttSink>, hang: Duration, rx: &mpsc::Receiver<Cmd>) {
+///
+/// `vox_hang` debounces VOX specifically: when inbound audio stops, VOX is held
+/// "active" for this long so inter-syllable gaps in the operator's speech do not
+/// drop PTT. `hang` is the separate overall release hold.
+fn station_loop(
+    mut wd: Watchdog<SerialPttSink>,
+    hang: Duration,
+    vox_hang: Duration,
+    rx: &mpsc::Receiver<Cmd>,
+) {
     info!("PTT station worker started");
     let mut remote = false;
-    let mut vox = false;
+    let mut vox_raw = false;
+    // While VOX was recently active, hold it until this instant (vox_hang), so a
+    // brief gap between syllables does not drop the key.
+    let mut vox_hold_until: Option<Instant> = None;
     // When the combined intent drops, hold the key until this instant (hang).
     let mut release_at: Option<Instant> = None;
 
@@ -147,7 +162,17 @@ fn station_loop(mut wd: Watchdog<SerialPttSink>, hang: Duration, rx: &mpsc::Rece
         loop {
             match rx.try_recv() {
                 Ok(Cmd::RemoteKey(d)) => remote = d,
-                Ok(Cmd::VoxActive(a)) => vox = a,
+                Ok(Cmd::VoxActive(a)) => {
+                    vox_raw = a;
+                    if a {
+                        vox_hold_until = None;
+                    } else if vox_hang > Duration::ZERO {
+                        // Start the VOX hold on the drop.
+                        vox_hold_until = Some(Instant::now() + vox_hang);
+                    } else {
+                        vox_hold_until = None;
+                    }
+                }
                 Ok(Cmd::Stop) | Err(mpsc::TryRecvError::Disconnected) => {
                     let _ = wd.unkey(Instant::now());
                     info!("PTT station worker stopped");
@@ -158,6 +183,11 @@ fn station_loop(mut wd: Watchdog<SerialPttSink>, hang: Duration, rx: &mpsc::Rece
         }
 
         let now = Instant::now();
+        // Effective VOX: raw-on, or within the post-drop hold window.
+        let vox = vox_raw || vox_hold_until.is_some_and(|t| now < t);
+        if !vox {
+            vox_hold_until = None;
+        }
         let want = remote || vox;
         if want {
             release_at = None;

@@ -70,6 +70,8 @@
       "senseLine": "Footswitch Input Line",
       "activeLow": "Invert sense (active low)",
       "vox": "Also key on received audio (VOX)",
+      "voxHang": "VOX hold",
+      "voxHangHint": "Keep the transmitter keyed this long after audio stops, so gaps between syllables don't drop PTT.",
       "timing": "Timing",
       "leadIn": "Lead-in (key before audio)",
       "hang": "Hang time (hold after release)",

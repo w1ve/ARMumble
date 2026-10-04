@@ -762,6 +762,9 @@ export interface PttConfig {
   active_low: boolean;
   /** Station: also key on inbound-audio VOX, not only on operator command. */
   vox: boolean;
+  /** Station VOX hold (ms, 0-300): keep the key down after audio stops so
+   *  inter-syllable gaps do not drop PTT. */
+  vox_hang_ms: number;
   /** Milliseconds the key leads the audio. */
   lead_in_ms: number;
   /** Milliseconds to hold the key after release (tail). */

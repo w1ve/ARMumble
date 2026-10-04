@@ -1151,6 +1151,11 @@ pub struct PttConfig {
     /// Station: also key on inbound-audio VOX, not only on an operator command.
     #[serde(default)]
     pub vox: bool,
+    /// Station VOX hold (ms, 0-300): keep the key down this long after inbound
+    /// audio stops, so inter-syllable gaps in the operator's speech do not drop
+    /// PTT. Independent of `hang_ms` (which applies to the overall release).
+    #[serde(default = "PttConfig::default_vox_hang_ms")]
+    pub vox_hang_ms: u32,
     /// Milliseconds the key leads the audio (Station delays audio to the rig by
     /// this much so the transmitter is up before speech - CONTEXT §14d).
     #[serde(default = "PttConfig::default_lead_in_ms")]
@@ -1173,6 +1178,9 @@ impl PttConfig {
     pub(crate) fn default_hang_ms() -> u32 {
         250
     }
+    pub(crate) fn default_vox_hang_ms() -> u32 {
+        150
+    }
     pub(crate) fn default_deadman_ms() -> u32 {
         2000
     }
@@ -1190,6 +1198,7 @@ impl Default for PttConfig {
             line: PttLine::default(),
             active_low: false,
             vox: false,
+            vox_hang_ms: Self::default_vox_hang_ms(),
             lead_in_ms: Self::default_lead_in_ms(),
             hang_ms: Self::default_hang_ms(),
             deadman_ms: Self::default_deadman_ms(),

@@ -28,6 +28,7 @@ const DEFAULT_PTT: PttConfig = {
   line: "dtr",
   active_low: false,
   vox: false,
+  vox_hang_ms: 150,
   lead_in_ms: 150,
   hang_ms: 250,
   deadman_ms: 2000,
@@ -184,14 +185,28 @@ export function PttPanel({
             />
           </div>
 
-          {/* Station-only: VOX */}
+          {/* Station-only: VOX + its syllable-gap hold */}
           {pttRole === "station" && (
-            <div className={styles.toggleRow}>
-              <div className={styles.toggleInfo}>
-                <span className={styles.fieldLabel}>{tStr("ptt.vox")}</span>
+            <>
+              <div className={styles.toggleRow}>
+                <div className={styles.toggleInfo}>
+                  <span className={styles.fieldLabel}>{tStr("ptt.vox")}</span>
+                </div>
+                <Toggle checked={config.vox} onChange={() => patch({ vox: !config.vox })} />
               </div>
-              <Toggle checked={config.vox} onChange={() => patch({ vox: !config.vox })} />
-            </div>
+              {config.vox && (
+                <SliderField
+                  label={tStr("ptt.voxHang")}
+                  hint={tStr("ptt.voxHangHint")}
+                  min={0}
+                  max={300}
+                  step={10}
+                  value={config.vox_hang_ms}
+                  onChange={(v) => patch({ vox_hang_ms: Math.round(v) })}
+                  format={(v) => `${Math.round(v)} ms`}
+                />
+              )}
+            </>
           )}
 
           {/* Timing */}
