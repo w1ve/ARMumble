@@ -25,6 +25,7 @@ import { Toggle, SliderField } from "./SharedControls";
 import { DenoiserAdvancedControls } from "./DenoiserAdvancedControls";
 import { ActivationModeSelector } from "./ActivationModeSelector";
 import { CalibrationPanel } from "./CalibrationPanel";
+import { PttPanel } from "./PttPanel";
 import { RadioCardGroup, type RadioCardOption } from "../../components/elements/RadioCardGroup";
 import styles from "./SettingsPage.module.css";
 import panelStyles from "./AudioPanel.module.css";
@@ -477,6 +478,11 @@ export function AudioPanel({
             />
           </div>
         </section>
+      )}
+
+      {/* -- Rig PTT (RS-232) -------------------------------- */}
+      {isExpert && isDesktopPlatform() && (
+        <PttPanel serverId={selectedServer} role={role} />
       )}
 
       {/* -- Audio Statistics -------------------------------- */}

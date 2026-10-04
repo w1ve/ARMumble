@@ -740,6 +740,46 @@ export type TransmitMode = "continuous" | "voice_activity" | "push_to_talk";
  *  - `swap_lr` swap left and right */
 export type StereoMode = "stereo" | "mono" | "swap_lr";
 
+/** PTT direction, fixed by this client's role. Mirrors Rust `PttRole`. */
+export type PttRole = "operator" | "station";
+
+/** RS-232 control line for PTT. Mirrors Rust `PttLine` (serde lowercase).
+ *  Dtr/Rts are writable (Station output); Cts/Dsr/Cd/Ri are readable
+ *  (Operator footswitch input). */
+export type PttLine = "dtr" | "rts" | "cts" | "dsr" | "cd" | "ri";
+
+/** Per-server rig-PTT configuration. Mirrors Rust `PttConfig`. */
+export interface PttConfig {
+  /** Whether serial PTT is active at all. */
+  enabled: boolean;
+  /** Direction: operator senses a footswitch, station keys the rig. */
+  role: PttRole;
+  /** Serial port name ("COM5", "/dev/ttyUSB0"); empty = unset. */
+  port: string;
+  /** Control line to drive (Station) or sense (Operator). */
+  line: PttLine;
+  /** Invert the active sense for odd interface wiring. */
+  active_low: boolean;
+  /** Station: also key on inbound-audio VOX, not only on operator command. */
+  vox: boolean;
+  /** Milliseconds the key leads the audio. */
+  lead_in_ms: number;
+  /** Milliseconds to hold the key after release (tail). */
+  hang_ms: number;
+  /** Deadman timeout (ms): auto-release without a keep-alive. */
+  deadman_ms: number;
+  /** Maximum continuous transmit (seconds); hard ceiling. */
+  max_tx_secs: number;
+}
+
+/** A serial port available for PTT. Mirrors Rust `SerialPortInfo`. */
+export interface SerialPortInfo {
+  /** OS port name. */
+  name: string;
+  /** Human-friendly description. */
+  label: string;
+}
+
 export interface AudioSettings {
   /** Selected input device name (null = system default). */
   selected_device: string | null;
