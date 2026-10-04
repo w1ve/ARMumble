@@ -1090,6 +1090,114 @@ pub struct AudioSettings {
     pub right_volume: f32,
 }
 
+/// PTT direction, fixed by this client's role on the server.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum PttRole {
+    /// Operator: sense a footswitch on an input line, send a key command.
+    #[default]
+    Operator,
+    /// Station: drive an output line to key the local rig.
+    Station,
+}
+
+/// Which RS-232 control line the PTT uses. Mirrors `rr_ptt::PttLine` and the
+/// TS `PttLine`; kept as its own type so the settings layer does not depend on
+/// the `rr-ptt` crate's feature-gated serial module.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum PttLine {
+    /// Data Terminal Ready (writable output; the usual Station key line).
+    #[default]
+    Dtr,
+    /// Request To Send (writable output).
+    Rts,
+    /// Clear To Send (readable input; a common footswitch return).
+    Cts,
+    /// Data Set Ready (readable input).
+    Dsr,
+    /// Carrier Detect (readable input).
+    Cd,
+    /// Ring Indicator (readable input).
+    Ri,
+}
+
+/// Per-server rig-PTT configuration. Persisted alongside [`AudioSettings`].
+///
+/// The role is the server's role ([`crate::state::rr_plugin::Role`]): an
+/// Operator senses a footswitch on an *input* line and sends a key command; a
+/// Station drives an *output* line to key its rig, triggered by an operator
+/// command and/or inbound-audio VOX. All timing fields feed the safety
+/// watchdog and the lead-in/hang-time behaviour (CONTEXT §14d/§14e).
+#[derive(Debug, Clone, PartialEq, Serialize, serde::Deserialize)]
+pub struct PttConfig {
+    /// Whether serial PTT is active at all. Off by default - nothing touches a
+    /// serial port, let alone a transmitter, until the user opts in.
+    #[serde(default)]
+    pub enabled: bool,
+    /// This client's role on the server, which fixes the PTT direction: an
+    /// Operator senses a footswitch input, a Station drives a key output.
+    #[serde(default)]
+    pub role: PttRole,
+    /// Serial port name (`"COM5"`, `"/dev/ttyUSB0"`). Empty = unset.
+    #[serde(default)]
+    pub port: String,
+    /// Control line to drive (Station) or sense (Operator).
+    #[serde(default)]
+    pub line: PttLine,
+    /// Invert the active sense for odd interface wiring.
+    #[serde(default)]
+    pub active_low: bool,
+    /// Station: also key on inbound-audio VOX, not only on an operator command.
+    #[serde(default)]
+    pub vox: bool,
+    /// Milliseconds the key leads the audio (Station delays audio to the rig by
+    /// this much so the transmitter is up before speech - CONTEXT §14d).
+    #[serde(default = "PttConfig::default_lead_in_ms")]
+    pub lead_in_ms: u32,
+    /// Milliseconds to hold the key after release, so the tail is not chopped.
+    #[serde(default = "PttConfig::default_hang_ms")]
+    pub hang_ms: u32,
+    /// Deadman timeout (ms): auto-release without a keep-alive.
+    #[serde(default = "PttConfig::default_deadman_ms")]
+    pub deadman_ms: u32,
+    /// Maximum continuous transmit (seconds); hard ceiling.
+    #[serde(default = "PttConfig::default_max_tx_secs")]
+    pub max_tx_secs: u32,
+}
+
+impl PttConfig {
+    pub(crate) fn default_lead_in_ms() -> u32 {
+        150
+    }
+    pub(crate) fn default_hang_ms() -> u32 {
+        250
+    }
+    pub(crate) fn default_deadman_ms() -> u32 {
+        2000
+    }
+    pub(crate) fn default_max_tx_secs() -> u32 {
+        120
+    }
+}
+
+impl Default for PttConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            role: PttRole::default(),
+            port: String::new(),
+            line: PttLine::default(),
+            active_low: false,
+            vox: false,
+            lead_in_ms: Self::default_lead_in_ms(),
+            hang_ms: Self::default_hang_ms(),
+            deadman_ms: Self::default_deadman_ms(),
+            max_tx_secs: Self::default_max_tx_secs(),
+        }
+    }
+}
+
 /// How the inbound stereo stream is mapped onto the output channels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize, Default)]
 #[serde(rename_all = "snake_case")]

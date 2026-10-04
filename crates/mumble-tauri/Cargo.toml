@@ -78,10 +78,17 @@ tauri-plugin-window-state = "2"
 # Auto-updater (desktop only). All updater logic lives in `src/updater/`.
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+# Rig PTT over RS-232. Real serial I/O is desktop-only (a station keys its rig
+# or an operator senses a footswitch on a PC), so the `serial` feature is
+# enabled here, under the desktop target.
+rr-ptt = { path = "../rr-ptt", features = ["serial"] }
 # Android: mumble-protocol with Opus codec + oboe for native audio I/O.
 [target.'cfg(target_os = "android")'.dependencies]
 mumble-protocol = { path = "../mumble-protocol", features = ["opus-codec", "persistent-chat", "rnnoise-denoiser"] }
 oboe = "0.6.1"
+# Android gets rr-ptt's types/watchdog but no serial backend (no rig keying on
+# a phone); the wire types still need to compile.
+rr-ptt = { path = "../rr-ptt" }
 
 # Windows-only: native window subclassing for aspect-ratio constraints
 # (see crates/mumble-tauri/src/platform/window/windows.rs).

@@ -133,6 +133,34 @@ impl AppState {
         Some((restart_outbound, restart_inbound, force_tcp_changed))
     }
 
+    /// Get the rig-PTT config for a specific server (or the active session when
+    /// `server_id` is `None`).
+    pub fn ptt_config_for(
+        &self,
+        server_id: Option<super::ServerId>,
+    ) -> super::types::PttConfig {
+        self.resolve_audio_target(server_id)
+            .lock()
+            .map(|s| s.audio.ptt_config.clone())
+            .unwrap_or_default()
+    }
+
+    /// Set the rig-PTT config for a specific server (or the active session when
+    /// `server_id` is `None`). Returns whether the target is the active session
+    /// (the caller restarts the live PTT controller only for the active one).
+    pub fn set_ptt_config_for(
+        &self,
+        server_id: Option<super::ServerId>,
+        config: super::types::PttConfig,
+    ) -> bool {
+        let target = self.resolve_audio_target(server_id);
+        let is_active = std::sync::Arc::ptr_eq(&target, &self.inner.snapshot());
+        if let Ok(mut state) = target.lock() {
+            state.audio.ptt_config = config;
+        }
+        is_active
+    }
+
     /// Get current voice state.
     pub fn voice_state(&self) -> VoiceState {
         self.inner.snapshot()

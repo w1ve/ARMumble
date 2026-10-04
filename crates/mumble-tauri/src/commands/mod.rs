@@ -19,6 +19,7 @@ pub(crate) mod offload;
 pub(crate) mod onboarding;
 pub(crate) mod popout;
 pub(crate) mod plugin_admin;
+pub(crate) mod ptt;
 pub(crate) mod server_settings;
 pub(crate) mod plugin_info;
 pub(crate) mod profile;

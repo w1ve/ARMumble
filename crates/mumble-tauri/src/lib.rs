@@ -694,6 +694,10 @@ macro_rules! all_command_handlers {
             commands::server::ping_server,
 
             commands::public_servers::fetch_file_server_capabilities,
+            commands::ptt::list_serial_ports,
+            commands::ptt::get_ptt_config,
+            commands::ptt::set_ptt_config,
+            commands::ptt::apply_remote_ptt,
             commands::audio::get_audio_devices,
             commands::audio::get_output_devices,
             commands::audio::get_audio_settings,

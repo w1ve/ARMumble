@@ -46,6 +46,9 @@ mod query;
 #[allow(dead_code, reason = "recording module is work-in-progress")]
 pub(crate) mod recording;
 mod registry;
+pub(crate) mod rr_plugin;
+#[cfg(not(target_os = "android"))]
+pub(crate) mod ptt;
 mod search;
 mod sessions;
 mod shared_handle;
@@ -91,6 +94,8 @@ pub(crate) fn parse_pchat_protocol_str(s: &str) -> PchatProtocol {
 #[derive(Default)]
 pub(super) struct AudioPipelineState {
     pub settings: AudioSettings,
+    /// Per-server rig-PTT configuration (serial port, line, timing, role).
+    pub ptt_config: PttConfig,
     pub voice_state: VoiceState,
     pub mixer: Option<AudioMixer>,
     pub mixing_playback: Option<Box<dyn crate::audio::MixingPlayback>>,
@@ -283,6 +288,15 @@ pub struct AppState {
     /// Aborted when the overlay closes.
     #[cfg(not(target_os = "android"))]
     pub(crate) draw_overlay_tracker: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// Live rig-PTT controller (serial keying / footswitch sensing) for the
+    /// active session, if PTT is enabled. Replaced on config change; dropping
+    /// it releases the key line. Desktop only.
+    #[cfg(not(target_os = "android"))]
+    pub(crate) ptt_controller: Mutex<Option<ptt::PttController>>,
+    /// Background task mirroring inbound-talk activity onto a Station's PTT VOX
+    /// gate (mode B). Aborted when PTT stops/reconfigures. Desktop only.
+    #[cfg(not(target_os = "android"))]
+    pub(crate) ptt_vox_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
 }
 
 impl AppState {
@@ -311,6 +325,10 @@ impl AppState {
             draw_overlay_context: Mutex::new(None),
             #[cfg(not(target_os = "android"))]
             draw_overlay_tracker: Mutex::new(None),
+            #[cfg(not(target_os = "android"))]
+            ptt_controller: Mutex::new(None),
+            #[cfg(not(target_os = "android"))]
+            ptt_vox_task: Mutex::new(None),
         }
     }
 

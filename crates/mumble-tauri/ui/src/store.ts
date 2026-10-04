@@ -84,6 +84,14 @@ import {
   PLUGIN_NAME_LIVE_DOC,
   friendlyPluginName,
 } from "./constants/pluginData";
+import {
+  RR_PLUGIN_NAME,
+  RrPayloadType,
+  type RrPttPayload,
+  type RrRolePayload,
+} from "./constants/remoteRadioPlugin";
+import { recordPeerRole, clearPeerRoles } from "./stationIdentity";
+import { getSavedServers } from "./serverStorage";
 import i18next from "i18next";
 import {
   probeFileServerCapabilities,
@@ -2497,6 +2505,45 @@ function pluginResponseAllowed(
   return kind !== "chat-message";
 }
 
+/** This client's role on the currently-active server, cached so the sync
+ *  plugin-message dispatcher can decide whether to act on an inbound PTT.
+ *  Set by {@link announceLocalRole} on connect. */
+let localIsStationFlag = false;
+
+/** Whether this client is the Station on the active server. */
+function isLocalStation(): boolean {
+  return localIsStationFlag;
+}
+
+/**
+ * Announce this client's role to the channel over the hidden
+ * `remote-radio/role` plugin channel, and cache it locally so inbound PTT is
+ * acted on only by a Station. Call on connect/channel-join. `host`/`port`
+ * identify the active server so the saved role can be looked up.
+ */
+export async function announceLocalRole(
+  host: string,
+  port: number,
+  channelId: number | null,
+): Promise<void> {
+  try {
+    const servers = await getSavedServers();
+    const key = `${host}:${port}`;
+    const match = servers.find((s) => `${s.host}:${s.port}` === key);
+    const role: import("./types").ClientRole = match?.role ?? "operator";
+    localIsStationFlag = role === "station";
+    await sendPluginMessage(
+      RR_PLUGIN_NAME,
+      RrPayloadType.Role,
+      { role } satisfies RrRolePayload,
+      [],
+      channelId,
+    );
+  } catch (e) {
+    console.warn("[store] announceLocalRole failed:", e);
+  }
+}
+
 /** Route an inbound plugin envelope to the appropriate in-store handler. */
 function dispatchPluginMessage(p: PluginMessageEvent): void {
   // Host-broadcast plugin lifecycle (any plugin).  Deactivation clears the
@@ -2507,6 +2554,31 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
     return;
   }
   if (p.payloadType === PluginPayloadType.PluginActivated) {
+    return;
+  }
+
+  // Remote.Radio's hidden control channel: role announcements + rig PTT.
+  if (p.pluginName === RR_PLUGIN_NAME) {
+    if (p.payloadType === RrPayloadType.Role) {
+      const data = decodePluginPayload<RrRolePayload>(p.payload);
+      if (data && p.senderSession != null) {
+        recordPeerRole(p.senderSession, data.role);
+      }
+      return;
+    }
+    if (p.payloadType === RrPayloadType.Ptt) {
+      // Only a Station acts on an inbound operator PTT: key/unkey its rig
+      // through the backend watchdog. (The backend ignores apply_remote_ptt
+      // unless a Station controller is running, so this is also safe if the
+      // active-role check races.)
+      const data = decodePluginPayload<RrPttPayload>(p.payload);
+      if (data && isLocalStation()) {
+        invoke("apply_remote_ptt", { down: data.down }).catch((e) =>
+          console.warn("[store] apply_remote_ptt failed:", e),
+        );
+      }
+      return;
+    }
     return;
   }
 
@@ -3058,6 +3130,13 @@ export async function initEventListeners(
             useAppStore.setState({ currentChannel: currentCh });
           }
 
+          // Announce our Remote.Radio role to the channel (hidden plugin
+          // message) so peers show the right identity, and so a Station starts
+          // acting on inbound operator PTT. Best-effort.
+          if (pending) {
+            void announceLocalRole(pending.host, pending.port, currentCh);
+          }
+
           // Fetch our own session ID.
           useAppStore.setState({ bootstrapStage: "Identifying you to the server..." });
           const ownSession = await invoke<number | null>("get_own_session");
@@ -3175,6 +3254,8 @@ export async function initEventListeners(
     await listen<{ serverId?: string | null; reason: string | null } | string | null>(
       TauriEvent.ServerDisconnected,
       async (event) => {
+        // Forget announced peer roles for the dropped session.
+        clearPeerRoles();
         // Normalise: backend now always sends an object payload, but tolerate
         // a bare reason string for forwards/backwards compatibility.
         const payload = event.payload;

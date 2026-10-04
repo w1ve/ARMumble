@@ -230,6 +230,10 @@ impl AppState {
         // `inner` to whichever session (if any) becomes active next.
         let _ = self.registry.remove(id);
         if is_active {
+            // §14e: release the rig the instant the active session drops - a
+            // vanished link must never leave a transmitter keyed.
+            #[cfg(not(target_os = "android"))]
+            self.stop_ptt();
             match self.registry.active_id().and_then(|nid| self.registry.session(nid)) {
                 Some(next_arc) => {
                     let _ = self.inner.swap(next_arc);
