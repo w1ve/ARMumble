@@ -2315,15 +2315,41 @@ the next backend pass (grep the fork for the client-version/user-agent constant)
   tauri_plugin_x as _;` (they are direct deps only for ACL-schema resolution,
   used by the shared lib). The `rrmumble` build is now warning-free. Also fixed a
   `chunks_exact_to_as_chunks` clippy lint in the new `apply_stereo_mode`.
-- ⬜ **Serial PTT (`rr-ptt`) + authoritative role broadcast** — NOT STARTED, the
-  one remaining MVP item (§18e.14 + §14d/§14e). Big enough for its own session:
-  new `crates/rr-ptt` (safe, `serialport` 4.x), `PttSource`/`PttSink`/`SerialPtt`/
-  `RecordingPtt` + a watchdog decorator (§14e safety first), the hidden
-  plugin-data PTT channel (§18b.1), and the plugin-data **role broadcast** that
-  replaces the station name-match placeholder (§18g step 8). Also still open from
-  §14: the **radio-mode profile** (default ≥96 kbps for the dual-RX stereo cliff,
-  filters off, `Audio` application, continuous transmit) and bitrate/`force_channels`
-  UI exposure.
+- ✅ **DONE — Serial PTT (`rr-ptt`) + authoritative role broadcast** (§18e.14,
+  §14d/§14e, §18b.1). Commits `71b63d8e` (rr-ptt crate), `3c45056f` (backend
+  wiring), `7f4db4dc` (UI).
+  - **`crates/rr-ptt`** (safe, `#![forbid(unsafe_code)]`, `serialport` 4.x behind
+    a `serial` feature): `PttSink`/`PttSource` traits, `SerialPttSink` (drives
+    DTR/RTS; **deasserts both on open** to dodge the USB auto-key trap, releases
+    on drop) / `SerialPttSource` (senses CTS/DSR/CD/RI; a failed read is "no
+    change", never unkey), `RecordingPtt*` doubles, and the **`Watchdog`** (§14e:
+    deadman, latching max-transmit ceiling, fail-closed on any sink error, release
+    on drop; time injected so it is tested headless). 12 crate tests. **Serial
+    path hardware-verified** by the user on a com0com null-modem pair: DTR/RTS key
+    in sync and start low on open; a sense line captured all key/unkey edges.
+  - **Transport = Mumble `PluginMessage`** (`plugin_name "remote-radio"`,
+    payloadType `ptt`/`role`), a distinct message type from `TextMessage` so it is
+    inherently hidden from chat. **Not** `PluginDataTransmission` (forbidden in
+    Fancy 0.3.2+) and **not** the parked `rr-control` WebRTC stack. There is no
+    `rr-session` arbiter in this path — the watchdog is the safety gate.
+  - **Backend** (`state/ptt.rs`, desktop): a worker-thread `PttController` owns the
+    watchdog + serial. Station keys on a remote operator command **and/or**
+    inbound-audio **VOX** (mode B, a poller mirrors `talking_sessions`); Operator
+    senses a footswitch and emits outbound `remote-radio/ptt`. Lead-in/hang-time
+    smooth the T/R switch. `PttConfig` per-server; commands `list_serial_ports`,
+    `get/set_ptt_config`, `apply_remote_ptt`. Released on disconnect (§14e req 3).
+  - **Frontend**: `dispatchPluginMessage` routes role → an authoritative
+    session→role map (`stationIdentity.tsx`, replacing the name-match placeholder;
+    `useIsStation` prefers it, falls back to the hint) and ptt → `apply_remote_ptt`
+    for a Station. `announceLocalRole` broadcasts on connect. `PttPanel` (Advanced,
+    per role) with the COM-port picker, line/active-low, VOX (station), and the
+    lead/hang/deadman/max-tx sliders. 4 panel tests; UI vitest 992/84.
+  - ⚠️ **Still open (follow-ups):** full disk persistence of `PttConfig` +
+    auto-start-on-connect independent of opening Settings (today it re-applies when
+    the Audio panel loads while connected); and the §14 **radio-mode profile**
+    (default ≥96 kbps, filters off, `Audio` application, continuous) +
+    bitrate/`force_channels` UI exposure. End-to-end over-the-air PTT through the
+    built app is the user's to confirm.
 
 **NEW FILES this session (so `git add` catches them):**
 `ui/src/builtinServers.ts`, `ui/src/stationIdentity.tsx`,
