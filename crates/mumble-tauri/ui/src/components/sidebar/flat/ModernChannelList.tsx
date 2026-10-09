@@ -1,4 +1,4 @@
-import { ChevronRightIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MicOffSmallIcon, ScreenShareIcon } from "../../../icons";
+import { ChevronRightIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MegaphoneIcon, MicOffSmallIcon, ScreenShareIcon } from "../../../icons";
 /**
  * ModernChannelList - a flat, always-visible channel viewer.
  *
@@ -259,6 +259,11 @@ function ModernChannelListImpl({
   // Collapsed channels (expanded by default = not in the set).
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
 
+  // Operator Whisper target: the channel whose megaphone we show (grey normally,
+  // green while the whisper hotkey is held).
+  const whisperTargetChannel = useAppStore((s) => s.whisperTargetChannel);
+  const whisperActive = useAppStore((s) => s.whisperActive);
+
   const handleChannelReorder = useChannelReorderHandler(channels);
 
   const toggleCollapsed = useCallback((id: number) => {
@@ -421,6 +426,16 @@ function ModernChannelListImpl({
                 </span>
               )}
               <PchatBadge protocol={channel.pchat_protocol} />
+              {whisperTargetChannel === channel.id && (
+                <span
+                  className={`${styles.whisperBadge} ${whisperActive ? styles.whisperBadgeActive : ""}`}
+                  title={whisperActive
+                    ? t("channelList.whisperingHere")
+                    : t("channelList.whisperTarget")}
+                >
+                  <MegaphoneIcon width={12} height={12} />
+                </span>
+              )}
             </span>
             {hasUsers && (
               <span className={styles.memberCount}>

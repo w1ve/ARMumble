@@ -223,6 +223,7 @@
   },
   "userListItem": {
     "registeredTitle": "Registriert",
+    "onAirTitle": "Auf Sendung (sendet)",
     "serverMutedTitle": "Vom Server stummgeschaltet",
     "selfMutedTitle": "Selbst stummgeschaltet",
     "serverDeafenedTitle": "Vom Server taubgeschaltet",
@@ -251,6 +252,8 @@
     "unnamed": "Namenlos",
     "noPermissionToJoin": "Keine Berechtigung zum Beitreten",
     "listening": "Zuhören",
+    "whisperTarget": "Flüsterziel (Flüstertaste halten, um hierher zu sprechen)",
+    "whisperingHere": "Flüstert hierher",
     "member_one": "{{count}} Mitglied",
     "member_other": "{{count}} Mitglieder",
     "expand": "Erweitern",

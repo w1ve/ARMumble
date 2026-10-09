@@ -1169,6 +1169,22 @@ pub struct PttConfig {
     /// Maximum continuous transmit (seconds); hard ceiling.
     #[serde(default = "PttConfig::default_max_tx_secs")]
     pub max_tx_secs: u32,
+    /// Operator software PTT hotkey (e.g. `"Ctrl+Shift+T"`), or `None` if
+    /// unset. A global OS shortcut; while held it both opens this client's
+    /// Mumble mic and sends an outbound `remote-radio/ptt` so the station keys
+    /// its rig deterministically (not relying on VOX). Operator role only.
+    #[serde(default)]
+    pub ptt_hotkey: Option<String>,
+    /// Operator "Whisper" hotkey (e.g. `"Ctrl+Shift+W"`), or `None` if unset. A
+    /// global OS shortcut; while held it redirects the mic into
+    /// [`Self::whisper_target_channel`] via a Mumble VoiceTarget, without leaving
+    /// the current channel. Must differ from [`Self::ptt_hotkey`]. Operator only.
+    #[serde(default)]
+    pub whisper_hotkey: Option<String>,
+    /// Channel id the Whisper hotkey redirects the mic into. `None` = unset
+    /// (whisper disabled even if a hotkey is bound).
+    #[serde(default)]
+    pub whisper_target_channel: Option<u32>,
 }
 
 impl PttConfig {
@@ -1203,6 +1219,9 @@ impl Default for PttConfig {
             hang_ms: Self::default_hang_ms(),
             deadman_ms: Self::default_deadman_ms(),
             max_tx_secs: Self::default_max_tx_secs(),
+            ptt_hotkey: None,
+            whisper_hotkey: None,
+            whisper_target_channel: None,
         }
     }
 }

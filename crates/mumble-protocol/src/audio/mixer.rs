@@ -179,8 +179,53 @@ struct SpeakerDecoder {
     last_activity: Instant,
 }
 
+/// Duplicate/He-interleave a decoded frame up to `out_channels`.
+///
+/// Safety net: duplicate a mono frame up to `out_channels` if a decoder ever
+/// yields fewer channels than the playback layout expects. In normal operation
+/// the per-speaker decoder is created at the playback (stereo) channel count,
+/// so decoded frames already match and this is a no-op. Kept defensively.
+///
+/// A no-op when the frame already has `out_channels`. Only mono -> N is handled.
+fn upmix_frame(frame: &mut crate::audio::sample::AudioFrame, out_channels: u16) {
+    let in_ch = frame.format.channels.max(1);
+    if in_ch == out_channels || in_ch != 1 || out_channels < 2 {
+        return;
+    }
+    let mono = frame.as_f32_samples();
+    let out_ch = out_channels as usize;
+    let mut out = Vec::with_capacity(mono.len() * out_ch);
+    for &s in mono {
+        for _ in 0..out_ch {
+            out.push(s);
+        }
+    }
+    frame.data = {
+        let mut bytes = vec![0u8; out.len() * 4];
+        let (chunks, _) = bytes.as_chunks_mut::<4>();
+        for (chunk, s) in chunks.iter_mut().zip(&out) {
+            *chunk = s.to_ne_bytes();
+        }
+        bytes
+    };
+    frame.format = AudioFormat {
+        channels: out_channels,
+        ..frame.format
+    };
+}
+
 impl SpeakerDecoder {
     fn new(format: AudioFormat) -> Result<Self> {
+        // Decode at the PLAYBACK channel count (stereo on this client). A
+        // stereo Opus decoder:
+        //   * duplicates a mono bitstream to both channels (dual-mono) - verified
+        //     by `tests/opus_channels.rs::mono_packet_decoded_by_a_stereo_decoder_
+        //     duplicates_the_channel` (worst L/R diff < 1e-5), so a normal mono
+        //     operator is still heard centred, and
+        //   * preserves a genuinely stereo bitstream's L/R separation - which a
+        //     mono decoder would irreversibly downmix.
+        // Decoding stereo is therefore correct for BOTH mono and stereo senders;
+        // it is also what makes the stereo on-air test audible to this client.
         let decoder = OpusDecoder::new(format)?;
         Ok(Self {
             decoder: Box::new(decoder),
@@ -281,8 +326,16 @@ impl AudioMixer {
         }
 
         let mut frame = speaker.decoder.decode(packet)?;
-        let consumed_units = frame_seq_units(&frame, self.format);
+        // Sequence units are 10 ms (480 samples per channel); frame_seq_units
+        // divides out the channel count, so it is correct for the stereo frame.
+        let consumed_units = frame_seq_units(&frame, frame.format);
         speaker.expected_next_seq = Some(packet.sequence + consumed_units);
+
+        // Safety no-op in normal operation: the stereo decoder already yields
+        // interleaved L/R (dual-mono for a mono sender, true stereo otherwise).
+        // Kept only to guarantee the playback channel layout if a decoder ever
+        // produces fewer channels than the output expects.
+        upmix_frame(&mut frame, self.format.channels);
 
         // Cold-start fade-in: a fresh decoder has no warm-up state,
         // and Opus's first decoded sample can be at full speech
@@ -325,6 +378,7 @@ impl AudioMixer {
             .ok_or_else(|| crate::error::Error::InvalidState("unknown speaker".into()))?;
 
         let mut frame = speaker.decoder.decode_lost()?;
+        upmix_frame(&mut frame, self.format.channels);
         apply_boundary_crossfade(&mut frame, &mut speaker.prev_last_sample);
         push_samples(&self.buffers, session, &frame);
         Ok(())

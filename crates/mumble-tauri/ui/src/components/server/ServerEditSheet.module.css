@@ -143,3 +143,47 @@
   max-width: 90vw;
   box-shadow: var(--shadow-lg, 0 8px 32px var(--color-overlay-medium));
 }
+
+/* Role toggle (Operator / Station) in the edit sheet. Two side-by-side cards
+   that behave like a radio group; the active one is accented. */
+.roleToggle {
+  display: flex;
+  gap: 8px;
+}
+
+.roleOption {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+.roleOption:hover {
+  border-color: var(--color-glass-border-hover, var(--color-accent));
+}
+
+.roleOptionActive {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft, rgba(42, 171, 238, 0.12));
+  color: var(--color-text);
+}
+
+.roleOptionTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.roleOptionHint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}

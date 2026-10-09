@@ -73,7 +73,10 @@ impl AppState {
     /// If any pipeline-relevant setting changed while voice is active,
     /// the outbound pipeline is automatically restarted.
     /// Volume changes are applied live via atomic handles (no restart).
-    pub fn set_audio_settings(&self, settings: super::types::AudioSettings) -> Option<(bool, bool, bool)> {
+    pub fn set_audio_settings(
+        &self,
+        settings: super::types::AudioSettings,
+    ) -> Option<(bool, bool, bool, bool)> {
         self.set_audio_settings_for(None, settings)
     }
 
@@ -86,7 +89,7 @@ impl AppState {
         &self,
         server_id: Option<super::ServerId>,
         settings: super::types::AudioSettings,
-    ) -> Option<(bool, bool, bool)> {
+    ) -> Option<(bool, bool, bool, bool)> {
         let target = self.resolve_audio_target(server_id);
         // A pipeline restart only makes sense for the session the live
         // audio loop is bound to - the active one.  Writing settings to a
@@ -101,8 +104,20 @@ impl AppState {
             )
         };
 
-        let restart_outbound =
-            is_active && voice_active && old_settings.needs_pipeline_restart(&settings);
+        // A transmit-mode change needs the voice state re-reconciled to the new
+        // mode (PTT -> mic closed/Muted; VOX/Continuous -> mic open/Active),
+        // which the caller does asynchronously via `reconcile_voice_for_mode`.
+        // When the mode changed we skip the ordinary outbound restart here and
+        // let the reconciler rebuild the pipeline in the correct state, so the
+        // two paths never fight (the old flag-based path left the mic stuck
+        // open on VOX->PTT and stuck muted on PTT->VOX).
+        let mode_changed =
+            is_active && old_settings.transmit_mode() != settings.transmit_mode();
+
+        let restart_outbound = is_active
+            && voice_active
+            && !mode_changed
+            && old_settings.needs_pipeline_restart(&settings);
         let restart_inbound =
             is_active && voice_active && old_settings.needs_inbound_restart(&settings);
         let force_tcp_changed =
@@ -130,7 +145,7 @@ impl AppState {
             state.audio.settings = settings;
         }
 
-        Some((restart_outbound, restart_inbound, force_tcp_changed))
+        Some((restart_outbound, restart_inbound, force_tcp_changed, mode_changed))
     }
 
     /// Get the rig-PTT config for a specific server (or the active session when
@@ -177,6 +192,15 @@ impl AppState {
         }
     }
 
+    /// Emit `whisper-active` so the frontend can turn the target channel's
+    /// megaphone icon green while the operator is whispering, and clear it on
+    /// release. Payload: `(active, target_channel_or_null)`.
+    pub(crate) fn emit_whisper_active(&self, active: bool, channel: Option<u32>) {
+        if let Some(app) = self.app_handle() {
+            let _ = app.emit("whisper-active", (active, channel));
+        }
+    }
+
     /// Set the local playback volume for a specific remote user.
     ///
     /// `volume` is a multiplier (0.0 = muted, 1.0 = normal, 2.0 = 200%).
@@ -209,7 +233,7 @@ mod voice_pipeline {
     use tauri::Emitter;
     use tracing::info;
 
-    use mumble_protocol::audio::encoder::{OpusEncoder, OpusEncoderConfig};
+    use mumble_protocol::audio::encoder::{ForceChannels, OpusEncoder, OpusEncoderConfig};
     use mumble_protocol::audio::filter::automatic_gain::{AgcConfig, AutomaticGainControl};
     use mumble_protocol::audio::filter::denoiser::{DenoiserConfig, SpectralDenoiser};
     use mumble_protocol::audio::filter::noise_gate::{NoiseGate, NoiseGateConfig};
@@ -227,12 +251,25 @@ mod voice_pipeline {
 
     impl AppState {
         /// Enable voice calling: unmute + undeaf, start audio pipelines.
+        ///
+        /// Push-to-Talk is mutually exclusive with an open mic: in PTT mode the
+        /// transmitter is keyed only while the key is held, so enabling voice
+        /// must land in **Muted** (inbound only, self-mute asserted), exactly
+        /// like `enable_voice_muted`. `push_to_talk_start`/`_end` (and the
+        /// operator rig hotkey) then open/close the outbound pipeline. Starting
+        /// Active here would leave the mic permanently live, since PTT inserts
+        /// no voice gate - that is the VOX/PTT bleed-through bug.
         pub async fn enable_voice(&self) -> Result<(), String> {
             let (handle, audio_settings) = {
                 let __session = self.inner.snapshot();
                 let state = __session.lock().map_err(|e| e.to_string())?;
                 (state.conn.client_handle.clone(), state.audio.settings.clone())
             };
+
+            if audio_settings.transmit_mode() == TransmitMode::PushToTalk {
+                info!("enable_voice: push-to-talk mode - entering muted (mic off until keyed)");
+                return self.enable_voice_muted().await;
+            }
 
             info!("enable_voice: starting audio pipelines");
 
@@ -371,7 +408,7 @@ mod voice_pipeline {
         }
 
         /// Stop only the outbound (mic capture) pipeline.
-        fn stop_outbound(&self) {
+        pub(in crate::state) fn stop_outbound(&self) {
             if let Ok(mut state) = self.inner.snapshot().lock() {
                 if let Some(handle) = state.audio.outbound_task_handle.take() {
                     handle.abort();
@@ -491,21 +528,54 @@ mod voice_pipeline {
             }
             let frame_size_samples = AudioSettings::frame_ms_to_samples(frame_size_ms);
 
-            let capture = PlatformAudioFactory::create_capture(
+            // A radio Station transmits STEREO so a dual-receiver rig (different
+            // receivers on L and R) keeps its channel separation on the air. An
+            // operator is a single voice mic and stays mono.
+            let station_stereo =
+                self.ptt_config_for(None).role == crate::state::types::PttRole::Station;
+
+            let capture = PlatformAudioFactory::create_capture_channels(
                 audio_settings.selected_device.as_deref(),
                 frame_size_samples,
                 input_vol.clone(),
+                station_stereo,
             )?;
+            // The capture may have fallen back to mono (e.g. a mono sound card),
+            // so build the encoder to match the capture's actual channel count.
+            let capture_format = capture.format();
+            let is_stereo = capture_format.channels >= 2;
+            if station_stereo {
+                info!(
+                    "outbound: Station stereo requested; capture is {} channel(s)",
+                    capture_format.channels
+                );
+            }
 
             let encoder_config = OpusEncoderConfig {
                 bitrate: bitrate_bps,
                 frame_size: frame_size_samples,
+                // Pin two coded channels so Opus can't collapse a near-silent
+                // receiver into the other and make it vanish; keep phase so the
+                // two receivers stay independent.
+                force_channels: if is_stereo {
+                    ForceChannels::Stereo
+                } else {
+                    ForceChannels::Auto
+                },
+                phase_inversion_disabled: is_stereo,
                 ..OpusEncoderConfig::default()
             };
-            let encoder = OpusEncoder::new(encoder_config, AudioFormat::MONO_48KHZ_F32)
+            let encoder = OpusEncoder::new(encoder_config, capture_format)
                 .map_err(|e| format!("Encoder init: {e}"))?;
 
-            let outbound_filters = build_outbound_filters(audio_settings);
+            // Build the DSP chain. For a stereo Station, skip filters that assume
+            // a mono stream (they would corrupt interleaved L/R); the gate is
+            // already absent in Continuous mode which a Station uses.
+            let outbound_filters = if is_stereo {
+                build_outbound_filters_stereo(audio_settings)
+            } else {
+                build_outbound_filters(audio_settings)
+            };
 
             info!(
                 "start_outbound_pipeline: filters={}, noise_suppression={}, threshold={:.5}",
@@ -527,8 +597,11 @@ mod voice_pipeline {
             let outbound_handle = if let Some(ref client) = client_handle {
                 let client = client.clone();
                 let app = app.clone();
+                // Share the live VoiceTarget id so the Whisper hotkey can
+                // redirect this pipeline's packets to another channel.
+                let target = self.outbound_target.clone();
                 Some(tokio::spawn(async move {
-                    outbound_audio_loop(outbound, client, app, own_session).await;
+                    outbound_audio_loop(outbound, client, app, own_session, target).await;
                 }))
             } else {
                 None
@@ -760,6 +833,56 @@ mod voice_pipeline {
             }
             self.emit_voice_state();
             Ok(())
+        }
+
+        /// Reconcile the live voice state to the current transmit mode after a
+        /// mode change while connected. This is the single authority for the
+        /// VOX/PTT/Continuous transition and replaces the old ad-hoc flag:
+        ///
+        /// - **Push-to-Talk** -> the mic must be closed until the key is held,
+        ///   so drop to `Muted` (stops outbound, asserts self-mute). From there
+        ///   `push_to_talk_start` opens it.
+        /// - **VoiceActivity / Continuous** -> the mic is open (gated or not),
+        ///   so come up to `Active`: rebuild the outbound chain for the new mode
+        ///   and clear self-mute. This is what un-sticks a client that was left
+        ///   Muted by a previous PTT selection.
+        ///
+        /// A no-op when voice is Inactive (not connected / not enabled) - the
+        /// next `enable_voice` already honours the mode.
+        pub async fn reconcile_voice_for_mode(&self) -> Result<(), String> {
+            let (voice_state, mode) = {
+                let __session = self.inner.snapshot();
+                let state = __session.lock().map_err(|e| e.to_string())?;
+                (state.audio.voice_state, state.audio.settings.transmit_mode())
+            };
+
+            if voice_state == VoiceState::Inactive {
+                return Ok(());
+            }
+
+            match mode {
+                TransmitMode::PushToTalk => {
+                    // Close the mic (idempotent if already Muted).
+                    info!("reconcile_voice_for_mode: -> push-to-talk, closing mic");
+                    self.push_to_talk_end().await
+                }
+                TransmitMode::VoiceActivity | TransmitMode::Continuous => {
+                    // Open the mic in the new mode. push_to_talk_start rebuilds
+                    // the outbound pipeline (via start_outbound_pipeline) with
+                    // the freshly-stored settings, so the gate is correctly
+                    // present (VOX) or absent (Continuous), and clears
+                    // self-mute. Idempotent-ish: from Active it is a no-op, so
+                    // force a rebuild by muting first only when needed.
+                    info!("reconcile_voice_for_mode: -> {mode:?}, opening mic");
+                    if voice_state == VoiceState::Active {
+                        // Already open: rebuild the chain for the new mode.
+                        self.restart_outbound()
+                    } else {
+                        // Was Muted (e.g. coming from PTT): open it.
+                        self.push_to_talk_start().await
+                    }
+                }
+            }
         }
 
 
@@ -1097,13 +1220,39 @@ mod voice_pipeline {
         // (the radio Station case); PushToTalk gates by self-mute at the
         // protocol level, not by a filter. In both of those the gate must be
         // absent, or the far end would lose audio the operator expects to send.
+        //
+        // The gate runs AFTER the AGC so its threshold matches what the
+        // calibrator measured (also post-AGC) - keep the two in the same
+        // signal domain or a calibrated threshold is meaningless.
         if settings.transmit_mode() == TransmitMode::VoiceActivity {
+            // Floor the open threshold so a stale/over-eager auto-calibration -
+            // which can pin `vad_threshold` near its ~-50 dBFS minimum - cannot
+            // leave the gate effectively always-open on a quiet room's
+            // AGC-amplified noise floor. -40 dBFS (~0.01 linear) sits well below
+            // a normal speaking level but above residual ambient. This is the
+            // main guard against "VOX stuck open in a quiet room".
+            const MIN_OPEN_THRESHOLD: f32 = 0.01;
+            let open = settings.vad_threshold.max(MIN_OPEN_THRESHOLD);
             filters.push(Box::new(NoiseGate::new(NoiseGateConfig {
-                open_threshold: settings.vad_threshold,
-                close_threshold: settings.vad_threshold * settings.noise_gate_close_ratio,
+                open_threshold: open,
+                close_threshold: open * settings.noise_gate_close_ratio,
                 hold_frames: settings.hold_frames,
                 ..NoiseGateConfig::default()
             })));
+        }
+        filters
+    }
+
+    /// Outbound filter chain for a STEREO Station. Only channel-safe filters are
+    /// included: the AGC applies one linked gain per interleaved sample (safe for
+    /// stereo), while the spectral denoiser, low-pass, and noise gate all assume a
+    /// mono stream and would corrupt interleaved L/R — so they are omitted. A
+    /// Station is Continuous (no gate) and its audio is receiver output, not a
+    /// voice mic, so denoising/gating are undesirable here anyway.
+    pub(super) fn build_outbound_filters_stereo(settings: &AudioSettings) -> FilterChain {
+        let mut filters = FilterChain::new();
+        if let Some(agc) = build_agc_filter(settings) {
+            filters.push(Box::new(agc));
         }
         filters
     }

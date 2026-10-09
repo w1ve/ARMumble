@@ -400,6 +400,13 @@ export const UserListItem = memo(function UserListItem({
         className={styles.userName}
         style={roleColor ? { color: roleColor } : undefined}
       >{user.name}</span>
+      {isTalking && (
+        <span
+          className={styles.onAirDot}
+          title={t("userListItem.onAirTitle")}
+          aria-label={t("userListItem.onAirTitle")}
+        />
+      )}
       {!isSelf && volumePct !== 100 && (
         <span className={styles.volumeBadge} title={`Volume: ${volumePct}%`}>
           <VolumeIcon width={12} height={12} />

@@ -66,6 +66,7 @@ pub(super) async fn outbound_audio_loop(
     handle: ClientHandle,
     app: Option<tauri::AppHandle>,
     own_session: Option<u32>,
+    outbound_target: Arc<std::sync::atomic::AtomicU32>,
 ) {
     debug!("outbound_audio_loop: task started");
 
@@ -79,7 +80,7 @@ pub(super) async fn outbound_audio_loop(
     // Bounded channel: 50 packets ~ 1 second of audio at 20ms/frame.
     let (tx, rx) = tokio::sync::mpsc::channel::<AudioPacketOut>(50);
 
-    let _outbound_send_task = tokio::spawn(outbound_send_task(rx, handle));
+    let _outbound_send_task = tokio::spawn(outbound_send_task(rx, handle, outbound_target));
 
     // Brief yield so the cpal callback can deliver an initial batch of
     // samples, then drain any that accumulated during startup.
@@ -238,12 +239,17 @@ fn process_outbound_tick(
 async fn outbound_send_task(
     mut rx: tokio::sync::mpsc::Receiver<AudioPacketOut>,
     handle: ClientHandle,
+    outbound_target: Arc<std::sync::atomic::AtomicU32>,
 ) {
+    use std::sync::atomic::Ordering;
     let mut sent: u64 = 0;
     let mut dropped: u64 = 0;
     while let Some(pkt) = rx.recv().await {
+        // Per-packet VoiceTarget id: 0 = normal (own channel), 1-30 = a
+        // registered whisper target. The Whisper hotkey flips this while held.
+        let target = outbound_target.load(Ordering::Relaxed);
         let audio = mumble_udp::Audio {
-            header: Some(mumble_udp::audio::Header::Target(0)),
+            header: Some(mumble_udp::audio::Header::Target(target)),
             sender_session: 0,
             frame_number: pkt.sequence,
             opus_data: pkt.data,

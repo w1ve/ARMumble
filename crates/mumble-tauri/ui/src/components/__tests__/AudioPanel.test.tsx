@@ -89,6 +89,7 @@ function renderPanel(
       selectedServer={null}
       onSelectServer={vi.fn()}
       role={role}
+      serverKey="__default__"
     />,
   );
   return { onChange, settings, ...result };

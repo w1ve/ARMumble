@@ -164,7 +164,7 @@ pub async fn run<H: EventHandler>(
     let version_msg = ControlMessage::Version(mumble_tcp::Version {
         version_v1: Some(ver.encode_v1()),
         version_v2: Some(ver.encode_v2()),
-        release: Some(format!("FancyMumble {}", env!("CARGO_PKG_VERSION"))),
+        release: Some(format!("RemoteRadio Mumble {}", env!("CARGO_PKG_VERSION"))),
         os: Some(std::env::consts::OS.into()),
         os_version: None,
         // Announce Fancy Mumble extension support, version derived from Cargo.toml.

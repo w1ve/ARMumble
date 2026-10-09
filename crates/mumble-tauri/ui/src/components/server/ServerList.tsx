@@ -1,4 +1,4 @@
-import { CloseIcon, PauseIcon, SearchIcon, UserFilledIcon } from "../../icons";
+import { CloseIcon, PauseIcon, SearchIcon, UserFilledIcon, RadioIcon, CircleDotIcon } from "../../icons";
 import { useMemo, useRef, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SavedServer, ServerPingResult } from "../../types";
@@ -81,6 +81,24 @@ function UsersInfo({ ping }: Readonly<{ ping?: ServerPingResult }>) {
 
 const LONG_PRESS_MS = 500;
 const LONG_PRESS_MOVE_THRESHOLD = 10;
+
+/** Small inline badge showing the saved connection role: an antenna for a
+ *  station (this PC is at the radio) or a dot-circle for an operator (remote
+ *  control). Defaults to operator when unset, matching the connect flow. */
+function RoleBadge({ role }: Readonly<{ role?: "operator" | "station" }>) {
+  const { t } = useTranslation("server");
+  const isStation = role === "station";
+  const label = isStation ? t("list.roleStation") : t("list.roleOperator");
+  return (
+    <span className={styles.roleBadge} title={label} aria-label={label}>
+      {isStation ? (
+        <RadioIcon width={12} height={12} />
+      ) : (
+        <CircleDotIcon width={12} height={12} />
+      )}
+    </span>
+  );
+}
 
 function ServerAvatar({
   server,
@@ -229,7 +247,10 @@ function ServerCardItem({
         />
 
         <div className={styles.info}>
-          <div className={styles.label}>{s.label || s.host}</div>
+          <div className={styles.label}>
+            <RoleBadge role={s.role} />
+            {s.label || s.host}
+          </div>
           <div className={styles.meta}>
             {isThisConnecting ? (connectingMessage ?? t("list.connecting")) : s.username}
           </div>

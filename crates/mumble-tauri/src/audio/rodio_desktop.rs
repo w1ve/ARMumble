@@ -54,6 +54,9 @@ pub struct RodioCapture {
     volume: Arc<AtomicU32>,
     pending: Vec<f32>,
     device_name: Option<String>,
+    /// When true, capture produces interleaved STEREO frames (L R L R) — the
+    /// radio Station case (dual receivers on L/R). Mono otherwise.
+    stereo: bool,
 }
 
 impl RodioCapture {
@@ -62,8 +65,27 @@ impl RodioCapture {
         frame_size: usize,
         volume: Arc<AtomicU32>,
     ) -> Result<Self> {
+        Self::new_with_channels(device_name, frame_size, volume, false)
+    }
+
+    pub fn new_with_channels(
+        device_name: Option<&str>,
+        frame_size: usize,
+        volume: Arc<AtomicU32>,
+        stereo: bool,
+    ) -> Result<Self> {
+        // The format is DETERMINISTIC from the request: a Station always
+        // produces interleaved stereo frames. If the hardware opens mono, the
+        // capture thread duplicates the single channel into L and R (dual-mono),
+        // so the frame is still valid stereo and matches the stereo encoder.
+        // This avoids a second device open (a probe) that was leaving the device
+        // busy and killing capture entirely.
         Ok(Self {
-            format: AudioFormat::MONO_48KHZ_F32,
+            format: if stereo {
+                AudioFormat::STEREO_48KHZ_F32
+            } else {
+                AudioFormat::MONO_48KHZ_F32
+            },
             frame_size,
             sequence: 0,
             sample_rx: None,
@@ -71,6 +93,7 @@ impl RodioCapture {
             volume,
             pending: Vec::with_capacity(frame_size * 2),
             device_name: device_name.map(str::to_owned),
+            stereo,
         })
     }
 
@@ -105,13 +128,15 @@ impl AudioCapture for RodioCapture {
             }
         }
 
-        if self.pending.len() < self.frame_size {
+        // One frame is frame_size samples PER CHANNEL; stereo interleaves two.
+        let frame_total = self.frame_size * if self.stereo { 2 } else { 1 };
+        if self.pending.len() < frame_total {
             return Err(Error::NotEnoughSamples);
         }
 
         let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
-        let mut data = Vec::with_capacity(self.frame_size * 4);
-        for s in self.pending.drain(..self.frame_size) {
+        let mut data = Vec::with_capacity(frame_total * 4);
+        for s in self.pending.drain(..frame_total) {
             data.extend_from_slice(&(s * vol).to_ne_bytes());
         }
         self.sequence += 1;
@@ -147,10 +172,11 @@ impl AudioCapture for RodioCapture {
                 .default_device()
                 .map_err(|e| Error::InvalidState(format!("No input device: {e}")))?
         };
+        let want_channels = if self.stereo { STEREO_CHANNELS } else { MONO_CHANNELS };
         let builder = with_device
             .default_config()
             .map_err(|e| Error::InvalidState(format!("Input config: {e}")))?
-            .prefer_channel_counts([MONO_CHANNELS])
+            .prefer_channel_counts([want_channels])
             .prefer_sample_rates([SAMPLE_RATE_48K]);
 
         let mic = builder
@@ -175,13 +201,21 @@ impl AudioCapture for RodioCapture {
         }
 
         let mic_channels = config.channel_count.get() as usize;
+        // The output format is fixed at construction (self.stereo). If a Station
+        // asked for stereo but the device opened mono, the capture thread
+        // duplicates the single channel into L and R (dual-mono) so the emitted
+        // frame is still valid interleaved stereo and matches the stereo encoder.
+        let emit_stereo = self.stereo;
+        debug!(
+            "rodio capture: hw_channels={mic_channels}, emit_stereo={emit_stereo}"
+        );
 
         // ~1 s of audio in CAPTURE_CHUNK-sized batches.
         let (tx, rx) = mpsc::sync_channel::<Vec<f32>>(48_000 / CAPTURE_CHUNK);
 
         let handle = thread::Builder::new()
             .name("rodio-mic-reader".into())
-            .spawn(move || capture_thread(mic, mic_channels, device_rate, tx))
+            .spawn(move || capture_thread(mic, mic_channels, device_rate, emit_stereo, tx))
             .map_err(|e| Error::InvalidState(format!("Spawn mic thread: {e}")))?;
 
         self.sample_rx = Some(rx);
@@ -208,21 +242,28 @@ fn capture_thread(
     mut mic: rodio::microphone::Microphone,
     channels: usize,
     device_rate: u32,
+    emit_stereo: bool,
     tx: SyncSender<Vec<f32>>,
 ) {
-    // Convert the mono device stream to 48 kHz. For a 48 kHz device this is a
-    // pass-through (`is_identity`), so the common case costs nothing. The
-    // resampler is streaming: it keeps its interpolation phase across the small
-    // batches we feed it, so there is no click where one batch meets the next.
+    if emit_stereo {
+        capture_thread_stereo(&mut mic, channels, device_rate, &tx);
+    } else {
+        capture_thread_mono(&mut mic, channels, device_rate, &tx);
+    }
+}
+
+/// Mono capture: downmix all hardware channels to mono, resample to 48 kHz, and
+/// dispatch in CAPTURE_CHUNK batches.
+fn capture_thread_mono(
+    mic: &mut rodio::microphone::Microphone,
+    channels: usize,
+    device_rate: u32,
+    tx: &SyncSender<Vec<f32>>,
+) {
     let mut resampler = LinearResampler::new(device_rate, SAMPLE_RATE_48K.get());
-    // Downmixed mono samples at the device rate, fed to the resampler in small
-    // batches so phase advances smoothly rather than in one big jump.
     let mut mono_in: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK);
-    // Resampled 48 kHz samples awaiting dispatch in CAPTURE_CHUNK batches.
     let mut out_48k: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK * 2);
 
-    // Feed `mono_in` through the resampler into `out_48k`, then dispatch every
-    // full CAPTURE_CHUNK. Returns false if the receiver has gone away.
     fn drain(
         resampler: &mut LinearResampler,
         mono_in: &mut Vec<f32>,
@@ -246,10 +287,7 @@ fn capture_thread(
             match mic.next() {
                 Some(s) => sum += s,
                 None => {
-                    // Stream ended: push any remaining input through the
-                    // resampler and flush whatever full batches result, so the
-                    // tail is not lost.
-                    let _ = drain(&mut resampler, &mut mono_in, &mut out_48k, &tx);
+                    let _ = drain(&mut resampler, &mut mono_in, &mut out_48k, tx);
                     if !out_48k.is_empty() {
                         let _ = tx.send(std::mem::take(&mut out_48k));
                     }
@@ -258,8 +296,105 @@ fn capture_thread(
             }
         }
         mono_in.push(sum / channels as f32);
-        if mono_in.len() >= CAPTURE_CHUNK
-            && !drain(&mut resampler, &mut mono_in, &mut out_48k, &tx)
+        if mono_in.len() >= CAPTURE_CHUNK && !drain(&mut resampler, &mut mono_in, &mut out_48k, tx) {
+            return;
+        }
+    }
+}
+
+/// Stereo capture: take hardware channels 0 and 1 as L and R, resample each
+/// independently (so they never bleed into each other at non-48k rates), and
+/// dispatch interleaved L R batches. The batch length is CAPTURE_CHUNK*2 so a
+/// batch is always a whole number of stereo sample pairs.
+fn capture_thread_stereo(
+    mic: &mut rodio::microphone::Microphone,
+    channels: usize,
+    device_rate: u32,
+    tx: &SyncSender<Vec<f32>>,
+) {
+    let mut rs_l = LinearResampler::new(device_rate, SAMPLE_RATE_48K.get());
+    let mut rs_r = LinearResampler::new(device_rate, SAMPLE_RATE_48K.get());
+    let mut lin: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK);
+    let mut rin: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK);
+    let mut out_l: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK * 2);
+    let mut out_r: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK * 2);
+    // Interleaved L R awaiting dispatch; drained in CAPTURE_CHUNK*2 batches.
+    let mut inter: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK * 4);
+    const STEREO_BATCH: usize = CAPTURE_CHUNK * 2;
+
+    fn drain(
+        rs_l: &mut LinearResampler,
+        rs_r: &mut LinearResampler,
+        lin: &mut Vec<f32>,
+        rin: &mut Vec<f32>,
+        out_l: &mut Vec<f32>,
+        out_r: &mut Vec<f32>,
+        inter: &mut Vec<f32>,
+        tx: &SyncSender<Vec<f32>>,
+    ) -> bool {
+        out_l.clear();
+        out_r.clear();
+        rs_l.process(lin, out_l);
+        rs_r.process(rin, out_r);
+        lin.clear();
+        rin.clear();
+        let n = out_l.len().min(out_r.len());
+        for i in 0..n {
+            inter.push(out_l[i]);
+            inter.push(out_r[i]);
+        }
+        while inter.len() >= STEREO_BATCH {
+            let batch: Vec<f32> = inter.drain(..STEREO_BATCH).collect();
+            if tx.send(batch).is_err() {
+                return false;
+            }
+        }
+        true
+    }
+
+    loop {
+        // Read one hardware frame (one sample per channel). Use channels 0/1 as
+        // L/R; ignore any extra channels. For a MONO device (channels==1),
+        // duplicate the single sample into both L and R (dual-mono) so the
+        // emitted stereo frame is always valid.
+        let mut l = 0.0f32;
+        let mut r = 0.0f32;
+        let mut got_r = false;
+        let mut ended = false;
+        for c in 0..channels {
+            match mic.next() {
+                Some(s) => {
+                    if c == 0 {
+                        l = s;
+                    } else if c == 1 {
+                        r = s;
+                        got_r = true;
+                    }
+                }
+                None => {
+                    ended = true;
+                    break;
+                }
+            }
+        }
+        if !got_r {
+            r = l; // mono device: dual-mono
+        }
+        if ended {
+            let _ = drain(
+                &mut rs_l, &mut rs_r, &mut lin, &mut rin, &mut out_l, &mut out_r, &mut inter, tx,
+            );
+            if !inter.is_empty() {
+                let _ = tx.send(std::mem::take(&mut inter));
+            }
+            return;
+        }
+        lin.push(l);
+        rin.push(r);
+        if lin.len() >= CAPTURE_CHUNK
+            && !drain(
+                &mut rs_l, &mut rs_r, &mut lin, &mut rin, &mut out_l, &mut out_r, &mut inter, tx,
+            )
         {
             return;
         }
@@ -694,6 +829,17 @@ impl super::AudioDeviceFactory for RodioAudioFactory {
         volume: Arc<AtomicU32>,
     ) -> std::result::Result<Box<dyn AudioCapture>, String> {
         RodioCapture::new(device_name, frame_size, volume)
+            .map(|c| Box::new(c) as _)
+            .map_err(|e| format!("Rodio capture init: {e}"))
+    }
+
+    fn create_capture_channels(
+        device_name: Option<&str>,
+        frame_size: usize,
+        volume: Arc<AtomicU32>,
+        stereo: bool,
+    ) -> std::result::Result<Box<dyn AudioCapture>, String> {
+        RodioCapture::new_with_channels(device_name, frame_size, volume, stereo)
             .map(|c| Box::new(c) as _)
             .map_err(|e| format!("Rodio capture init: {e}"))
     }

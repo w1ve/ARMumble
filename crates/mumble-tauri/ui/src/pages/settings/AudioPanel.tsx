@@ -143,6 +143,7 @@ export function AudioPanel({
   selectedServer,
   onSelectServer,
   role,
+  serverKey,
 }: Readonly<{
   devices: AudioDevice[];
   outputDevices: AudioDevice[];
@@ -159,6 +160,9 @@ export function AudioPanel({
   onSelectServer: (id: ServerId | null) => void;
   /** Role of the server being edited; a Station is offered Continuous only. */
   role: ClientRole;
+  /** Persistence key ("host:port", or the default bucket) for the edited
+   *  server, so the PTT panel can save its config to disk. */
+  serverKey: string;
 }>) {
   const { t } = useTranslation("settings");
   const tStr = t as (key: string) => string;
@@ -192,6 +196,17 @@ export function AudioPanel({
         if (Array.isArray(algos)) setAvailableAlgorithms(algos);
       })
       .catch(() => { /* keep the conservative default */ });
+  }, []);
+
+  // Stereo on-air test: transmit the embedded stereo tone to the other side.
+  // The backend emits `stereo-test-state` (true while playing, false when done
+  // or stopped) so the button can toggle Play <-> Stop.
+  const [stereoTesting, setStereoTesting] = useState(false);
+  useEffect(() => {
+    const unlisten = listen<boolean>("stereo-test-state", (e) => {
+      setStereoTesting(e.payload);
+    });
+    return () => { unlisten.then((f) => f()); };
   }, []);
 
   // The voice-gate calibration UI applies only in Voice-Activation mode.
@@ -326,6 +341,24 @@ export function AudioPanel({
               onChange={(v) => onChange({ right_volume: v })}
               format={(v) => `${Math.round(v * 100)}%`}
             />
+          </>
+        )}
+        {/* The stereo test TRANSMITS stereo, which only a Station does — an
+            operator sends mono — so the button is shown only in Station mode. */}
+        {isDesktopPlatform() && role === "station" && (
+          <>
+            <p className={styles.fieldHint}>{t("audio.stereoTestHint")}</p>
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              onClick={() =>
+                invoke(stereoTesting ? "stop_stereo_test" : "play_stereo_test").catch((e) =>
+                  console.error("stereo test:", e),
+                )
+              }
+            >
+              {stereoTesting ? t("audio.stereoTestStop") : t("audio.stereoTestPlay")}
+            </button>
           </>
         )}
       </section>
@@ -482,7 +515,12 @@ export function AudioPanel({
 
       {/* -- Rig PTT (RS-232) -------------------------------- */}
       {isExpert && isDesktopPlatform() && (
-        <PttPanel serverId={selectedServer} role={role} />
+        <PttPanel
+          serverId={selectedServer}
+          serverKey={serverKey}
+          role={role}
+          transmitMode={effectiveMode}
+        />
       )}
 
       {/* -- Audio Statistics -------------------------------- */}

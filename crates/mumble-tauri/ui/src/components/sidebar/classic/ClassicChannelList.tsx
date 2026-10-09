@@ -1,4 +1,4 @@
-import { ChevronRightIcon, ListenBadgeIcon, LockIcon } from "../../../icons";
+import { ChevronRightIcon, ListenBadgeIcon, LockIcon, MegaphoneIcon } from "../../../icons";
 /**
  * ClassicChannelList - the traditional Mumble hierarchical channel tree.
  *
@@ -16,6 +16,7 @@ import { colorFor } from "../user/UserListItem";
 import { useIsStation, StationGlyph } from "../../../stationIdentity";
 import { useUserAvatar } from "../../../lazyBlobs";
 import { PchatBadge } from "../PchatBadge";
+import { useAppStore } from "../../../store";
 import { useChannelDropTarget } from "../../../utils/userMoveDnd";
 import { PERM_ENTER } from "../../../utils/permissions";
 import {
@@ -113,6 +114,30 @@ function StackedAvatars({ users }: Readonly<{ users: UserEntry[] }>) {
         </div>
       )}
     </div>
+  );
+}
+
+// --- Whisper target badge (megaphone) ----------------------------
+// Shows on the channel designated as the operator's whisper target: grey when
+// idle, pulsing green while the whisper hotkey is held. Mirrors the flat view.
+function WhisperBadge({ channelId }: Readonly<{ channelId: number }>) {
+  const { t } = useTranslation("sidebar");
+  const whisperTargetChannel = useAppStore((s) => s.whisperTargetChannel);
+  const whisperActive = useAppStore((s) => s.whisperActive);
+  if (whisperTargetChannel !== channelId) return null;
+  return (
+    <span
+      className={`${styles.whisperBadge ?? ""} ${whisperActive ? (styles.whisperBadgeActive ?? "") : ""}`.trim()}
+      title={whisperActive ? t("channelList.whisperingHere") : t("channelList.whisperTarget")}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        marginLeft: 4,
+        color: whisperActive ? "var(--color-success, #22c55e)" : "var(--color-text-muted, #9ca3af)",
+      }}
+    >
+      <MegaphoneIcon width={12} height={12} />
+    </span>
   );
 }
 
@@ -274,6 +299,7 @@ function ClassicChannelListImpl({
                   </span>
                 )}
                 <PchatBadge protocol={channel.pchat_protocol} />
+                <WhisperBadge channelId={channel.id} />
               </span>
               <span className={styles.channelMeta}>
                 {t("channelList.member", { count: totalUsers })}
@@ -331,6 +357,7 @@ function ClassicChannelListImpl({
               </span>
             )}
             <PchatBadge protocol={channel.pchat_protocol} />
+            <WhisperBadge channelId={channel.id} />
           </span>
         </div>
         {unread > 0 && (

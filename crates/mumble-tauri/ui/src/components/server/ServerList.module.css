@@ -111,6 +111,18 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Role indicator (antenna = station, dot-circle = operator) shown before the
+   server label. Muted so it reads as metadata, not an action. */
+.roleBadge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-muted, #9ca3af);
 }
 
 .meta {
@@ -125,7 +137,9 @@
 .users {
   position: absolute;
   top: 50%;
-  right: 10px;
+  /* Sit to the LEFT of the always-visible action buttons (~26px wide at right:6px)
+     so the two no longer overlap. */
+  right: 34px;
   transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
@@ -154,7 +168,9 @@
   align-items: center;
   justify-content: center;
   gap: 2px;
-  opacity: 0;
+  /* Always visible so the edit/delete/favorite actions are discoverable
+     without hovering; brightens to full opacity on hover as a cue. */
+  opacity: 0.55;
   transition: opacity 0.15s;
 }
 
@@ -207,7 +223,8 @@
 .favoriteStarBadge {
   position: absolute;
   top: 50%;
-  right: 10px;
+  /* Left of the always-visible action buttons, matching .users. */
+  right: 34px;
   transform: translateY(-50%);
   background: transparent;
   border: none;

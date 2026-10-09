@@ -64,7 +64,7 @@ import { applyReadStates, clearReadReceipts } from "./components/chat/readreceip
 import { useOnboardingStore } from "./components/onboarding/onboardingStore";
 import type { OnboardingConfigEvent, OnboardingResponseEvent } from "./types";
 import { offloadManager } from "./messageOffload";
-import { getSilencedChannels, setSilencedChannel, getUserVolumes, saveUserVolume, getMutedPushChannels, setMutedPushChannel, getPreferences, updatePreferences } from "./preferencesStorage";
+import { getSilencedChannels, setSilencedChannel, getUserVolumes, saveUserVolume, getMutedPushChannels, setMutedPushChannel, updatePreferences, getPreferences, getSavedPttConfig, getSavedAudioSettings, getSavedVoiceMuted, saveVoiceMuted } from "./preferencesStorage";
 import {
   friendKeyFor as dmFriendKeyFor,
   isDmPersistenceEnabled,
@@ -423,6 +423,13 @@ export interface AppState {
   inCall: boolean;
   /** Session IDs of users currently transmitting audio (talking). */
   talkingSessions: Set<number>;
+  /** Channel id the operator Whisper hotkey targets (null = whisper not
+   *  configured for the active server). The channel list shows a megaphone
+   *  icon on this channel only. */
+  whisperTargetChannel: number | null;
+  /** True while the Whisper hotkey is held and the mic is redirected to the
+   *  target channel. Drives the megaphone icon green. */
+  whisperActive: boolean;
 
   // -- DM state --------------------------------------------------
   /** Session ID of the user whose DM chat is currently viewed. */
@@ -887,6 +894,8 @@ const INITIAL: Pick<
   | "udpActive"
   | "inCall"
   | "talkingSessions"
+  | "whisperTargetChannel"
+  | "whisperActive"
   | "selectedDmUser"
   | "dmMessages"
   | "dmUnreadCounts"
@@ -979,6 +988,8 @@ const INITIAL: Pick<
   udpActive: false,
   inCall: false,
   talkingSessions: new Set<number>(),
+  whisperTargetChannel: null,
+  whisperActive: false,
   selectedDmUser: null,
   dmMessages: [],
   dmUnreadCounts: {},
@@ -1604,8 +1615,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   enableVoice: async () => {
     try {
       await invoke("enable_voice");
-      set({ voiceState: "active", inCall: true });
-      updatePreferences({ voiceOnReconnect: true }).catch(() => {});
+      // The backend decides the landing state: Active for VOX/Continuous, but
+      // Muted for Push-to-Talk (mic stays off until the key is held). Read it
+      // back rather than assuming Active, so PTT doesn't show a live mic.
+      let vs: VoiceState = "active";
+      try {
+        vs = await invoke<VoiceState>("get_voice_state");
+      } catch {
+        /* fall back to optimistic active */
+      }
+      set({ voiceState: vs, inCall: vs !== "inactive" });
+      if (!isRestoringVoice) {
+        const key = activeServerKey();
+        if (key) saveVoiceMuted(key, vs === "muted").catch(() => {});
+      }
+      updatePreferences({ voiceOnReconnect: true, voiceMutedOnReconnect: vs === "muted" }).catch(() => {});
     } catch (e) {
       console.error("enable_voice error:", e);
     }
@@ -1624,11 +1648,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   toggleMute: async () => {
     // Capture state BEFORE the await so pref write is deterministic and
     // ordered relative to the user action, not the async Rust IPC delivery.
-    // "active" ? will be muted; "muted" or "inactive" ? will be active.
+    // "active" -> will be muted; "muted" or "inactive" -> will be active.
     const willBeMuted = useAppStore.getState().voiceState === "active";
     try {
       await invoke("toggle_mute");
       if (!isRestoringVoice) {
+        // Persist per-server (authoritative) + legacy global flag.
+        const key = activeServerKey();
+        if (key) saveVoiceMuted(key, willBeMuted).catch(() => {});
         updatePreferences({ voiceOnReconnect: true, voiceMutedOnReconnect: willBeMuted }).catch(() => {});
       }
     } catch (e) {
@@ -2521,16 +2548,32 @@ function isLocalStation(): boolean {
  * acted on only by a Station. Call on connect/channel-join. `host`/`port`
  * identify the active server so the saved role can be looked up.
  */
+/**
+ * Resolve the connection role for a server. A saved server's own `role` wins;
+ * otherwise (e.g. a built-in Remote Radio server, which is not persisted as a
+ * saved entry) fall back to the per-host `builtinRoles` choice, then the user's
+ * `defaultRole`, then "operator". This is the single source of truth for role
+ * resolution so built-in and saved connections behave identically.
+ */
+export async function resolveRoleForServer(
+  host: string,
+  port: number,
+): Promise<import("./types").ClientRole> {
+  const key = `${host}:${port}`;
+  const servers = await getSavedServers();
+  const match = servers.find((s) => `${s.host}:${s.port}` === key);
+  if (match?.role) return match.role;
+  const prefs = await getPreferences();
+  return prefs.builtinRoles?.[host] ?? prefs.defaultRole ?? "operator";
+}
+
 export async function announceLocalRole(
   host: string,
   port: number,
   channelId: number | null,
 ): Promise<void> {
   try {
-    const servers = await getSavedServers();
-    const key = `${host}:${port}`;
-    const match = servers.find((s) => `${s.host}:${s.port}` === key);
-    const role: import("./types").ClientRole = match?.role ?? "operator";
+    const role = await resolveRoleForServer(host, port);
     localIsStationFlag = role === "station";
     await sendPluginMessage(
       RR_PLUGIN_NAME,
@@ -2542,6 +2585,176 @@ export async function announceLocalRole(
   } catch (e) {
     console.warn("[store] announceLocalRole failed:", e);
   }
+}
+
+/**
+ * On connect, push this server's persisted rig-PTT config to the backend so the
+ * serial controller starts automatically. The backend's `set_ptt_config` calls
+ * `restart_ptt` for the active session, which opens the port and spawns the
+ * station/operator worker. The config's `role` is forced to the saved server
+ * role so the backend opens the correct line direction. No-op (disabled config)
+ * if the user never set up PTT for this server.
+ */
+async function applySavedPttConfigOnConnect(host: string, port: number): Promise<void> {
+  try {
+    const key = `${host}:${port}`;
+    const saved = await getSavedPttConfig(key);
+    if (!saved) return; // nothing configured for this server
+
+    const role = await resolveRoleForServer(host, port);
+    const config = { ...saved, role };
+
+    // Push config + (re)start the serial controller only when serial PTT is
+    // actually enabled; the whisper hotkey below is independent of that.
+    if (saved.enabled) {
+      await invoke("set_ptt_config", { config, serverId: undefined });
+      console.info("[store] applied saved PTT config on connect", { key, role, port: saved.port });
+    } else {
+      // Still store the config so the backend knows the whisper target channel.
+      await invoke("set_ptt_config", { config, serverId: undefined }).catch(() => {});
+    }
+
+    const shortcuts = await import("./pages/settings/shortcutHelpers");
+
+    // Register the operator software-PTT hotkey app-wide so it works anywhere,
+    // not only while the Voice settings panel (which also registers it) is
+    // open. This is INDEPENDENT of serial PTT (`saved.enabled`): the hotkey
+    // opens the Mumble mic and keys the remote station via the `operator_ptt`
+    // command whether or not a serial rig controller is in use. Requiring
+    // `saved.enabled` here was a bug that left keyboard-only operators with a
+    // dead PTT hotkey.
+    if (role === "operator" && saved.ptt_hotkey) {
+      await shortcuts.applyOperatorPttShortcut(saved.ptt_hotkey);
+      activeOperatorHotkey = saved.ptt_hotkey;
+      console.info("[store] registered operator PTT hotkey on connect", { hotkey: saved.ptt_hotkey });
+    }
+
+    // Register the operator Whisper hotkey app-wide (independent of serial PTT).
+    if (role === "operator" && saved.whisper_hotkey && saved.whisper_target_channel != null) {
+      await shortcuts.applyWhisperShortcut(saved.whisper_hotkey);
+      activeWhisperHotkey = saved.whisper_hotkey;
+      useAppStore.setState({ whisperTargetChannel: saved.whisper_target_channel });
+      console.info("[store] registered whisper hotkey on connect", {
+        hotkey: saved.whisper_hotkey,
+        target: saved.whisper_target_channel,
+      });
+    }
+  } catch (e) {
+    console.warn("[store] applySavedPttConfigOnConnect failed:", e);
+  }
+}
+
+/** The operator PTT hotkey currently registered app-wide (so it can be cleared
+ *  on disconnect). PttPanel manages its own (de)registration while open; this
+ *  covers the connect-time registration so PTT works without visiting Settings. */
+let activeOperatorHotkey: string | null = null;
+/** The whisper hotkey currently registered app-wide (cleared on disconnect). */
+let activeWhisperHotkey: string | null = null;
+
+/** Clear any app-wide operator PTT + whisper hotkeys registered on connect. */
+async function clearOperatorHotkeyOnDisconnect(): Promise<void> {
+  const { clearGlobalShortcut } = await import("./pages/settings/shortcutHelpers");
+  if (activeOperatorHotkey) {
+    const hk = activeOperatorHotkey;
+    activeOperatorHotkey = null;
+    try { await clearGlobalShortcut(hk); } catch (e) { console.warn("[store] clear PTT hotkey:", e); }
+  }
+  if (activeWhisperHotkey) {
+    const hk = activeWhisperHotkey;
+    activeWhisperHotkey = null;
+    try { await clearGlobalShortcut(hk); } catch (e) { console.warn("[store] clear whisper hotkey:", e); }
+  }
+  useAppStore.setState({ whisperTargetChannel: null, whisperActive: false });
+}
+
+/**
+ * On connect, push this server's persisted audio settings (crucially the
+ * transmit mode: VOX / Continuous / PTT) to the backend active session, so the
+ * backend knows the correct mode BEFORE voice is enabled. Without this the
+ * backend session is seeded from the shared default profile and only learns a
+ * server's real mode when its Settings panel is opened - so a fresh launch
+ * could come up in the wrong mode. Falls back to the default profile when the
+ * server has no saved settings of its own.
+ */
+async function applySavedAudioSettingsOnConnect(host: string, port: number): Promise<void> {
+  try {
+    const key = `${host}:${port}`;
+    const saved = await getSavedAudioSettings(key);
+    if (!saved) return;
+    await invoke("set_audio_settings", { settings: saved, serverId: undefined });
+  } catch (e) {
+    console.warn("[store] applySavedAudioSettingsOnConnect failed:", e);
+  }
+}
+
+/**
+ * Decide and apply the initial voice state for a freshly-connected server,
+ * per the Remote.Radio spec:
+ *
+ * - **Push-to-Talk**: mic MUTED (opens only while the PTT key/footswitch is
+ *   held). We never auto-open a PTT mic.
+ * - **VOX / Continuous (operator)**: restore the per-server saved mute state;
+ *   if none was ever saved, come up LIVE (unmuted).
+ * - **Station** (always Continuous): first run (no saved state) comes up
+ *   MUTED; thereafter restore the saved state.
+ *
+ * The resulting mute state is persisted per-server so the next run restores it.
+ * Returns the VoiceState the backend was driven to.
+ */
+async function applyInitialVoiceState(host: string, port: number): Promise<void> {
+  try {
+    const key = `${host}:${port}`;
+    const role = await resolveRoleForServer(host, port);
+
+    // The backend already has this server's transmit mode (pushed just above).
+    const settings = await invoke<import("./types").AudioSettings>("get_audio_settings", {
+      serverId: undefined,
+    });
+    const mode =
+      settings.transmit_mode === "voice_activity" && settings.push_to_talk
+        ? "push_to_talk"
+        : settings.transmit_mode;
+
+    const savedMuted = await getSavedVoiceMuted(key);
+
+    // Resolve the desired mute per the spec.
+    let muted: boolean;
+    if (mode === "push_to_talk") {
+      muted = true; // PTT: never auto-live
+    } else if (savedMuted !== null) {
+      muted = savedMuted; // VOX/Continuous: honour saved state
+    } else {
+      // No saved state: station first-run is muted, operator comes up live.
+      muted = role === "station";
+    }
+
+    if (muted) {
+      await invoke("enable_voice_muted");
+      useAppStore.setState({ voiceState: "muted", inCall: true });
+    } else {
+      await invoke("enable_voice");
+      // enable_voice is mode-aware (PTT would land muted), but here mode is
+      // VOX/Continuous so it lands Active. Sync from the backend to be safe.
+      const vs = await invoke<VoiceState>("get_voice_state");
+      useAppStore.setState({ voiceState: vs, inCall: vs !== "inactive" });
+      muted = vs === "muted";
+    }
+
+    // Persist the resolved state and keep the legacy global flags roughly in
+    // step for any code still reading them.
+    await saveVoiceMuted(key, muted);
+    updatePreferences({ voiceOnReconnect: true, voiceMutedOnReconnect: muted }).catch(() => {});
+    console.info("[store] applied initial voice state", { key, role, mode, muted });
+  } catch (e) {
+    console.warn("[store] applyInitialVoiceState failed:", e);
+  }
+}
+
+/** Resolve the active server's persistence key ("host:port"), or null. */
+function activeServerKey(): string | null {
+  const st = useAppStore.getState();
+  const meta = st.sessions.find((s) => s.id === st.activeServerId);
+  return meta ? `${meta.host}:${meta.port}` : null;
 }
 
 /** Route an inbound plugin envelope to the appropriate in-store handler. */
@@ -3135,6 +3348,11 @@ export async function initEventListeners(
           // acting on inbound operator PTT. Best-effort.
           if (pending) {
             void announceLocalRole(pending.host, pending.port, currentCh);
+            // Push this server's saved audio settings (incl. transmit mode) to
+            // the backend BEFORE voice is enabled, so the mode is correct, then
+            // auto-apply the rig-PTT config so the serial controller starts.
+            await applySavedAudioSettingsOnConnect(pending.host, pending.port);
+            void applySavedPttConfigOnConnect(pending.host, pending.port);
           }
 
           // Fetch our own session ID.
@@ -3198,45 +3416,18 @@ export async function initEventListeners(
           useAppStore.setState({ bootstrapStage: null });
           navigate("/chat");
 
-          // Restore voice call state from before the disconnect.
-          // isRestoringVoice suppresses pref writes from the
-          // voice-state-changed listener during this sequence so that
-          // rapid "active" then "muted" events cannot race and
-          // clobber voiceMutedOnReconnect with false.
-          try {
-            const prefs = await getPreferences();
-            if (prefs.voiceOnReconnect) {
-              isRestoringVoice = true;
-              try {
-                if (prefs.voiceMutedOnReconnect) {
-                  // Establish the muted state in ONE atomic backend call.
-                  // The previous enableVoice() + toggleMute() two-step could
-                  // race on a reconnect (the unmute from enableVoice landing
-                  // after the mute) and leave the user unmuted.
-                  await invoke("enable_voice_muted");
-                  useAppStore.setState({ voiceState: "muted", inCall: true });
-                  updatePreferences({ voiceOnReconnect: true, voiceMutedOnReconnect: true }).catch(() => {});
-                } else {
-                  await useAppStore.getState().enableVoice();
-                }
-              } finally {
-                isRestoringVoice = false;
-              }
+          // Establish the initial voice state deterministically from the
+          // server's transmit mode, role, and per-server saved mute (see
+          // applyInitialVoiceState). isRestoringVoice suppresses pref writes
+          // from the voice-state-changed listener during this sequence so
+          // transient events can't clobber the resolved state.
+          if (pending) {
+            isRestoringVoice = true;
+            try {
+              await applyInitialVoiceState(pending.host, pending.port);
+            } finally {
+              isRestoringVoice = false;
             }
-          } catch {
-            // Voice restore is best-effort.
-          }
-
-          // Authoritatively sync the self mute/deaf indicator to the backend's
-          // actual voice state.  `voiceState` is otherwise only set optimistically
-          // and via the `voice-state-changed` event, which can fire during connect
-          // before the listener is ready (or diverge after a reconnect) - leaving
-          // the self indicator stale, e.g. showing muted while voice is active.
-          try {
-            const vs = await invoke<VoiceState>("get_voice_state");
-            useAppStore.setState({ voiceState: vs, inCall: vs !== "inactive" });
-          } catch {
-            // best-effort sync
           }
         })
         .catch((err) => {
@@ -3256,6 +3447,8 @@ export async function initEventListeners(
       async (event) => {
         // Forget announced peer roles for the dropped session.
         clearPeerRoles();
+        // Release the app-wide operator PTT hotkey registered on connect.
+        void clearOperatorHotkeyOnDisconnect();
         // Normalise: backend now always sends an object payload, but tolerate
         // a bare reason string for forwards/backwards compatibility.
         const payload = event.payload;
@@ -3634,6 +3827,16 @@ export async function initEventListeners(
         next.delete(session);
       }
       useAppStore.setState({ talkingSessions: next });
+    }),
+
+    // Whisper hotkey held/released: light the target channel's megaphone.
+    await listen<[boolean, number | null]>(TauriEvent.WhisperActive, (event) => {
+      const [active, channel] = event.payload;
+      useAppStore.setState((prev) => ({
+        whisperActive: active,
+        // Keep the known target even on release so the (grey) megaphone stays.
+        whisperTargetChannel: channel ?? prev.whisperTargetChannel,
+      }));
     }),
 
     // Server announced its (Fancy) version. Keep the cached

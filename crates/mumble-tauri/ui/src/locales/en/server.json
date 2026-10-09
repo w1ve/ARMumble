@@ -1,4 +1,16 @@
 ﻿{
+  "builtin": {
+    "connectAs": "Connect as",
+    "roleOperator": "Operator",
+    "roleStation": "Station",
+    "roleOperatorHint": "You operate a station remotely",
+    "roleStationHint": "This PC is at the radio",
+    "tagLegacy": "Legacy",
+    "tagStereo": "Stereo",
+    "statusOnline": "Online",
+    "statusOffline": "Offline — not reachable",
+    "statusChecking": "Checking availability…"
+  },
   "password": {
     "title": "Password Required",
     "differentUser": {
@@ -17,6 +29,11 @@
   "edit": {
     "title": "Edit Server",
     "labelField": "Label",
+    "roleField": "Connect as",
+    "roleOperator": "Operator",
+    "roleStation": "Station",
+    "roleOperatorHint": "You operate a station remotely",
+    "roleStationHint": "This PC is at the radio",
     "hostField": "Host",
     "portField": "Port",
     "usernameField": "Username",
@@ -58,7 +75,9 @@
     "searchPlaceholder": "Search servers...",
     "searchAriaLabel": "Search saved servers",
     "emptyState": "No saved servers yet. Add one to get started!",
-    "noMatch": "No servers match \"{{query}}\""
+    "noMatch": "No servers match \"{{query}}\"",
+    "roleOperator": "Operator (you control a remote station)",
+    "roleStation": "Station (this PC is at the radio)"
   },
   "public": {
     "title": "Public Servers",

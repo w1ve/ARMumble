@@ -51,6 +51,38 @@
   color: var(--color-text-primary);
 }
 
+/* On-air chip in the PTT card title: red pulsing dot + label while the local
+ * mic is live, so the operator can confirm PTT is actually transmitting. */
+.pttOnAir {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ef4444;
+}
+
+.pttOnAirDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 6px 1px rgba(239, 68, 68, 0.6);
+  animation: pttOnAirPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes pttOnAirPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px 1px rgba(239, 68, 68, 0.6); }
+  50% { opacity: 0.55; box-shadow: 0 0 10px 3px rgba(239, 68, 68, 0.3); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pttOnAirDot { animation: none; }
+}
+
 /* Transient flash applied to a setting heading after it is chosen from the
  * settings search, so the user's eye lands on the right control. */
 .searchHighlight {

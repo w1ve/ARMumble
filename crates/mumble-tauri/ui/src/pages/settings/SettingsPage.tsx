@@ -6,7 +6,8 @@ import { listen } from "@tauri-apps/api/event";
 import { load } from "../../utils/store";
 import type { AudioDevice, AudioSettings, ClientRole, FancyProfile, ServerId, UserMode, TimeFormat, DateFormat, NumberFormat, WelcomeMessageDisplay } from "../../types";
 import { getSavedServers } from "../../serverStorage";
-import { getPreferences, updatePreferences, getSavedAudioSettings, saveAudioSettings, AUDIO_DEFAULT_KEY } from "../../preferencesStorage";
+import { RR_PORT, RR_FANCY_PORT } from "../../builtinServers";
+import { getPreferences, updatePreferences, getSavedAudioSettings, saveAudioSettings, saveVoiceMuted, AUDIO_DEFAULT_KEY } from "../../preferencesStorage";
 import { serializeProfile, dataUrlToBytes } from "../../profileFormat";
 import { useAppStore } from "../../store";
 import {
@@ -183,6 +184,11 @@ export default function SettingsPage() {
   // write that a server-switch load performs. Set when a load starts,
   // cleared once that load's setAudioSettings has been committed.
   const audioLoadInFlight = useRef(false);
+  // Tracks the last effective transmit mode per edited server so a deliberate
+  // mode change can persist the resulting mute state (PTT -> muted, VOX /
+  // Continuous -> unmuted). Keyed by server key so switching the edited server
+  // doesn't look like a mode change.
+  const prevModeRef = useRef<{ key: string; mode: string } | null>(null);
 
   // The persistence key ("host:port") for the selected server, or the
   // shared-default bucket when editing defaults / nothing is connected.
@@ -262,6 +268,14 @@ export default function SettingsPage() {
         const roles: Record<string, ClientRole> = {};
         for (const s of servers) {
           roles[`${s.host}:${s.port}`] = s.role ?? "operator";
+        }
+        // Built-in Remote Radio servers are not saved, so their Operator/Station
+        // choice lives in prefs.builtinRoles (keyed by host). Each location has a
+        // legacy (RR_PORT) and a fancy (RR_FANCY_PORT) server, so key both ports
+        // to the per-host role to match whichever one the live session is on.
+        for (const [host, r] of Object.entries(prefs.builtinRoles ?? {})) {
+          roles[`${host}:${RR_PORT}`] = r;
+          roles[`${host}:${RR_FANCY_PORT}`] = r;
         }
         setSavedServerRoles(roles);
         setDefaultRole(prefs.defaultRole ?? "operator");
@@ -481,6 +495,27 @@ export default function SettingsPage() {
       auto_input_sensitivity: false,
     }));
   }, [selectedAudioRole, audioSettings.transmit_mode, audioSettings.push_to_talk]);
+
+  // -- Persist resulting mute on a deliberate transmit-mode change -
+  // Spec: switching to PTT mutes the mic; switching to VOX/Continuous makes it
+  // live. The backend reconciles the live state (reconcile_voice_for_mode);
+  // here we persist the resulting per-server mute so it restores next run.
+  useEffect(() => {
+    if (!initialLoadDone.current) return;
+    if (audioLoadInFlight.current) return;
+    const key = selectedAudioKey;
+    const mode =
+      audioSettings.transmit_mode === "voice_activity" && audioSettings.push_to_talk
+        ? "push_to_talk"
+        : audioSettings.transmit_mode;
+    const prev = prevModeRef.current;
+    prevModeRef.current = { key, mode };
+    // Only act on a real change for the SAME server (not a server switch or
+    // the initial establishment of the baseline).
+    if (!prev || prev.key !== key || prev.mode === mode) return;
+    const muted = mode === "push_to_talk";
+    void saveVoiceMuted(key, muted);
+  }, [audioSettings.transmit_mode, audioSettings.push_to_talk, selectedAudioKey]);
 
   // -- Auto-save audio settings (debounced) ------------------------
 
@@ -922,6 +957,7 @@ export default function SettingsPage() {
               selectedServer={selectedAudioServer}
               onSelectServer={setSelectedAudioServer}
               role={selectedAudioRole}
+              serverKey={selectedAudioKey}
             />
           )}
 

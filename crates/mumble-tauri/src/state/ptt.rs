@@ -156,6 +156,10 @@ fn station_loop(
     let mut vox_hold_until: Option<Instant> = None;
     // When the combined intent drops, hold the key until this instant (hang).
     let mut release_at: Option<Instant> = None;
+    // Track the last-logged intent so each key/unkey edge is logged exactly
+    // once (at info level) - the single most useful signal when diagnosing
+    // "the rig isn't keying" on real serial hardware.
+    let mut logged_want = false;
 
     loop {
         // Drain any pending commands without blocking the tick cadence.
@@ -189,6 +193,13 @@ fn station_loop(
             vox_hold_until = None;
         }
         let want = remote || vox;
+        if want != logged_want {
+            logged_want = want;
+            info!(
+                "PTT station intent {} (remote={remote}, vox={vox})",
+                if want { "KEY" } else { "UNKEY (hang then release)" },
+            );
+        }
         if want {
             release_at = None;
             if let Err(e) = wd.key(now) {
@@ -326,11 +337,14 @@ impl AppState {
             }
         }
 
-        // Mode B (§14d): a Station with VOX enabled keys on inbound-audio
-        // activity. `talking_sessions` on the active session is the inbound-talk
-        // truth (maintained by the event handler), so a light poller mirrors it
-        // onto the controller's VOX gate. Operator role has no VOX.
-        if matches!(role, Role::Station) && config.vox {
+        // A Station ALWAYS keys on inbound-audio activity: the station's RX is the
+        // operator's voice to be transmitted, so "receiving audio" IS "key the rig".
+        // There is no separate VOX opt-in (that only made sense for a mic-gated
+        // transmitter, which a station is not). `talking_sessions` on the active
+        // session is the inbound-talk truth (maintained by the event handler), so a
+        // light poller mirrors it onto the controller's key gate. Operator role has
+        // no inbound keying.
+        if matches!(role, Role::Station) {
             self.start_vox_poller();
         }
     }
@@ -397,7 +411,14 @@ impl AppState {
     pub(crate) fn apply_remote_ptt(&self, down: bool) {
         if let Ok(slot) = self.ptt_controller.lock() {
             if let Some(ctrl) = slot.as_ref() {
+                info!("apply_remote_ptt: down={down} -> station controller");
                 ctrl.set_remote_key(down);
+            } else {
+                // The frontend only routes PTT to a local Station, so reaching
+                // here means the Station controller isn't running - almost
+                // always a disabled/portless PttConfig. Log it so the "rig
+                // never keys" case is obvious in the logs.
+                warn!("apply_remote_ptt: down={down} ignored - no PTT controller running (station PTT disabled or no serial port?)");
             }
         }
     }
@@ -409,6 +430,38 @@ impl AppState {
                 ctrl.set_vox_active(active);
             }
         }
+    }
+
+    /// Operator: broadcast a software-PTT key/unkey (from the operator PTT
+    /// hotkey) as an outbound `remote-radio/ptt` plugin message to the current
+    /// channel. This is the deterministic twin of the footswitch path
+    /// (`operator_loop` -> `on_intent`): mode-B keying so a Station rigs up on an
+    /// explicit command rather than relying on inbound-audio VOX.
+    ///
+    /// The station's own safety watchdog still guards against a stuck key.
+    pub(crate) async fn send_operator_ptt(&self, down: bool) -> Result<(), String> {
+        // Monotonic per-process sequence so a stale/reordered frame is dropped
+        // by the receiver. The footswitch path uses its own per-restart Arc;
+        // this static covers the hotkey path, and the two never share a port.
+        static HOTKEY_SEQ: AtomicU64 = AtomicU64::new(0);
+        let seq = HOTKEY_SEQ.fetch_add(1, Ordering::Relaxed);
+        let channel = self.current_channel();
+        info!("operator PTT: sending remote-radio/ptt down={down} seq={seq} channel={channel:?}");
+        let payload = super::rr_plugin::encode(&PttPayload { down, seq })
+            .map_err(|e| format!("encode operator PTT failed: {e}"))?;
+        let r = self
+            .send_plugin_message(
+                super::rr_plugin::PLUGIN_NAME.to_owned(),
+                super::rr_plugin::PAYLOAD_TYPE_PTT.to_owned(),
+                payload,
+                Vec::new(),
+                channel,
+            )
+            .await;
+        if let Err(ref e) = r {
+            warn!("operator PTT: send failed: {e}");
+        }
+        r
     }
 }
 

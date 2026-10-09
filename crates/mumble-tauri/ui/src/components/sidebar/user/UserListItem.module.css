@@ -138,6 +138,28 @@
   50% { box-shadow: 0 0 12px 4px rgba(34, 197, 94, 0.25); }
 }
 
+/* --- On-air dot (red, next to the name while transmitting) ------ */
+
+.onAirDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 6px 1px rgba(239, 68, 68, 0.6);
+  animation: onAirPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes onAirPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px 1px rgba(239, 68, 68, 0.6); }
+  50% { opacity: 0.55; box-shadow: 0 0 10px 3px rgba(239, 68, 68, 0.3); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onAirDot { animation: none; }
+}
+
 /* --- Name & Badges ---------------------------------------------- */
 
 .userName {

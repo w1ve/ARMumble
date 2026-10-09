@@ -88,6 +88,19 @@ pub trait AudioDeviceFactory {
         volume: Arc<AtomicU32>,
     ) -> std::result::Result<Box<dyn AudioCapture>, String>;
 
+    /// Create a capture device that produces interleaved STEREO frames when
+    /// `stereo` is true (radio Station with a dual-receiver sound card), or mono
+    /// otherwise. Default implementation ignores `stereo` and returns mono, so
+    /// backends without stereo capture (Android) still compile.
+    fn create_capture_channels(
+        device_name: Option<&str>,
+        frame_size: usize,
+        volume: Arc<AtomicU32>,
+        _stereo: bool,
+    ) -> std::result::Result<Box<dyn AudioCapture>, String> {
+        Self::create_capture(device_name, frame_size, volume)
+    }
+
     /// Create a mixing playback device that reads from per-speaker
     /// buffers, sums all active speakers, and outputs to hardware.
     fn create_mixing_playback(
@@ -129,6 +142,26 @@ impl AudioDeviceFactory for PlatformAudioFactory {
             rodio_desktop::RodioAudioFactory::create_capture(device_name, frame_size, volume)
         } else {
             desktop::CpalAudioFactory::create_capture(device_name, frame_size, volume)
+        }
+    }
+
+    fn create_capture_channels(
+        device_name: Option<&str>,
+        frame_size: usize,
+        volume: Arc<AtomicU32>,
+        stereo: bool,
+    ) -> std::result::Result<Box<dyn AudioCapture>, String> {
+        // Use the ACTIVE backend for capture (both support stereo now). Forcing
+        // a different backend for stereo split capture from playback and broke
+        // station transmit entirely.
+        if USE_RODIO_BACKEND.load(Ordering::Relaxed) {
+            rodio_desktop::RodioAudioFactory::create_capture_channels(
+                device_name, frame_size, volume, stereo,
+            )
+        } else {
+            desktop::CpalAudioFactory::create_capture_channels(
+                device_name, frame_size, volume, stereo,
+            )
         }
     }
 

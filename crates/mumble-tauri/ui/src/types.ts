@@ -588,6 +588,10 @@ export interface UserPreferences {
   defaultUsername: string;
   /** Default connection role (operator or station) pre-selected on sign-in. */
   defaultRole?: ClientRole;
+  /** Per-built-in-server role choice, keyed by host (e.g. "toronto.remote.radio").
+   *  Built-in servers are not saved as regular servers, so their Operator/Station
+   *  choice is remembered here instead. Falls back to `defaultRole` when unset. */
+  builtinRoles?: Record<string, ClientRole>;
   /** Preferred time format for message timestamps. */
   timeFormat: TimeFormat;
   /** Convert UTC timestamps to the local timezone before displaying. */
@@ -773,6 +777,16 @@ export interface PttConfig {
   deadman_ms: number;
   /** Maximum continuous transmit (seconds); hard ceiling. */
   max_tx_secs: number;
+  /** Operator software PTT hotkey (e.g. "Ctrl+Shift+T"), or null if unset.
+   *  Held, it opens the Mumble mic and keys the remote station (mode B). */
+  ptt_hotkey: string | null;
+  /** Operator "Whisper" hotkey (e.g. "Ctrl+Shift+W"), or null if unset. Held,
+   *  it redirects the mic into {@link whisper_target_channel} via a Mumble
+   *  VoiceTarget without leaving the current channel. Must differ from
+   *  {@link ptt_hotkey}. */
+  whisper_hotkey: string | null;
+  /** Channel id the Whisper hotkey redirects into, or null if unset. */
+  whisper_target_channel: number | null;
 }
 
 /** A serial port available for PTT. Mirrors Rust `SerialPortInfo`. */

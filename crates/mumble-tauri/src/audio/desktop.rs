@@ -40,6 +40,10 @@ pub struct CpalCapture {
     device: cpal::Device,
     /// Number of channels the hardware actually uses.
     hw_channels: u16,
+    /// When true, capture produces interleaved STEREO frames (L R L R) instead
+    /// of downmixing to mono — used by the radio Station so a dual-receiver rig
+    /// (different receivers on L and R) keeps its channel separation on the air.
+    stereo: bool,
     /// Live input volume multiplier (`f32` bits in `AtomicU32`).
     volume: Arc<AtomicU32>,
     /// Suppresses repeated overflow warnings from the cpal callback.
@@ -61,6 +65,16 @@ impl CpalCapture {
     /// * `frame_size` - samples per channel per frame (480 for Mumble).
     /// * `volume` - shared atomic volume multiplier (f32 bits as u32).
     pub fn new(device_name: Option<&str>, frame_size: usize, volume: Arc<AtomicU32>) -> Result<Self> {
+        Self::new_with_channels(device_name, frame_size, volume, false)
+    }
+
+    /// Create a capture source, optionally in stereo (interleaved L R) mode.
+    pub fn new_with_channels(
+        device_name: Option<&str>,
+        frame_size: usize,
+        volume: Arc<AtomicU32>,
+        stereo: bool,
+    ) -> Result<Self> {
         let host = cpal::default_host();
 
         let device = if let Some(name) = device_name {
@@ -88,45 +102,96 @@ impl CpalCapture {
             .map_err(|e| Error::InvalidState(e.to_string()))?;
         let hw_channels = default_cfg.channels();
 
+        // Format is deterministic from the request: a Station always emits
+        // interleaved stereo. If the hardware is mono, the input handler
+        // duplicates the single channel into L and R (dual-mono), so the frame
+        // is always valid stereo and matches the stereo encoder.
         Ok(Self {
-            format: AudioFormat::MONO_48KHZ_F32,
+            format: if stereo {
+                AudioFormat::STEREO_48KHZ_F32
+            } else {
+                AudioFormat::MONO_48KHZ_F32
+            },
             frame_size,
             sequence: 0,
             buffer: Arc::new(Mutex::new(VecDeque::with_capacity(9_600))),
             stream: None,
             device,
             hw_channels,
+            stereo,
             volume,
             overflow_warned: Arc::new(AtomicBool::new(false)),
         })
     }
 }
 
+/// Per-callback resampling state. Mono uses one resampler; stereo uses two
+/// (one per channel) so L and R are resampled independently and never
+/// interpolate into each other.
+struct CaptureResample {
+    /// Left (or mono) channel resampler.
+    left: LinearResampler,
+    /// Right channel resampler (stereo only).
+    right: LinearResampler,
+    /// Scratch buffers, reused across callbacks to avoid per-callback alloc.
+    scratch_a: Vec<f32>,
+    scratch_b: Vec<f32>,
+    scratch_c: Vec<f32>,
+}
+
+#[allow(clippy::too_many_arguments)]
 fn handle_cpal_input(
     buffer: &Arc<Mutex<VecDeque<f32>>>,
     data: &[f32],
     hw_channels: u16,
+    stereo: bool,
     overflow_warned: &Arc<AtomicBool>,
-    resampler: &mut LinearResampler,
-    resampled: &mut Vec<f32>,
+    rs: &mut CaptureResample,
 ) {
     let Ok(mut buf) = buffer.lock() else { return };
 
-    // Downmix to mono first (the resampler is a mono stream), then resample the
-    // mono stream to 48 kHz. For a 48 kHz device the resampler is a pass-through
-    // (identity), so this adds a copy and nothing else in the common case.
-    resampled.clear();
-    if hw_channels <= 1 {
-        resampler.process(data, resampled);
-    } else {
-        let mut mono: Vec<f32> = Vec::with_capacity(data.len() / hw_channels as usize + 1);
-        for chunk in data.chunks(hw_channels as usize) {
-            let sum: f32 = chunk.iter().sum();
-            mono.push(sum / hw_channels as f32);
+    if stereo {
+        // STEREO: take hardware channels 0 and 1 as L and R (duplicating a mono
+        // device's single channel into both), resample each independently, and
+        // re-interleave to L R L R. Independent resamplers keep the two receivers
+        // from bleeding into each other at non-48k rates.
+        let ch = hw_channels.max(1) as usize;
+        let (lin, rin, out_l, out_r) =
+            (&mut rs.scratch_a, &mut rs.scratch_b, &mut rs.scratch_c, &mut Vec::new());
+        lin.clear();
+        rin.clear();
+        for frame in data.chunks(ch) {
+            let l = frame[0];
+            // Mono device: duplicate L into R (dual-mono). Stereo: use channel 1.
+            let r = if frame.len() > 1 { frame[1] } else { l };
+            lin.push(l);
+            rin.push(r);
         }
-        resampler.process(&mono, resampled);
+        out_l.clear();
+        rs.left.process(lin, out_l);
+        rs.right.process(rin, out_r);
+        // Re-interleave; the two resamplers emit the same count for equal input.
+        let n = out_l.len().min(out_r.len());
+        buf.reserve(n * 2);
+        for i in 0..n {
+            buf.push_back(out_l[i]);
+            buf.push_back(out_r[i]);
+        }
+    } else {
+        // MONO: downmix to mono, then resample the mono stream to 48 kHz.
+        rs.scratch_a.clear();
+        if hw_channels <= 1 {
+            rs.left.process(data, &mut rs.scratch_a);
+        } else {
+            let mut mono: Vec<f32> = Vec::with_capacity(data.len() / hw_channels as usize + 1);
+            for chunk in data.chunks(hw_channels as usize) {
+                let sum: f32 = chunk.iter().sum();
+                mono.push(sum / hw_channels as f32);
+            }
+            rs.left.process(&mono, &mut rs.scratch_a);
+        }
+        buf.extend(rs.scratch_a.iter().copied());
     }
-    buf.extend(resampled.iter().copied());
 
     const MAX_SAMPLES: usize = 9_600;
     if buf.len() > MAX_SAMPLES {
@@ -144,21 +209,26 @@ impl AudioCapture for CpalCapture {
     }
 
     fn read_frame(&mut self) -> Result<AudioFrame> {
+        // One frame is frame_size samples PER CHANNEL; stereo interleaves two.
+        let chans = if self.stereo { 2 } else { 1 };
+        let frame_total = self.frame_size * chans;
+
         let mut buf = self
             .buffer
             .lock()
             .map_err(|e| Error::InvalidState(e.to_string()))?;
 
-        if buf.len() < self.frame_size {
+        if buf.len() < frame_total {
             return Err(Error::NotEnoughSamples);
         }
 
         // If the buffer has accumulated significantly more than one
         // frame, the encoding loop fell behind.  Skip old audio to
-        // avoid sending stale voice packets.
-        let max_queued = self.frame_size * 5; // ~100 ms at 48 kHz
+        // avoid sending stale voice packets. Keep interleave alignment by
+        // dropping whole frames (multiple of frame_total).
+        let max_queued = frame_total * 5; // ~100 ms at 48 kHz
         if buf.len() > max_queued {
-            let excess = buf.len() - self.frame_size;
+            let excess = ((buf.len() - frame_total) / chans) * chans;
             warn!(
                 "capture buffer overflow: {} samples ({:.0} ms), dropping {} stale samples",
                 buf.len(),
@@ -171,8 +241,8 @@ impl AudioCapture for CpalCapture {
         self.overflow_warned.store(false, Ordering::Relaxed);
 
         let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
-        let mut data = Vec::with_capacity(self.frame_size * 4);
-        for s in buf.drain(..self.frame_size) {
+        let mut data = Vec::with_capacity(frame_total * 4);
+        for s in buf.drain(..frame_total) {
             data.extend_from_slice(&(s * vol).to_ne_bytes());
         }
 
@@ -188,6 +258,7 @@ impl AudioCapture for CpalCapture {
     fn start(&mut self) -> Result<()> {
         let buffer = self.buffer.clone();
         let hw_channels = self.hw_channels;
+        let stereo = self.stereo;
         let overflow_warned = self.overflow_warned.clone();
 
         // Open at the device's own default rate rather than demanding 48 kHz.
@@ -208,15 +279,20 @@ impl AudioCapture for CpalCapture {
             buffer_size: cpal::BufferSize::Default,
         };
 
-        // One resampler for the whole stream, owned by the callback so its
-        // interpolation phase is continuous across callback invocations.
-        let mut resampler = LinearResampler::new(device_rate, 48_000);
-        if !resampler.is_identity() {
+        // Resamplers owned by the callback so their interpolation phase is
+        // continuous across callback invocations. Stereo uses one per channel.
+        let mut rs = CaptureResample {
+            left: LinearResampler::new(device_rate, 48_000),
+            right: LinearResampler::new(device_rate, 48_000),
+            scratch_a: Vec::new(),
+            scratch_b: Vec::new(),
+            scratch_c: Vec::new(),
+        };
+        if !rs.left.is_identity() {
             debug!(
                 "cpal capture: device rate {device_rate} Hz != 48 kHz; resampling on capture"
             );
         }
-        let mut resampled: Vec<f32> = Vec::new();
 
         let stream = self
             .device
@@ -227,9 +303,9 @@ impl AudioCapture for CpalCapture {
                         &buffer,
                         data,
                         hw_channels,
+                        stereo,
                         &overflow_warned,
-                        &mut resampler,
-                        &mut resampled,
+                        &mut rs,
                     );
                 },
                 |err| error!("cpal input error: {err}"),
@@ -266,6 +342,17 @@ impl super::AudioDeviceFactory for CpalAudioFactory {
         volume: Arc<AtomicU32>,
     ) -> std::result::Result<Box<dyn AudioCapture>, String> {
         CpalCapture::new(device_name, frame_size, volume)
+            .map(|c| Box::new(c) as _)
+            .map_err(|e| format!("Capture init: {e}"))
+    }
+
+    fn create_capture_channels(
+        device_name: Option<&str>,
+        frame_size: usize,
+        volume: Arc<AtomicU32>,
+        stereo: bool,
+    ) -> std::result::Result<Box<dyn AudioCapture>, String> {
+        CpalCapture::new_with_channels(device_name, frame_size, volume, stereo)
             .map(|c| Box::new(c) as _)
             .map_err(|e| format!("Capture init: {e}"))
     }

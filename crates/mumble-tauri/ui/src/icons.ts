@@ -57,6 +57,7 @@ export {
   Lock as LockSvg,
   LogOut as LogoutIcon,
   Maximize2 as MaximizeIcon,
+  Megaphone as MegaphoneIcon,
   Menu as MenuIcon,
   MessageSquare as MessageIcon,
   MessageSquareOff as MessageMinusIcon,

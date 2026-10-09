@@ -223,6 +223,7 @@
   },
   "userListItem": {
     "registeredTitle": "Enregistré",
+    "onAirTitle": "À l'antenne (émission)",
     "serverMutedTitle": "Muet par le serveur",
     "selfMutedTitle": "Auto-muet",
     "serverDeafenedTitle": "Assourdi par le serveur",
@@ -251,6 +252,8 @@
     "unnamed": "Sans nom",
     "noPermissionToJoin": "Vous n'avez pas la permission de rejoindre",
     "listening": "Écoute en parallèle",
+    "whisperTarget": "Cible du chuchotement (maintenez la touche pour parler ici)",
+    "whisperingHere": "Chuchotement ici",
     "member_one": "{{count}} membre",
     "member_other": "{{count}} membres",
     "expand": "Développer",

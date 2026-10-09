@@ -51,6 +51,7 @@ pub(crate) mod rr_plugin;
 pub(crate) mod ptt;
 mod search;
 mod sessions;
+mod stereo_test;
 mod shared_handle;
 pub mod types;
 
@@ -108,6 +109,9 @@ pub(super) struct AudioPipelineState {
     pub speaker_volumes: SpeakerVolumes,
     pub mic_test_handle: Option<tauri::async_runtime::JoinHandle<()>>,
     pub latency_test_handle: Option<tauri::async_runtime::JoinHandle<()>>,
+    /// Running "Play Stereo Test" transmit task (sends the embedded stereo
+    /// test tone to the server), if any. Aborted by `stop_stereo_test`.
+    pub stereo_test_handle: Option<tauri::async_runtime::JoinHandle<()>>,
     pub voice_replay_handle: Option<tauri::async_runtime::JoinHandle<()>>,
     pub voice_replay_stop: Option<tokio::sync::watch::Sender<bool>>,
     pub recording_handle: Option<recording::RecordingHandle>,
@@ -297,6 +301,22 @@ pub struct AppState {
     /// gate (mode B). Aborted when PTT stops/reconfigures. Desktop only.
     #[cfg(not(target_os = "android"))]
     pub(crate) ptt_vox_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    /// The 5-bit VoiceTarget id stamped on every outbound audio packet:
+    /// 0 = normal talking (your own channel), 1-30 = a registered whisper/shout
+    /// target, 31 = server loopback. Shared with the outbound send task so the
+    /// "Whisper" hotkey can redirect the mic to another channel while held
+    /// (set to 1) and revert on release (set to 0), independent of pipeline
+    /// restarts. Long-lived on `AppState` for that reason.
+    pub(crate) outbound_target: Arc<AtomicU32>,
+    /// True while a Whisper key-hold actually opened the mic (i.e. the operator
+    /// was Muted/PTT when whisper started). On release we only re-mute when this
+    /// is set; in VOX/Continuous the mic was already live, so whisper must leave
+    /// it live and merely revert the target.
+    pub(crate) whisper_opened_mic: std::sync::atomic::AtomicBool,
+    /// True while the stereo test has paused a live mic that must be resumed
+    /// when the test ends (claimed exactly once by whichever of the task's
+    /// natural completion or `stop_stereo_test` runs first).
+    pub(crate) stereo_test_resume_mic: std::sync::atomic::AtomicBool,
 }
 
 impl AppState {
@@ -329,6 +349,9 @@ impl AppState {
             ptt_controller: Mutex::new(None),
             #[cfg(not(target_os = "android"))]
             ptt_vox_task: Mutex::new(None),
+            outbound_target: Arc::new(AtomicU32::new(0)),
+            whisper_opened_mic: std::sync::atomic::AtomicBool::new(false),
+            stereo_test_resume_mic: std::sync::atomic::AtomicBool::new(false),
         }
     }
 

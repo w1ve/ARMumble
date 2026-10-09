@@ -10,7 +10,7 @@ import {
   getServerPassword,
   setServerPassword,
 } from "../serverStorage";
-import { getPreferences } from "../preferencesStorage";
+import { getPreferences, updatePreferences } from "../preferencesStorage";
 import type { SavedServer, ServerPingResult, UserMode, ClientRole } from "../types";
 import { RR_PORT, RR_PASSWORD, type BuiltinServer } from "../builtinServers";
 import { notifyServersChanged } from "../stationIdentity";
@@ -226,11 +226,23 @@ export default function ConnectPage() {
    * connect dialog can prompt.
    */
   const handleBuiltinConnect = useCallback(
-    async (server: BuiltinServer) => {
+    async (server: BuiltinServer, chosenRole: ClientRole) => {
+      // Built-in servers are not saved, so remember the Operator/Station choice
+      // per-host in preferences. resolveRoleForServer() reads this on connect so
+      // PTT direction, role announcement, and initial voice state are correct.
+      try {
+        const prefs = await getPreferences();
+        await updatePreferences({
+          builtinRoles: { ...(prefs.builtinRoles ?? {}), [server.host]: chosenRole },
+        });
+      } catch (e) {
+        console.warn("[connect] persist built-in role failed:", e);
+      }
       const name = (defaultUsername || "").trim();
+      // Each entry carries its own voice port (64738 legacy / 54736 fancy).
       await connect(
         server.host,
-        RR_PORT,
+        server.port,
         name || server.abbr,
         null,
         RR_PASSWORD,
@@ -389,6 +401,7 @@ export default function ConnectPage() {
             <BuiltinServerList
               onConnect={handleBuiltinConnect}
               onAddNew={handleShowWizard}
+              defaultRole={defaultRole}
               disabled={isConnecting}
             />
             {savedServers.length > 0 && (

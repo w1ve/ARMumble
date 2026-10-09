@@ -56,4 +56,5 @@ export enum TauriEvent {
   VoiceStateChanged = "voice-state-changed",
   WatchSync = "watch-sync",
   WebrtcSignal = "webrtc-signal",
+  WhisperActive = "whisper-active",
 }

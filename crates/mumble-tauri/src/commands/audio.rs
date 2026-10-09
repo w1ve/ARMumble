@@ -130,11 +130,17 @@ pub(crate) async fn set_audio_settings(
     server_id: Option<state::ServerId>,
 ) -> Result<(), String> {
     let force_tcp = settings.force_tcp_audio;
-    let (needs_outbound, needs_inbound, force_tcp_changed) = state
+    let (needs_outbound, needs_inbound, force_tcp_changed, mode_changed) = state
         .set_audio_settings_for(server_id, settings)
-        .unwrap_or((false, false, false));
+        .unwrap_or((false, false, false, false));
 
-    if needs_outbound {
+    // A transmit-mode change reconciles the live voice state to the new mode:
+    // PTT closes the mic (muted until keyed); VOX/Continuous opens it. This is
+    // the single path for VOX<->PTT<->Continuous and both rebuilds the pipeline
+    // and fixes the self-mute, so neither direction leaves the mic stuck.
+    if mode_changed {
+        state.reconcile_voice_for_mode().await?;
+    } else if needs_outbound {
         state.restart_outbound()?;
     }
     if needs_inbound {
@@ -170,6 +176,19 @@ pub(crate) fn get_audio_backend() -> bool {
 #[tauri::command]
 pub(crate) fn get_voice_state(state: tauri::State<'_, AppState>) -> VoiceState {
     state.voice_state()
+}
+
+/// Transmit the embedded stereo test tone to the server (pauses the mic for
+/// the duration). The far operator hears left/all/right separation on the air.
+#[tauri::command]
+pub(crate) fn play_stereo_test(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.play_stereo_test()
+}
+
+/// Stop a running stereo test and resume the mic if it had been paused.
+#[tauri::command]
+pub(crate) fn stop_stereo_test(state: tauri::State<'_, AppState>) {
+    state.stop_stereo_test();
 }
 
 /// Enable voice calling for the current channel.

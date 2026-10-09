@@ -155,6 +155,37 @@ impl AppState {
             .map_err(|e| format!("Failed to send PluginMessage: {e}"))
     }
 
+    /// Register a VoiceTarget slot (`id`, 1-30) that whispers/shouts to a single
+    /// channel. Used by the operator "Whisper" feature: slot 1 is pointed at the
+    /// chosen target channel so holding the whisper hotkey (which stamps target
+    /// id 1 on outbound packets) redirects the mic into that channel without
+    /// leaving the current one. `links`/`children` are false - whisper to the
+    /// one channel only.
+    pub async fn set_voice_target_channel(&self, id: u32, channel_id: u32) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::SetVoiceTarget {
+                id,
+                targets: vec![command::VoiceTargetEntry {
+                    sessions: Vec::new(),
+                    channel_id: Some(channel_id),
+                    group: None,
+                    links: false,
+                    children: false,
+                }],
+            })
+            .await
+            .map_err(|e| format!("Failed to set voice target: {e}"))
+    }
+
+    /// Set the VoiceTarget id stamped on every outbound audio packet (0 = normal
+    /// own-channel talking, 1-30 = a registered whisper target). No network
+    /// call - just flips the shared atomic the outbound send task reads.
+    pub fn set_outbound_target(&self, id: u32) {
+        self.outbound_target
+            .store(id, std::sync::atomic::Ordering::Relaxed);
+    }
+
     /// Announce a poll in a channel (server-relayed).
     pub async fn send_fancy_poll(
         &self,

@@ -21,8 +21,8 @@
   },
   "externalLinkGuard": {
     "title": "External Link",
-    "body": "You are about to leave Fancy Mumble and visit an external website:",
-    "disclaimer": "This website is not affiliated with or endorsed by Fancy Mumble. External links may lead to sites that contain harmful, misleading, or unwanted content. Proceed only if you trust the source.",
+    "body": "You are about to leave Remote Radio Mumble and visit an external website:",
+    "disclaimer": "This website is not affiliated with or endorsed by Remote Radio Mumble. External links may lead to sites that contain harmful, misleading, or unwanted content. Proceed only if you trust the source.",
     "cancelBtn": "Cancel",
     "openBtn": "Open Link"
   },
@@ -204,10 +204,10 @@
       "failed": "Update failed"
     },
     "subtitle": {
-      "restarting": "Fancy Mumble will restart automatically when finished.",
+      "restarting": "Remote Radio Mumble will restart automatically when finished.",
       "checking": "Checking for updates...",
-      "autoInstall": "Preparing to install the latest version of Fancy Mumble...",
-      "ready": "A new version of Fancy Mumble is ready to install."
+      "autoInstall": "Preparing to install the latest version of Remote Radio Mumble...",
+      "ready": "A new version of Remote Radio Mumble is ready to install."
     },
     "progress": {
       "installing": "Verifying & installing...",

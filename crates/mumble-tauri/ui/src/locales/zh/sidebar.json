@@ -223,6 +223,7 @@
   },
   "userListItem": {
     "registeredTitle": "已注册",
+    "onAirTitle": "发射中",
     "serverMutedTitle": "被服务器静音",
     "selfMutedTitle": "已自我静音",
     "serverDeafenedTitle": "被服务器屏蔽声音",
@@ -251,6 +252,8 @@
     "unnamed": "未命名",
     "noPermissionToJoin": "没有加入权限",
     "listening": "正在收听",
+    "whisperTarget": "私语目标（按住私语键即可向此频道讲话）",
+    "whisperingHere": "正在向此频道私语",
     "member_one": "{{count}} 位成员",
     "member_other": "{{count}} 位成员",
     "expand": "展开",

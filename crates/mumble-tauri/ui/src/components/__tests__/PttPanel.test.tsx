@@ -28,6 +28,9 @@ function cfg(overrides: Partial<PttConfig> = {}): PttConfig {
     hang_ms: 250,
     deadman_ms: 2000,
     max_tx_secs: 120,
+    ptt_hotkey: null,
+    whisper_hotkey: null,
+    whisper_target_channel: null,
     ...overrides,
   };
 }
@@ -53,7 +56,7 @@ describe("PttPanel", () => {
 
   it("offers only input lines for an Operator", async () => {
     mockBackend(cfg({ role: "operator", line: "cts" }));
-    render(<PttPanel serverId={null} role="operator" />);
+    render(<PttPanel serverId={null} serverKey="__default__" role="operator" transmitMode="push_to_talk" />);
     // Input lines present; output lines absent.
     await waitFor(() => expect(screen.getByRole("option", { name: /CTS/ })).toBeTruthy());
     expect(screen.getByRole("option", { name: /DSR/ })).toBeTruthy();
@@ -63,7 +66,7 @@ describe("PttPanel", () => {
 
   it("offers only output lines for a Station", async () => {
     mockBackend(cfg({ role: "station", line: "dtr" }));
-    render(<PttPanel serverId={null} role="station" />);
+    render(<PttPanel serverId={null} serverKey="__default__" role="station" transmitMode="continuous" />);
     await waitFor(() => expect(screen.getByRole("option", { name: /DTR/ })).toBeTruthy());
     expect(screen.getByRole("option", { name: /RTS/ })).toBeTruthy();
     expect(screen.queryByRole("option", { name: /CTS/ })).toBeNull();
@@ -71,7 +74,7 @@ describe("PttPanel", () => {
 
   it("hides the line picker until enabled", async () => {
     mockBackend(cfg({ enabled: false, role: "operator" }));
-    render(<PttPanel serverId={null} role="operator" />);
+    render(<PttPanel serverId={null} serverKey="__default__" role="operator" transmitMode="push_to_talk" />);
     // Give the mount load a tick, then confirm no line options are rendered.
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("get_ptt_config", expect.anything()));
     expect(screen.queryByRole("option", { name: /CTS/ })).toBeNull();
@@ -79,7 +82,7 @@ describe("PttPanel", () => {
 
   it("loads the serial port list into the picker", async () => {
     mockBackend(cfg({ enabled: true, role: "operator", port: "COM5" }));
-    render(<PttPanel serverId={null} role="operator" />);
+    render(<PttPanel serverId={null} serverKey="__default__" role="operator" transmitMode="push_to_talk" />);
     await waitFor(() => expect(screen.getByText("COM5 (USB serial)")).toBeTruthy());
   });
 });

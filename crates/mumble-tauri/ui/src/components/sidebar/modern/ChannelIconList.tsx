@@ -1,4 +1,4 @@
-import { HashIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MicOffSmallIcon, ScreenShareIcon } from "../../../icons";
+import { HashIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MegaphoneIcon, MicOffSmallIcon, ScreenShareIcon } from "../../../icons";
 /**
  * ChannelIconList - a "Modern" channel viewer.
  *
@@ -93,6 +93,28 @@ function ChannelIcon({ channel, isCurrent }: ChannelIconProps) {
         <span className={styles.channelIconInitial}>{initial}</span>
       )}
     </div>
+  );
+}
+
+// -- Whisper target badge (megaphone) -----------------------------
+// Shows on the operator's whisper target channel: grey idle, green while held.
+function WhisperBadge({ channelId }: Readonly<{ channelId: number }>) {
+  const { t } = useTranslation("sidebar");
+  const whisperTargetChannel = useAppStore((s) => s.whisperTargetChannel);
+  const whisperActive = useAppStore((s) => s.whisperActive);
+  if (whisperTargetChannel !== channelId) return null;
+  return (
+    <span
+      title={whisperActive ? t("channelList.whisperingHere") : t("channelList.whisperTarget")}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        marginLeft: 4,
+        color: whisperActive ? "var(--color-success, #22c55e)" : "var(--color-text-muted, #9ca3af)",
+      }}
+    >
+      <MegaphoneIcon width={11} height={11} />
+    </span>
   );
 }
 
@@ -399,6 +421,7 @@ function ChannelIconListImpl({
                 </span>
               )}
               <PchatBadge protocol={channel.pchat_protocol} />
+              <WhisperBadge channelId={channel.id} />
             </span>
           </button>
 

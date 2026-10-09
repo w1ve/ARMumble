@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
-import type { SavedServer } from "../../types";
+import type { SavedServer, ClientRole } from "../../types";
 import { getServerPassword, setServerPassword } from "../../serverStorage";
 import { isMobile } from "../../utils/platform";
 import MobileBottomSheet from "../elements/MobileBottomSheet";
@@ -23,6 +23,7 @@ interface Props {
 function EditForm({ server, onSave, onClose }: Readonly<Props>) {
   const { t } = useTranslation(["server", "common"]);
   const [label, setLabel] = useState(server.label || "");
+  const [role, setRole] = useState<ClientRole>(server.role ?? "operator");
   const [host, setHost] = useState(server.host);
   const [port, setPort] = useState(String(server.port));
   const [username, setUsername] = useState(server.username);
@@ -72,6 +73,7 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
 
     onSave(server.id, {
       label: label.trim() || host.trim(),
+      role,
       host: host.trim(),
       port: Number.parseInt(port) || 64738,
       username: username.trim(),
@@ -92,6 +94,32 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
           placeholder={t("edit.labelPlaceholder")}
         />
       </label>
+
+      <div className={styles.fieldLabel}>
+        {t("edit.roleField")}
+        <div className={styles.roleToggle} role="radiogroup" aria-label={t("edit.roleField")}>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={role === "operator"}
+            className={`${styles.roleOption} ${role === "operator" ? styles.roleOptionActive : ""}`}
+            onClick={() => setRole("operator")}
+          >
+            <span className={styles.roleOptionTitle}>{t("edit.roleOperator")}</span>
+            <span className={styles.roleOptionHint}>{t("edit.roleOperatorHint")}</span>
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={role === "station"}
+            className={`${styles.roleOption} ${role === "station" ? styles.roleOptionActive : ""}`}
+            onClick={() => setRole("station")}
+          >
+            <span className={styles.roleOptionTitle}>{t("edit.roleStation")}</span>
+            <span className={styles.roleOptionHint}>{t("edit.roleStationHint")}</span>
+          </button>
+        </div>
+      </div>
 
       <label className={styles.fieldLabel}>
         {t("edit.hostField")}

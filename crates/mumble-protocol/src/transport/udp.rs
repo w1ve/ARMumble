@@ -19,8 +19,17 @@ use crate::message::UdpMessage;
 use crate::proto::mumble_udp;
 use crate::transport::audio_codec::{AudioPacketCodec, LegacyAudioCodec, MumbleVarint};
 
-/// Maximum UDP datagram size (Mumble practical limit).
-const MAX_UDP_SIZE: usize = 1024;
+/// Maximum UDP datagram size.
+///
+/// Must hold the largest datagram we might RECEIVE, not just send. A mono voice
+/// packet is a few hundred bytes, but STEREO Opus (two coded channels — a
+/// dual-receiver station, or the stereo test tone at 128 kbps) is roughly twice
+/// that and, plus the protobuf UDP header + crypto tag, can exceed 1 KB. At
+/// 1024 the OS truncates/drops any larger datagram — on Windows `recv` returns
+/// WSAEMSGSIZE (os error 10040) and the whole packet is lost, so stereo audio
+/// silently never arrives. Opus's own max frame is ~4000 bytes; 8192 leaves
+/// comfortable headroom for the header, tag, and positional data on top of that.
+const MAX_UDP_SIZE: usize = 8192;
 
 /// Abstraction over the OCB2-AES128 encryption used for Mumble UDP.
 ///

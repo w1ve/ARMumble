@@ -223,6 +223,7 @@
   },
   "userListItem": {
     "registeredTitle": "Registered",
+    "onAirTitle": "On air (transmitting)",
     "serverMutedTitle": "Server muted",
     "selfMutedTitle": "Self muted",
     "serverDeafenedTitle": "Server deafened",
@@ -251,6 +252,8 @@
     "unnamed": "Unnamed",
     "noPermissionToJoin": "No permission to join",
     "listening": "Listening",
+    "whisperTarget": "Whisper target (hold the whisper key to talk here)",
+    "whisperingHere": "Whispering here",
     "member_one": "{{count}} member",
     "member_other": "{{count}} members",
     "expand": "Expand",

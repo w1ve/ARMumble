@@ -8,6 +8,7 @@ import type {
   AudioSettings,
   ClientRole,
   NotificationSoundSettings,
+  PttConfig,
   RegisteredUser,
   UserMode,
   UserPreferences,
@@ -16,6 +17,7 @@ import type {
 const STORE_FILE = "preferences.json";
 const KEY = "preferences";
 const AUDIO_KEY = "audioSettings";
+const PTT_KEY = "pttConfig";
 
 const DEFAULTS: UserPreferences = {
   userMode: "normal",
@@ -213,6 +215,74 @@ export async function saveAudioSettings(
   const map = await readAudioMap();
   map[serverKey] = settings;
   await store.set(AUDIO_KEY, map);
+}
+
+// -- Serial PTT config persistence (per-server) --------------------
+
+/**
+ * Rig-PTT config is stored per server (`host:port`) so each station/operator
+ * keeps its own port, line, hotkey and timing. It must be persisted on the
+ * frontend (not just in backend session memory) so the controller can be
+ * started automatically on connect - otherwise the rig only keys after the
+ * user manually opens the PTT settings panel. Mirrors the audio-settings map;
+ * the {@link AUDIO_DEFAULT_KEY} bucket is the "no server" default.
+ */
+type PttConfigMap = Record<string, PttConfig>;
+
+/**
+ * Return the persisted PTT config for a server (`host:port`), falling back to
+ * the default bucket, or null when nothing is saved.
+ */
+export async function getSavedPttConfig(
+  serverKey: string = AUDIO_DEFAULT_KEY,
+): Promise<PttConfig | null> {
+  const store = await getStore();
+  const map = (await store.get<PttConfigMap>(PTT_KEY)) ?? {};
+  return map[serverKey] ?? map[AUDIO_DEFAULT_KEY] ?? null;
+}
+
+/** Persist the PTT config for a server (`host:port`), or the shared default. */
+export async function savePttConfig(
+  config: PttConfig,
+  serverKey: string = AUDIO_DEFAULT_KEY,
+): Promise<void> {
+  const store = await getStore();
+  const map = (await store.get<PttConfigMap>(PTT_KEY)) ?? {};
+  map[serverKey] = config;
+  await store.set(PTT_KEY, map);
+}
+
+// -- Per-server voice mute persistence -----------------------------
+
+/**
+ * The mic mute state is persisted per server (`host:port`) so each rig comes
+ * back the way it was left. This is distinct from the legacy global
+ * `voiceOnReconnect`/`voiceMutedOnReconnect` prefs, which could not represent
+ * a different mute state per server. A value of `undefined` means "never set"
+ * and lets the connect logic apply the role/mode default (operator VOX -> live,
+ * station -> muted on first run).
+ */
+type VoiceMutedMap = Record<string, boolean>;
+const VOICE_MUTED_KEY = "voiceMutedByServer";
+
+/** Return the saved mic-mute state for a server, or null if never set. */
+export async function getSavedVoiceMuted(
+  serverKey: string,
+): Promise<boolean | null> {
+  const store = await getStore();
+  const map = (await store.get<VoiceMutedMap>(VOICE_MUTED_KEY)) ?? {};
+  return serverKey in map ? map[serverKey] : null;
+}
+
+/** Persist the mic-mute state for a server. */
+export async function saveVoiceMuted(
+  serverKey: string,
+  muted: boolean,
+): Promise<void> {
+  const store = await getStore();
+  const map = (await store.get<VoiceMutedMap>(VOICE_MUTED_KEY)) ?? {};
+  map[serverKey] = muted;
+  await store.set(VOICE_MUTED_KEY, map);
 }
 
 // -- Dismissed persistence banners ---------------------------------

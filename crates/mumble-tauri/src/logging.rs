@@ -57,8 +57,8 @@ static AUTO_ZIP: AtomicBool = AtomicBool::new(false);
 /// Tauri app handle is available, which is after [`init`].
 static LOG_DIR: OnceLock<PathBuf> = OnceLock::new();
 
-/// Prefix for log file names: `fancy-mumble.<YYYY-MM-DD>.log`.
-const LOG_PREFIX: &str = "fancy-mumble";
+/// Prefix for log file names: `remote-radio-mumble.<YYYY-MM-DD>.log`.
+const LOG_PREFIX: &str = "remote-radio-mumble";
 
 // -- Writers --------------------------------------------------------
 
