@@ -29,6 +29,9 @@ export enum RrPayloadType {
   Ptt = "ptt",
   /** Announce this client's role. Payload: {@link RrRolePayload}. */
   Role = "role",
+  /** Operator tells a Station which radio feeds its transmitted stereo RIGHT
+   *  channel (dual-radio). Payload: {@link RrRightChannelSourcePayload}. */
+  RightChannelSource = "right_channel_source",
 }
 
 /**
@@ -49,4 +52,16 @@ export interface RrPttPayload {
 export interface RrRolePayload {
   /** The sender's role on this server. */
   role: ClientRole;
+  /** Station only: whether a 2nd radio input is configured, so operators know
+   *  to enable the Radio 1 / Radio 2 right-channel control. Absent/false means
+   *  no dual-radio available. */
+  hasSecondRadio?: boolean;
+}
+
+/** Operator -> Station: which radio feeds the transmitted stereo RIGHT
+ *  channel. The station re-mixes its capture on receipt (one stereo stream). */
+export interface RrRightChannelSourcePayload {
+  /** `radio1` = normal stereo / mix of radio 1; `radio2` = Left=radio1 mono,
+   *  Right=radio2 mono. */
+  source: import("../types").RightChannelSource;
 }

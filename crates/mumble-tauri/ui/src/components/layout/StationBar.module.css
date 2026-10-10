@@ -12,14 +12,7 @@
   flex-shrink: 0;
 }
 
-.serverInfo {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  flex-shrink: 1;
-}
-
-/* mic + TX scope + headphone cluster, kept together on one line */
+/* mic + level meter + headphone cluster, kept together on one line */
 .cluster {
   display: inline-flex;
   align-items: center;
@@ -27,30 +20,13 @@
   flex-shrink: 0;
 }
 
-.serverName {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--color-text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Fixed small TX oscilloscope so the operator control head has room. */
-.scopeWrap {
+/* Fixed small level meter so the operator control head has room. */
+.meterWrap {
   width: 120px;
   flex: 0 0 120px;
   display: flex;
   align-items: center;
-  height: 30px;
-}
-
-.voiceActions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+  height: 14px;
 }
 
 .voiceToggle {

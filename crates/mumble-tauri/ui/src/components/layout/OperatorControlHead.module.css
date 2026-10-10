@@ -132,3 +132,51 @@
   font-size: 11px;
   color: var(--color-danger);
 }
+
+/* --- Stereo controls --- */
+.stereoBadge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  flex-shrink: 0;
+}
+
+.stereoBadgeOn {
+  color: #fff;
+  background: var(--color-online);
+  border-color: var(--color-online);
+}
+
+/* A disabled segmented/control group reads as greyed and ignores clicks. */
+.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.panWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.panLabel {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.pan {
+  width: 80px;
+  cursor: ew-resize;
+}
+
+.pan:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

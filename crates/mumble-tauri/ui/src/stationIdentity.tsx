@@ -58,6 +58,48 @@ export function clearPeerRoles(): void {
     peerStationSessions.clear();
     globalThis.dispatchEvent(new CustomEvent(PEER_ROLES_CHANGED_EVENT));
   }
+  if (peerSecondRadioSessions.size > 0) {
+    peerSecondRadioSessions.clear();
+    globalThis.dispatchEvent(new CustomEvent(PEER_ROLES_CHANGED_EVENT));
+  }
+}
+
+// --- Station dual-radio capability (fed by the role broadcast) --------------
+
+/** Mumble session id -> whether that Station advertised a 2nd radio input.
+ *  Lets an operator enable the Radio 1 / Radio 2 right-channel control only
+ *  when the connected Station actually has a second radio. */
+const peerSecondRadioSessions = new Map<number, boolean>();
+
+/** Record whether a peer Station has a 2nd radio (from the role broadcast). */
+export function recordPeerSecondRadio(session: number, hasSecondRadio: boolean): void {
+  const prev = peerSecondRadioSessions.get(session);
+  if (prev !== hasSecondRadio) {
+    peerSecondRadioSessions.set(session, hasSecondRadio);
+    globalThis.dispatchEvent(new CustomEvent(PEER_ROLES_CHANGED_EVENT));
+  }
+}
+
+/** Whether ANY peer in the roster advertised a 2nd radio. Operators use this to
+ *  enable the dual-radio right-channel control. */
+export function anyPeerHasSecondRadio(): boolean {
+  for (const v of peerSecondRadioSessions.values()) {
+    if (v) return true;
+  }
+  return false;
+}
+
+/** React hook: true when a Station with a 2nd radio is present. Re-renders on
+ *  role/capability broadcasts. */
+export function useAnyPeerHasSecondRadio(): boolean {
+  const [has, setHas] = useState(false);
+  useEffect(() => {
+    const refresh = () => setHas(anyPeerHasSecondRadio());
+    refresh();
+    globalThis.addEventListener(PEER_ROLES_CHANGED_EVENT, refresh);
+    return () => globalThis.removeEventListener(PEER_ROLES_CHANGED_EVENT, refresh);
+  }, []);
+  return has;
 }
 
 /** Authoritative station flag for a session id, or `undefined` if that peer

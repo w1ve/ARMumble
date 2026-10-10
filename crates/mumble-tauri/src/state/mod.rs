@@ -106,6 +106,11 @@ pub(super) struct AudioPipelineState {
     /// Live playback stereo-fold / per-channel-gain control, shared with the
     /// active output backend. `None` when no playback is running.
     pub stereo_control: Option<Arc<mumble_protocol::audio::mixer::StereoControl>>,
+    /// Live right-channel source for a dual-radio Station capture
+    /// (0 = Radio 1, 1 = Radio 2). Shared with the capture thread so the
+    /// operator can switch it without a pipeline restart. `None` when the
+    /// capture isn't a dual-radio one.
+    pub right_source_control: Option<Arc<std::sync::atomic::AtomicU8>>,
     pub speaker_volumes: SpeakerVolumes,
     pub mic_test_handle: Option<tauri::async_runtime::JoinHandle<()>>,
     pub latency_test_handle: Option<tauri::async_runtime::JoinHandle<()>>,

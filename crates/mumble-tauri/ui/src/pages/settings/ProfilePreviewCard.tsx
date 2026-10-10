@@ -148,15 +148,18 @@ export function ProfilePreviewCard({
 
       {/* Avatar area - flex row: avatar on left, name on right centred to avatar midpoint */}
       <div className={styles.previewAvatarArea}>
-        <div className={styles.previewAvatarWrapper} style={avatarBorderStyle}>
+        <div
+          className={`${styles.previewAvatarWrapper} ${isStation ? styles.previewAvatarStation : ""}`}
+          style={avatarBorderStyle}
+        >
           {avatar ? (
             <img
               src={avatar}
               alt={t("profilePreview.avatarAlt")}
-              className={styles.previewAvatarImg}
+              className={`${styles.previewAvatarImg} ${isStation ? styles.previewAvatarStationImg : ""}`}
             />
           ) : (
-            <span className={styles.previewAvatarPlaceholder}>
+            <span className={`${styles.previewAvatarPlaceholder} ${isStation ? styles.previewAvatarStationImg : ""}`}>
               {isStation ? <StationIcon width={48} height={48} /> : <UserFilledIcon width={48} height={48} />}
             </span>
           )}

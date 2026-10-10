@@ -89,8 +89,13 @@ import {
   RrPayloadType,
   type RrPttPayload,
   type RrRolePayload,
+  type RrRightChannelSourcePayload,
 } from "./constants/remoteRadioPlugin";
-import { recordPeerRole, clearPeerRoles } from "./stationIdentity";
+import { recordPeerRole, clearPeerRoles, recordPeerSecondRadio } from "./stationIdentity";
+
+/** Sentinel for the "(No device)" selection (mirrors NO_DEVICE in
+ *  DeviceSelect.tsx); a station with this as its 2nd input has no 2nd radio. */
+const NO_DEVICE_SENTINEL = "\u0000none";
 import { getSavedServers } from "./serverStorage";
 import i18next from "i18next";
 import {
@@ -2520,15 +2525,50 @@ export async function announceLocalRole(
   try {
     const role = await resolveRoleForServer(host, port);
     localIsStationFlag = role === "station";
+    // A Station advertises whether it has a 2nd radio configured, so operators
+    // know to enable the Radio 1 / Radio 2 right-channel control.
+    let hasSecondRadio = false;
+    if (role === "station") {
+      try {
+        const serverId = useAppStore.getState().activeServerId ?? undefined;
+        const cfg = await invoke<import("./types").AudioSettings>("get_audio_settings", { serverId });
+        const d2 = cfg.selected_device_2;
+        hasSecondRadio = d2 != null && d2 !== "" && d2 !== NO_DEVICE_SENTINEL;
+      } catch {
+        /* best-effort */
+      }
+    }
     await sendPluginMessage(
       RR_PLUGIN_NAME,
       RrPayloadType.Role,
-      { role } satisfies RrRolePayload,
+      { role, hasSecondRadio } satisfies RrRolePayload,
       [],
       channelId,
     );
   } catch (e) {
     console.warn("[store] announceLocalRole failed:", e);
+  }
+}
+
+/**
+ * Operator -> active Station: set which radio feeds the transmitted stereo
+ * RIGHT channel. Broadcast over the RR plugin channel scoped to the current
+ * channel; the Station re-mixes its capture live on receipt.
+ */
+export async function sendRightChannelSource(
+  source: import("./types").RightChannelSource,
+): Promise<void> {
+  try {
+    const channelId = useAppStore.getState().currentChannel;
+    await sendPluginMessage(
+      RR_PLUGIN_NAME,
+      RrPayloadType.RightChannelSource,
+      { source } satisfies RrRightChannelSourcePayload,
+      [],
+      channelId,
+    );
+  } catch (e) {
+    console.warn("[store] sendRightChannelSource failed:", e);
   }
 }
 
@@ -2721,6 +2761,25 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
       const data = decodePluginPayload<RrRolePayload>(p.payload);
       if (data && p.senderSession != null) {
         recordPeerRole(p.senderSession, data.role);
+        recordPeerSecondRadio(p.senderSession, data.hasSecondRadio === true);
+      }
+      return;
+    }
+    if (p.payloadType === RrPayloadType.RightChannelSource) {
+      // Only a Station acts on it: switch which radio feeds the transmitted
+      // right channel, live (no pipeline restart). Updates the setting so the
+      // backend atomic is flipped via set_audio_settings.
+      const data = decodePluginPayload<RrRightChannelSourcePayload>(p.payload);
+      if (data && isLocalStation()) {
+        const serverId = useAppStore.getState().activeServerId ?? undefined;
+        void invoke<import("./types").AudioSettings>("get_audio_settings", { serverId })
+          .then((cfg) =>
+            invoke("set_audio_settings", {
+              settings: { ...cfg, right_channel_source: data.source },
+              serverId,
+            }),
+          )
+          .catch((e) => console.warn("[store] right-channel-source apply failed:", e));
       }
       return;
     }

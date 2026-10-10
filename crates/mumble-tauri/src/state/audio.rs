@@ -139,6 +139,18 @@ impl AppState {
                     settings.right_volume,
                 );
             }
+            // Live-switch the dual-radio right-channel source (no restart).
+            if let Some(ref rs) = state.audio.right_source_control {
+                let v = match settings.right_channel_source {
+                    crate::state::types::RightChannelSource::Radio2 => {
+                        crate::audio::rodio_desktop::RIGHT_SOURCE_RADIO2
+                    }
+                    crate::state::types::RightChannelSource::Radio1 => {
+                        crate::audio::rodio_desktop::RIGHT_SOURCE_RADIO1
+                    }
+                };
+                rs.store(v, Ordering::Relaxed);
+            }
         }
 
         if let Ok(mut state) = target.lock() {
@@ -625,12 +637,48 @@ mod voice_pipeline {
             let station_stereo =
                 self.ptt_config_for(None).role == crate::state::types::PttRole::Station;
 
-            let capture = PlatformAudioFactory::create_capture_channels(
-                audio_settings.selected_device.as_deref(),
-                frame_size_samples,
-                input_vol.clone(),
-                station_stereo,
-            )?;
+            // Dual-radio Station: when a 2nd radio input is configured, open
+            // both devices and build one stereo stream whose right channel is
+            // switchable live (Radio 1 vs Radio 2). Store the shared atomic so
+            // set_audio_settings_for can flip it without a pipeline restart.
+            let dual_radio = station_stereo
+                && audio_settings
+                    .selected_device_2
+                    .as_deref()
+                    .is_some_and(|s| !s.is_empty()
+                        && !crate::commands::audio::is_no_device(Some(s)));
+            let capture = if dual_radio {
+                let right_source = Arc::new(std::sync::atomic::AtomicU8::new(
+                    match audio_settings.right_channel_source {
+                        crate::state::types::RightChannelSource::Radio2 => {
+                            crate::audio::rodio_desktop::RIGHT_SOURCE_RADIO2
+                        }
+                        crate::state::types::RightChannelSource::Radio1 => {
+                            crate::audio::rodio_desktop::RIGHT_SOURCE_RADIO1
+                        }
+                    },
+                ));
+                if let Ok(mut state) = self.inner.snapshot().lock() {
+                    state.audio.right_source_control = Some(right_source.clone());
+                }
+                PlatformAudioFactory::create_capture_dual(
+                    audio_settings.selected_device.as_deref(),
+                    audio_settings.selected_device_2.as_deref(),
+                    frame_size_samples,
+                    input_vol.clone(),
+                    right_source,
+                )?
+            } else {
+                if let Ok(mut state) = self.inner.snapshot().lock() {
+                    state.audio.right_source_control = None;
+                }
+                PlatformAudioFactory::create_capture_channels(
+                    audio_settings.selected_device.as_deref(),
+                    frame_size_samples,
+                    input_vol.clone(),
+                    station_stereo,
+                )?
+            };
             // The capture may have fallen back to mono (e.g. a mono sound card),
             // so build the encoder to match the capture's actual channel count.
             let capture_format = capture.format();

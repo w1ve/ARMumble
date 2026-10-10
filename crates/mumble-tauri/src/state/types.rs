@@ -1006,6 +1006,13 @@ pub enum TransmitMode {
 pub struct AudioSettings {
     /// Selected input device name (None = system default).
     pub selected_device: Option<String>,
+    /// Second radio input device (Station only; None = no 2nd radio).
+    #[serde(default)]
+    pub selected_device_2: Option<String>,
+    /// Which radio feeds the transmitted stereo RIGHT channel. Switchable live
+    /// by the operator; only meaningful when `selected_device_2` is set.
+    #[serde(default)]
+    pub right_channel_source: RightChannelSource,
     /// Whether auto-gain is enabled.
     pub auto_gain: bool,
     /// Voice activation threshold (0.0-1.0). Below this level -> silence.
@@ -1233,6 +1240,19 @@ pub enum StereoMode {
     SwapLr,
 }
 
+/// Which radio feeds the transmitted stereo RIGHT channel on a dual-radio
+/// Station. Switchable live by the operator (sent over the RR plugin channel).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RightChannelSource {
+    /// Right carries radio 1 (normal stereo capture / mix of radio 1).
+    #[default]
+    Radio1,
+    /// Right carries the second radio: Left = radio 1 mixed to mono,
+    /// Right = radio 2 mixed to mono.
+    Radio2,
+}
+
 impl AudioSettings {
     pub(crate) fn default_max_gain() -> f32 {
         15.0
@@ -1291,6 +1311,10 @@ impl AudioSettings {
     /// require a pipeline restart.
     pub fn needs_pipeline_restart(&self, other: &Self) -> bool {
         self.selected_device != other.selected_device
+            // The 2nd radio device opening/closing rebuilds capture. The
+            // right_channel_source is intentionally NOT here: it's switched
+            // live via a shared atomic in the capture thread (no restart).
+            || self.selected_device_2 != other.selected_device_2
             || self.auto_gain != other.auto_gain
             || (self.vad_threshold - other.vad_threshold).abs() > f32::EPSILON
             || (self.max_gain_db - other.max_gain_db).abs() > f32::EPSILON
@@ -1318,6 +1342,8 @@ impl Default for AudioSettings {
     fn default() -> Self {
         Self {
             selected_device: None,
+            selected_device_2: None,
+            right_channel_source: RightChannelSource::Radio1,
             auto_gain: true,
             vad_threshold: 0.01,
             max_gain_db: 15.0,

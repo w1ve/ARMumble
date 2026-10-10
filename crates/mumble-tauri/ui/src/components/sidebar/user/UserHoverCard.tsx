@@ -45,7 +45,7 @@ export default function UserHoverCard({ user, children, className }: UserHoverCa
     [showCard, user.comment, liveComment],
   );
   const isRegistered = user.user_id != null && user.user_id > 0;
-  const isStation = useIsStation()(user.name);
+  const isStation = useIsStation()(user.name, user.session);
 
   return (
     <>
@@ -61,8 +61,8 @@ export default function UserHoverCard({ user, children, className }: UserHoverCa
         {children ?? (
           <span className={styles.default}>
             {url
-              ? <img src={url} alt="" className={styles.avatar} />
-              : <span className={styles.avatarFallback} style={isStation ? undefined : { background: colorFor(user.name) }}>
+              ? <img src={url} alt="" className={`${styles.avatar} ${isStation ? styles.avatarStation : ""}`} />
+              : <span className={`${styles.avatarFallback} ${isStation ? styles.avatarStation : ""}`} style={isStation ? undefined : { background: colorFor(user.name) }}>
                   <StationGlyph isStation={isStation} size={14} fallback={user.name.charAt(0).toUpperCase()} />
                 </span>}
             <span className={styles.name}>{user.name}</span>

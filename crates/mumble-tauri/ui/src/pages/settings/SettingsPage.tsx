@@ -48,6 +48,8 @@ type Tab = "profile" | "voice" | "shortcuts" | "identities" | "advanced" | "pers
 
 const DEFAULT_AUDIO: AudioSettings = {
   selected_device: null,
+  selected_device_2: null,
+  right_channel_source: "radio1",
   auto_gain: true,
   vad_threshold: 0.3,
   max_gain_db: 15,

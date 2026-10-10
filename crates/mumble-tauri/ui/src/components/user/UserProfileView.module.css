@@ -107,6 +107,15 @@
   background: var(--color-bg-secondary, #1a1a2e);
 }
 
+/* A radio station gets a rounded SQUARE avatar (vs round for people). */
+.avatarWrapper.avatarWrapperStation {
+  border-radius: 14px;
+}
+.avatarImg.avatarImgStation,
+.avatarPlaceholder.avatarImgStation {
+  border-radius: 12px;
+}
+
 .decoration {
   position: absolute;
   top: -10px;

@@ -16,7 +16,7 @@ import type { UserEntry, FancyProfile, UserMode } from "../../types";
 import { parseComment } from "../../profileFormat";
 import { useUserAvatar, useUserComment } from "../../lazyBlobs";
 import { getPreferences } from "../../preferencesStorage";
-import { useStationNames, isStationName } from "../../stationIdentity";
+import { useIsStation } from "../../stationIdentity";
 import { useUserStats } from "../../hooks/useUserStats";
 import { formatDuration } from "../../utils/format";
 import UserInfoPanel from "./UserInfoPanel";
@@ -133,8 +133,7 @@ function UserProfilePanel({
 
   const isExpert = userMode !== "normal";
 
-  const stationNames = useStationNames();
-  const isStation = isStationName(user.name, stationNames);
+  const isStation = useIsStation()(user.name, user.session);
 
   // Load user mode preference on mount.
   useEffect(() => {
@@ -221,15 +220,18 @@ function UserProfilePanel({
 
         {/* Avatar + name row - flex row so name centre aligns with avatar centre */}
         <div className={styles.avatarArea}>
-          <div className={styles.avatarWrapper} style={avatarBorderStyle}>
+          <div
+            className={`${styles.avatarWrapper} ${isStation ? styles.avatarWrapperStation : ""}`}
+            style={avatarBorderStyle}
+          >
             {avatarDataUrl ? (
               <img
                 src={avatarDataUrl}
                 alt={user.name}
-                className={styles.avatarImg}
+                className={`${styles.avatarImg} ${isStation ? styles.avatarImgStation : ""}`}
               />
             ) : (
-              <span className={styles.avatarPlaceholder}>
+              <span className={`${styles.avatarPlaceholder} ${isStation ? styles.avatarImgStation : ""}`}>
                 {isStation ? <StationIcon width={48} height={48} /> : <UserFilledIcon width={48} height={48} />}
               </span>
             )}

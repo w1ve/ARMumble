@@ -28,7 +28,7 @@ import { CalibrationPanel } from "./CalibrationPanel";
 import { PttPanel } from "./PttPanel";
 import { RadioCardGroup, type RadioCardOption } from "../../components/elements/RadioCardGroup";
 import { DeviceSelect } from "../../components/audio/DeviceSelect";
-import { InputOscilloscope, OutputOscilloscope } from "../../components/audio/Oscilloscope";
+import { InputLevelMeter, OutputLevelMeter } from "../../components/audio/LevelMeter";
 import styles from "./SettingsPage.module.css";
 import panelStyles from "./AudioPanel.module.css";
 import { registerSettings } from "./settingsSearchRegistry";
@@ -168,6 +168,17 @@ export function AudioPanel({
 }>) {
   const { t } = useTranslation("settings");
   const tStr = t as (key: string) => string;
+  const isStation = role === "station";
+  // Role-based device labels. A Station is at the rig: its "input" is the
+  // radio's audio and its "output" modulates the radio. An Operator is the
+  // remote human: a microphone in, a listening device out.
+  const inputLabel = isStation ? t("audio.radioAudioDevice") : t("audio.microphoneDevice");
+  const outputLabel = isStation ? t("audio.radioModulationInput") : t("audio.operatorListeningDevice");
+  // The 2nd input (second radio) list excludes whatever the first input is set
+  // to, so the two radios can't be the same device.
+  const secondInputDevices = devices.filter(
+    (d) => d.name !== (settings.selected_device ?? ""),
+  );
   const denoiserOptions = buildDenoiserOptions(tStr);
   const stereoOptions: RadioCardOption<StereoMode>[] = [
     {
@@ -251,7 +262,7 @@ export function AudioPanel({
       <section className={styles.section}>
         <div className={panelStyles.deviceColumns}>
           <div className={panelStyles.deviceColumn}>
-            <h3 className={styles.sectionTitle}>{t("audio.inputDevice")}</h3>
+            <h3 className={styles.sectionTitle}>{inputLabel}</h3>
             <DeviceSelect
               devices={devices}
               value={settings.selected_device ?? null}
@@ -259,10 +270,10 @@ export function AudioPanel({
               systemDefaultLabel={t("audio.systemDefault")}
               noDeviceLabel={t("audio.noDevice")}
               defaultSuffix={t("audio.deviceDefault")}
-              ariaLabel={t("audio.inputDevice")}
+              ariaLabel={inputLabel}
             />
             <div className={panelStyles.deviceScope}>
-              <InputOscilloscope ariaLabel={t("audio.inputDevice")} />
+              <InputLevelMeter ariaLabel={inputLabel} />
             </div>
             <SliderField
               label={t("audio.microphoneVolume")}
@@ -273,10 +284,28 @@ export function AudioPanel({
               onChange={(v) => onChange({ input_volume: v })}
               format={(v) => `${Math.round(v * 100)}%`}
             />
+
+            {/* Second radio input (Station only). '(No device)' disables the
+                dual-radio feature. Cannot be the same device as the first. */}
+            {isStation && (
+              <>
+                <h3 className={styles.sectionTitle}>{t("audio.secondRadioDevice")}</h3>
+                <DeviceSelect
+                  devices={secondInputDevices}
+                  value={settings.selected_device_2 ?? null}
+                  onChange={(selected_device_2) => onChange({ selected_device_2 })}
+                  systemDefaultLabel={t("audio.systemDefault")}
+                  noDeviceLabel={t("audio.noDevice")}
+                  defaultSuffix={t("audio.deviceDefault")}
+                  ariaLabel={t("audio.secondRadioDevice")}
+                />
+                <p className={styles.fieldHint}>{t("audio.secondRadioHint")}</p>
+              </>
+            )}
           </div>
 
           <div className={panelStyles.deviceColumn}>
-            <h3 className={styles.sectionTitle}>{t("audio.outputDevice")}</h3>
+            <h3 className={styles.sectionTitle}>{outputLabel}</h3>
             <DeviceSelect
               devices={outputDevices}
               value={settings.selected_output_device ?? null}
@@ -284,10 +313,10 @@ export function AudioPanel({
               systemDefaultLabel={t("audio.systemDefault")}
               noDeviceLabel={t("audio.noDevice")}
               defaultSuffix={t("audio.deviceDefault")}
-              ariaLabel={t("audio.outputDevice")}
+              ariaLabel={outputLabel}
             />
             <div className={panelStyles.deviceScope}>
-              <OutputOscilloscope ariaLabel={t("audio.outputDevice")} />
+              <OutputLevelMeter ariaLabel={outputLabel} />
             </div>
             <SliderField
               label={t("audio.speakerVolume")}
@@ -300,6 +329,16 @@ export function AudioPanel({
             />
           </div>
         </div>
+
+        {/* Station-only explanation of the radio audio in/out roles. */}
+        {isStation && (
+          <p className={styles.fieldHint}>
+            <strong>{t("audio.radioAudioDevice")}</strong>
+            {t("audio.stationDeviceExplainA")}
+            <strong>{t("audio.radioModulationInput")}</strong>
+            {t("audio.stationDeviceExplainB")}
+          </p>
+        )}
       </section>
 
       {/* -- Stereo Output ------------------------------------------ */}

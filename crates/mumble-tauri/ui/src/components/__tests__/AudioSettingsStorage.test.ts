@@ -40,6 +40,8 @@ const AUDIO_KEY = "audioSettings";
 function makeSettings(overrides: Partial<AudioSettings> = {}): AudioSettings {
   return {
     selected_device: null,
+    selected_device_2: null,
+    right_channel_source: "radio1",
     auto_gain: true,
     vad_threshold: 0.3,
     max_gain_db: 15,

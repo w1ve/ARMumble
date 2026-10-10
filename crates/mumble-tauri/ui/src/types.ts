@@ -743,6 +743,11 @@ export type TransmitMode = "continuous" | "voice_activity" | "push_to_talk";
  *  - `swap_lr` swap left and right */
 export type StereoMode = "stereo" | "mono" | "swap_lr";
 
+/** Which radio feeds the transmitted stereo RIGHT channel on a dual-radio
+ *  Station. `radio1` = right carries radio 1 (normal stereo / mix); `radio2`
+ *  = right carries the second radio (Left=radio1 mono, Right=radio2 mono). */
+export type RightChannelSource = "radio1" | "radio2";
+
 /** PTT direction, fixed by this client's role. Mirrors Rust `PttRole`. */
 export type PttRole = "operator" | "station";
 
@@ -799,6 +804,13 @@ export interface SerialPortInfo {
 export interface AudioSettings {
   /** Selected input device name (null = system default). */
   selected_device: string | null;
+  /** Second radio input device (Station only; null = disabled / no 2nd radio).
+   *  When set, the Station can route this device onto the right channel. */
+  selected_device_2: string | null;
+  /** Which radio feeds the transmitted stereo RIGHT channel: the first radio
+   *  (mix/mono of radio 1) or the second radio. Switchable live by the
+   *  operator; only meaningful when selected_device_2 is set. */
+  right_channel_source: RightChannelSource;
   /** Whether auto-gain is enabled. */
   auto_gain: boolean;
   /** Voice activation open threshold (0.0\u20131.0). */

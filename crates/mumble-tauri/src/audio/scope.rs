@@ -6,8 +6,9 @@
 //! `scope-data` events at ~30 fps. When no scope is mounted the push is a
 //! single relaxed atomic load, so the audio threads pay almost nothing.
 
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::OnceLock;
+use std::collections::HashSet;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{LazyLock, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
@@ -55,16 +56,21 @@ struct ScopeFrame {
 
 struct ScopeHub {
     app: OnceLock<tauri::AppHandle>,
-    input_subs: AtomicUsize,
-    output_subs: AtomicUsize,
+    // Sets of subscriber ids (one per mounted scope). Using id sets instead of
+    // a bare counter makes the ref-count robust against unbalanced
+    // subscribe/unsubscribe calls (e.g. a late unsubscribe from a scope that
+    // unmounted during a route change can't starve a still-mounted one).
+    // LazyLock because HashSet::new() is not const-constructible in a static.
+    input_subs: LazyLock<Mutex<HashSet<u64>>>,
+    output_subs: LazyLock<Mutex<HashSet<u64>>>,
     input_last_ms: AtomicU64,
     output_last_ms: AtomicU64,
 }
 
 static HUB: ScopeHub = ScopeHub {
     app: OnceLock::new(),
-    input_subs: AtomicUsize::new(0),
-    output_subs: AtomicUsize::new(0),
+    input_subs: LazyLock::new(|| Mutex::new(HashSet::new())),
+    output_subs: LazyLock::new(|| Mutex::new(HashSet::new())),
     input_last_ms: AtomicU64::new(0),
     output_last_ms: AtomicU64::new(0),
 };
@@ -82,41 +88,31 @@ pub fn set_app_handle(app: tauri::AppHandle) {
     let _ = HUB.app.set(app);
 }
 
-/// Increment the subscriber count for a source (scope mounted).
-pub fn subscribe(source: ScopeSource) {
-    let counter = match source {
-        ScopeSource::Input => &HUB.input_subs,
-        ScopeSource::Output => &HUB.output_subs,
-    };
-    let _prev = counter.fetch_add(1, Ordering::Relaxed);
+fn subs_set(source: ScopeSource) -> &'static Mutex<HashSet<u64>> {
+    // Deref the LazyLock to the inner Mutex (forces init on first use). HUB is
+    // 'static so the borrow is 'static.
+    match source {
+        ScopeSource::Input => &*HUB.input_subs,
+        ScopeSource::Output => &*HUB.output_subs,
+    }
 }
 
-/// Decrement the subscriber count for a source (scope unmounted).
-pub fn unsubscribe(source: ScopeSource) {
-    let counter = match source {
-        ScopeSource::Input => &HUB.input_subs,
-        ScopeSource::Output => &HUB.output_subs,
-    };
-    // Saturating decrement via a relaxed CAS loop.
-    let mut cur = counter.load(Ordering::Relaxed);
-    while cur > 0 {
-        match counter.compare_exchange_weak(
-            cur,
-            cur - 1,
-            Ordering::Relaxed,
-            Ordering::Relaxed,
-        ) {
-            Ok(_) => break,
-            Err(actual) => cur = actual,
-        }
+/// Register a subscriber id for a source (scope mounted).
+pub fn subscribe(source: ScopeSource, id: u64) {
+    if let Ok(mut set) = subs_set(source).lock() {
+        let _ = set.insert(id);
+    }
+}
+
+/// Remove a subscriber id for a source (scope unmounted).
+pub fn unsubscribe(source: ScopeSource, id: u64) {
+    if let Ok(mut set) = subs_set(source).lock() {
+        let _ = set.remove(&id);
     }
 }
 
 fn subs(source: ScopeSource) -> usize {
-    match source {
-        ScopeSource::Input => HUB.input_subs.load(Ordering::Relaxed),
-        ScopeSource::Output => HUB.output_subs.load(Ordering::Relaxed),
-    }
+    subs_set(source).lock().map(|s| s.len()).unwrap_or(0)
 }
 
 fn last_ms(source: ScopeSource) -> &'static AtomicU64 {

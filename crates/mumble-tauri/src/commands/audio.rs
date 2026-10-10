@@ -216,17 +216,17 @@ pub(crate) fn set_audio_backend(use_rodio: bool) {
 /// "output"). Ref-counted: the backend only taps + emits `scope-data` while
 /// at least one scope is subscribed, so it is free when nothing is shown.
 #[tauri::command]
-pub(crate) fn scope_subscribe(source: String) {
+pub(crate) fn scope_subscribe(source: String, id: u64) {
     if let Some(src) = audio::scope::ScopeSource::parse(&source) {
-        audio::scope::subscribe(src);
+        audio::scope::subscribe(src, id);
     }
 }
 
 /// Unsubscribe a previously subscribed scope source.
 #[tauri::command]
-pub(crate) fn scope_unsubscribe(source: String) {
+pub(crate) fn scope_unsubscribe(source: String, id: u64) {
     if let Some(src) = audio::scope::ScopeSource::parse(&source) {
-        audio::scope::unsubscribe(src);
+        audio::scope::unsubscribe(src, id);
     }
 }
 

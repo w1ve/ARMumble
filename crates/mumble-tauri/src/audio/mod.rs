@@ -188,6 +188,33 @@ impl AudioDeviceFactory for PlatformAudioFactory {
     }
 }
 
+/// Dual-radio Station capture (rodio-only inherent method, not part of the
+/// cross-platform trait). Opens radio 1 + radio 2 and produces one interleaved
+/// stereo stream whose right channel is switchable live via `right_source`.
+/// Falls back to normal single-device stereo capture on the cpal backend.
+#[cfg(not(target_os = "android"))]
+impl PlatformAudioFactory {
+    pub fn create_capture_dual(
+        device_name: Option<&str>,
+        device_name_2: Option<&str>,
+        frame_size: usize,
+        volume: Arc<AtomicU32>,
+        right_source: Arc<std::sync::atomic::AtomicU8>,
+    ) -> std::result::Result<Box<dyn AudioCapture>, String> {
+        if USE_RODIO_BACKEND.load(Ordering::Relaxed) {
+            rodio_desktop::create_capture_dual(
+                device_name, device_name_2, frame_size, volume, right_source,
+            )
+        } else {
+            // cpal backend has no dual-radio path yet; fall back to normal
+            // single-device stereo capture.
+            desktop::CpalAudioFactory::create_capture_channels(
+                device_name, frame_size, volume, true,
+            )
+        }
+    }
+}
+
 #[cfg(target_os = "android")]
 pub use android::OboeAudioFactory as PlatformAudioFactory;
 

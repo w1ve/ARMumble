@@ -7,7 +7,7 @@
 
 use std::collections::VecDeque;
 use std::num::NonZero;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 use std::sync::mpsc::{self, SyncSender, TryRecvError};
 use std::sync::Arc;
 use std::thread;
@@ -51,13 +51,25 @@ pub struct RodioCapture {
     sequence: u64,
     sample_rx: Option<mpsc::Receiver<Vec<f32>>>,
     _capture_thread: Option<thread::JoinHandle<()>>,
+    _radio2_thread: Option<thread::JoinHandle<()>>,
     volume: Arc<AtomicU32>,
     pending: Vec<f32>,
     device_name: Option<String>,
+    /// Second radio input device (Station dual-radio). When set, capture opens
+    /// a 2nd device whose mono audio can feed the RIGHT channel.
+    device_name_2: Option<String>,
+    /// Live right-channel source: 0 = Radio 1 (normal stereo), 1 = Radio 2
+    /// (Left = radio1 mono, Right = radio2 mono). Read in the capture mix loop
+    /// so the operator can switch it without a pipeline restart.
+    right_source: Arc<AtomicU8>,
     /// When true, capture produces interleaved STEREO frames (L R L R) — the
     /// radio Station case (dual receivers on L/R). Mono otherwise.
     stereo: bool,
 }
+
+/// Right-channel source values shared with the capture thread via an atomic.
+pub const RIGHT_SOURCE_RADIO1: u8 = 0;
+pub const RIGHT_SOURCE_RADIO2: u8 = 1;
 
 impl RodioCapture {
     pub fn new(
@@ -90,11 +102,31 @@ impl RodioCapture {
             sequence: 0,
             sample_rx: None,
             _capture_thread: None,
+            _radio2_thread: None,
             volume,
             pending: Vec::with_capacity(frame_size * 2),
             device_name: device_name.map(str::to_owned),
+            device_name_2: None,
+            right_source: Arc::new(AtomicU8::new(RIGHT_SOURCE_RADIO1)),
             stereo,
         })
+    }
+
+    /// Dual-radio Station capture: always interleaved stereo. `device_name` is
+    /// radio 1, `device_name_2` is radio 2. `right_source` is a live-switchable
+    /// atomic (RIGHT_SOURCE_RADIO1/RADIO2) controlling what the right channel
+    /// carries without a pipeline restart.
+    pub fn new_dual(
+        device_name: Option<&str>,
+        device_name_2: Option<&str>,
+        frame_size: usize,
+        volume: Arc<AtomicU32>,
+        right_source: Arc<AtomicU8>,
+    ) -> Result<Self> {
+        let mut c = Self::new_with_channels(device_name, frame_size, volume, true)?;
+        c.device_name_2 = device_name_2.map(str::to_owned);
+        c.right_source = right_source;
+        Ok(c)
     }
 
     /// Look up an input device by display name (as returned by
@@ -269,9 +301,46 @@ impl AudioCapture for RodioCapture {
         // ~1 s of audio in CAPTURE_CHUNK-sized batches.
         let (tx, rx) = mpsc::sync_channel::<Vec<f32>>(48_000 / CAPTURE_CHUNK);
 
+        // Dual-radio: open the 2nd radio and spawn a thread that resamples its
+        // mono to 48 kHz into a shared ring buffer. The primary stereo thread
+        // reads the latest radio-2 samples when right_source == Radio2.
+        let radio2: Option<Radio2Buffer> = if emit_stereo {
+            self.device_name_2.as_deref().and_then(|name2| {
+                match open_radio2(name2) {
+                    Ok((mic2, ch2, rate2)) => {
+                        let buf = Radio2Buffer::new();
+                        let buf_feed = buf.clone();
+                        match thread::Builder::new()
+                            .name("rodio-radio2-reader".into())
+                            .spawn(move || radio2_capture_thread(mic2, ch2, rate2, buf_feed))
+                        {
+                            Ok(h) => {
+                                self._radio2_thread = Some(h);
+                                debug!("rodio capture: 2nd radio '{name2}' opened (rate={rate2}, ch={ch2})");
+                                Some(buf)
+                            }
+                            Err(e) => {
+                                warn!("rodio capture: failed to spawn radio2 thread: {e}");
+                                None
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("rodio capture: failed to open 2nd radio '{name2}': {e}");
+                        None
+                    }
+                }
+            })
+        } else {
+            None
+        };
+
+        let right_source = self.right_source.clone();
         let handle = thread::Builder::new()
             .name("rodio-mic-reader".into())
-            .spawn(move || capture_thread(mic, mic_channels, device_rate, emit_stereo, tx))
+            .spawn(move || {
+                capture_thread(mic, mic_channels, device_rate, emit_stereo, radio2, right_source, tx)
+            })
             .map_err(|e| Error::InvalidState(format!("Spawn mic thread: {e}")))?;
 
         self.sample_rx = Some(rx);
@@ -283,8 +352,93 @@ impl AudioCapture for RodioCapture {
     fn stop(&mut self) -> Result<()> {
         self.sample_rx = None;
         self._capture_thread = None;
+        self._radio2_thread = None;
         self.pending.clear();
         Ok(())
+    }
+}
+
+/// Shared ring buffer carrying resampled 48 kHz mono samples from the 2nd
+/// radio to the primary stereo capture thread. Bounded so a stalled consumer
+/// can't grow it without limit; the primary thread drains it in lock-step.
+#[derive(Clone)]
+struct Radio2Buffer {
+    inner: Arc<std::sync::Mutex<VecDeque<f32>>>,
+}
+
+impl Radio2Buffer {
+    fn new() -> Self {
+        Self { inner: Arc::new(std::sync::Mutex::new(VecDeque::with_capacity(48_000))) }
+    }
+    /// Push resampled mono samples (producer = radio2 thread).
+    fn push(&self, samples: &[f32]) {
+        if let Ok(mut q) = self.inner.lock() {
+            // Cap at ~0.5 s to bound latency/memory if the consumer stalls.
+            const MAX: usize = 24_000;
+            for &s in samples {
+                if q.len() >= MAX {
+                    let _ = q.pop_front();
+                }
+                q.push_back(s);
+            }
+        }
+    }
+    /// Pop one sample (consumer = primary thread); 0.0 when starved.
+    fn pop_one(&self) -> f32 {
+        self.inner.lock().ok().and_then(|mut q| q.pop_front()).unwrap_or(0.0)
+    }
+}
+
+/// Open the 2nd radio input device for dual-radio capture. Returns the
+/// Microphone, its hardware channel count, and its native sample rate.
+fn open_radio2(name: &str) -> Result<(rodio::microphone::Microphone, usize, u32)> {
+    let builder = MicrophoneBuilder::new();
+    let with_device = match RodioCapture::find_input_by_name(name) {
+        Some(input) => builder
+            .device(input)
+            .map_err(|e| Error::InvalidState(format!("Open radio2 '{name}': {e}")))?,
+        None => builder
+            .default_device()
+            .map_err(|e| Error::InvalidState(format!("No radio2 device: {e}")))?,
+    };
+    let mic = with_device
+        .default_config()
+        .map_err(|e| Error::InvalidState(format!("radio2 config: {e}")))?
+        .prefer_sample_rates([SAMPLE_RATE_48K])
+        .open_stream()
+        .map_err(|e| Error::InvalidState(format!("Open radio2 mic: {e}")))?;
+    let cfg = mic.config();
+    let channels = cfg.channel_count.get() as usize;
+    let rate = cfg.sample_rate.get();
+    Ok((mic, channels, rate))
+}
+
+/// Radio-2 capture thread: downmix all channels to mono, resample to 48 kHz,
+/// push into the shared ring for the primary stereo thread to consume.
+fn radio2_capture_thread(
+    mut mic: rodio::microphone::Microphone,
+    channels: usize,
+    device_rate: u32,
+    buf: Radio2Buffer,
+) {
+    let mut resampler = LinearResampler::new(device_rate, SAMPLE_RATE_48K.get());
+    let mut mono_in: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK);
+    let mut out_48k: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK * 2);
+    loop {
+        let mut sum = 0.0f32;
+        for _ in 0..channels {
+            match mic.next() {
+                Some(s) => sum += s,
+                None => return,
+            }
+        }
+        mono_in.push(sum / channels as f32);
+        if mono_in.len() >= CAPTURE_CHUNK {
+            resampler.process(&mono_in, &mut out_48k);
+            mono_in.clear();
+            buf.push(&out_48k);
+            out_48k.clear();
+        }
     }
 }
 
@@ -294,15 +448,18 @@ impl AudioCapture for RodioCapture {
 /// 100 times per second instead of 48 000.
 const CAPTURE_CHUNK: usize = 480;
 
+#[allow(clippy::too_many_arguments)]
 fn capture_thread(
     mut mic: rodio::microphone::Microphone,
     channels: usize,
     device_rate: u32,
     emit_stereo: bool,
+    radio2: Option<Radio2Buffer>,
+    right_source: Arc<AtomicU8>,
     tx: SyncSender<Vec<f32>>,
 ) {
     if emit_stereo {
-        capture_thread_stereo(&mut mic, channels, device_rate, &tx);
+        capture_thread_stereo(&mut mic, channels, device_rate, radio2, &right_source, &tx);
     } else {
         capture_thread_mono(&mut mic, channels, device_rate, &tx);
     }
@@ -366,6 +523,8 @@ fn capture_thread_stereo(
     mic: &mut rodio::microphone::Microphone,
     channels: usize,
     device_rate: u32,
+    radio2: Option<Radio2Buffer>,
+    right_source: &Arc<AtomicU8>,
     tx: &SyncSender<Vec<f32>>,
 ) {
     let mut rs_l = LinearResampler::new(device_rate, SAMPLE_RATE_48K.get());
@@ -378,6 +537,7 @@ fn capture_thread_stereo(
     let mut inter: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK * 4);
     const STEREO_BATCH: usize = CAPTURE_CHUNK * 2;
 
+    #[allow(clippy::too_many_arguments)]
     fn drain(
         rs_l: &mut LinearResampler,
         rs_r: &mut LinearResampler,
@@ -386,6 +546,8 @@ fn capture_thread_stereo(
         out_l: &mut Vec<f32>,
         out_r: &mut Vec<f32>,
         inter: &mut Vec<f32>,
+        radio2: Option<&Radio2Buffer>,
+        right_source: &Arc<AtomicU8>,
         tx: &SyncSender<Vec<f32>>,
     ) -> bool {
         out_l.clear();
@@ -395,9 +557,25 @@ fn capture_thread_stereo(
         lin.clear();
         rin.clear();
         let n = out_l.len().min(out_r.len());
+
+        // Dual-radio: when the operator has selected Radio 2 for the right
+        // channel AND a 2nd radio is open, override the mix so that
+        //   Left  = radio 1 mixed to mono  (out_l + out_r) / 2
+        //   Right = radio 2 (already 48 kHz, pulled sample-aligned from the ring)
+        // Reading the atomic here makes the switch live, with no restart.
+        let dual = radio2.is_some()
+            && right_source.load(Ordering::Relaxed) == RIGHT_SOURCE_RADIO2;
+
         for i in 0..n {
-            inter.push(out_l[i]);
-            inter.push(out_r[i]);
+            if dual {
+                let mono1 = (out_l[i] + out_r[i]) * 0.5;
+                let r2 = radio2.map(|b| b.pop_one()).unwrap_or(0.0);
+                inter.push(mono1);
+                inter.push(r2);
+            } else {
+                inter.push(out_l[i]);
+                inter.push(out_r[i]);
+            }
         }
         while inter.len() >= STEREO_BATCH {
             let batch: Vec<f32> = inter.drain(..STEREO_BATCH).collect();
@@ -438,7 +616,8 @@ fn capture_thread_stereo(
         }
         if ended {
             let _ = drain(
-                &mut rs_l, &mut rs_r, &mut lin, &mut rin, &mut out_l, &mut out_r, &mut inter, tx,
+                &mut rs_l, &mut rs_r, &mut lin, &mut rin, &mut out_l, &mut out_r, &mut inter,
+                radio2.as_ref(), right_source, tx,
             );
             if !inter.is_empty() {
                 let _ = tx.send(std::mem::take(&mut inter));
@@ -449,7 +628,8 @@ fn capture_thread_stereo(
         rin.push(r);
         if lin.len() >= CAPTURE_CHUNK
             && !drain(
-                &mut rs_l, &mut rs_r, &mut lin, &mut rin, &mut out_l, &mut out_r, &mut inter, tx,
+                &mut rs_l, &mut rs_r, &mut lin, &mut rin, &mut out_l, &mut out_r, &mut inter,
+                radio2.as_ref(), right_source, tx,
             )
         {
             return;
@@ -918,6 +1098,21 @@ impl super::AudioDeviceFactory for RodioAudioFactory {
             .map(|c| Box::new(c) as _)
             .map_err(|e| format!("Rodio mixing playback init: {e}"))
     }
+}
+
+/// Create a dual-radio Station capture (always stereo): radio 1 on
+/// `device_name`, radio 2 on `device_name_2`, with a live-switchable
+/// `right_source` atomic. Rodio-only (the active desktop backend).
+pub fn create_capture_dual(
+    device_name: Option<&str>,
+    device_name_2: Option<&str>,
+    frame_size: usize,
+    volume: Arc<AtomicU32>,
+    right_source: Arc<AtomicU8>,
+) -> std::result::Result<Box<dyn AudioCapture>, String> {
+    RodioCapture::new_dual(device_name, device_name_2, frame_size, volume, right_source)
+        .map(|c| Box::new(c) as _)
+        .map_err(|e| format!("Rodio dual capture init: {e}"))
 }
 
 #[cfg(test)]

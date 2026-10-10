@@ -39,6 +39,15 @@
   color: #fff;
   flex-shrink: 0;
 }
+/* Station = rounded square (vs round person avatar). Burnt orange for the
+   glyph-fallback case; the img case just squares the corners. */
+.avatar.avatarStation,
+.avatarFallback.avatarStation {
+  border-radius: 5px;
+}
+.avatarFallback.avatarStation {
+  background: linear-gradient(135deg, #c2410c 0%, #ea6a1f 100%);
+}
 .name {
   overflow: hidden;
   text-overflow: ellipsis;

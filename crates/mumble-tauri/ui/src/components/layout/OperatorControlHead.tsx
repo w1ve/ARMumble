@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import { ActivityIcon, AudioWaveformIcon, KeyboardIcon, KeyIcon, MegaphoneIcon } from "../../icons";
-import { useAppStore } from "../../store";
-import type { AudioSettings, PttConfig, TransmitMode } from "../../types";
+import { useAppStore, sendRightChannelSource } from "../../store";
+import { useAnyPeerHasSecondRadio } from "../../stationIdentity";
+import type { AudioSettings, PttConfig, RightChannelSource, StereoMode, TransmitMode } from "../../types";
 import { savePttConfig } from "../../preferencesStorage";
 import {
   eventToShortcut,
@@ -137,6 +139,95 @@ export default function OperatorControlHead({ serverId, serverKey }: Props) {
     }
     return undefined;
   }, [whisperReady, whisperHotkey]);
+
+  // --- Stereo playback controls (operator output side) ---------------
+  // "Stereo" indicator reflects whether the INCOMING stream is actually
+  // stereo. Derive it from the output scope tap's channel count (ref-counted).
+  const [incomingStereo, setIncomingStereo] = useState(false);
+  const lastStereoAt = useRef(0);
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    const id = Math.floor(Math.random() * 0xffffffffff);
+    invoke("scope_subscribe", { source: "output", id }).catch(() => {});
+    listen<{ source: string; channels: number }>("scope-data", (e) => {
+      if (disposed || e.payload.source !== "output") return;
+      if (e.payload.channels >= 2) {
+        lastStereoAt.current = performance.now();
+        setIncomingStereo(true);
+      }
+    }).then((fn) => { if (disposed) fn(); else unlisten = fn; }).catch(() => {});
+    // Decay to "not stereo" if no stereo frames for a while (stream stopped).
+    const iv = window.setInterval(() => {
+      if (performance.now() - lastStereoAt.current > 1500) setIncomingStereo(false);
+    }, 500);
+    return () => {
+      disposed = true;
+      if (unlisten) unlisten();
+      window.clearInterval(iv);
+      invoke("scope_unsubscribe", { source: "output", id }).catch(() => {});
+    };
+  }, []);
+
+  // Playback stereo mode: Mix = fold both channels into both ears ("mono");
+  // L/R = keep channels separate ("stereo"); Swap toggles "swap_lr".
+  const stereoMode: StereoMode = audio?.playback_stereo_mode ?? "stereo";
+  const isMix = stereoMode === "mono";
+  const isSwapped = stereoMode === "swap_lr";
+
+  const patchAudio = useCallback(
+    (p: Partial<AudioSettings>) => {
+      setAudio((prev) => {
+        if (!prev) return prev;
+        const merged = { ...prev, ...p };
+        void invoke("set_audio_settings", { settings: merged, serverId }).catch((e) =>
+          console.error("control-head set_audio_settings:", e),
+        );
+        return merged;
+      });
+    },
+    [serverId],
+  );
+
+  // Mix <-> L/R. Leaving Mix restores plain stereo; entering Mix is mono fold.
+  const setMix = useCallback(
+    (mix: boolean) => {
+      patchAudio({ playback_stereo_mode: mix ? "mono" : "stereo" });
+    },
+    [patchAudio],
+  );
+  // Swap only applies in L/R; toggles between stereo and swap_lr.
+  const setSwap = useCallback(
+    (swap: boolean) => {
+      patchAudio({ playback_stereo_mode: swap ? "swap_lr" : "stereo" });
+    },
+    [patchAudio],
+  );
+  // Pan: -1 (full left) .. 0 (center) .. +1 (full right), mapped onto the
+  // left/right playback gain pair. Center = both 1.0.
+  const pan = audio ? (audio.right_volume ?? 1) - (audio.left_volume ?? 1) : 0;
+  const setPan = useCallback(
+    (p: number) => {
+      const clamped = Math.max(-1, Math.min(1, p));
+      const left = clamped <= 0 ? 1 : 1 - clamped;
+      const right = clamped >= 0 ? 1 : 1 + clamped;
+      patchAudio({ left_volume: left, right_volume: right });
+    },
+    [patchAudio],
+  );
+
+  // Radio 1 / Radio 2 right-channel source. Operator-local toggle that tells
+  // the Station (over the RR plugin channel) which radio feeds the right
+  // channel. Enabled only when a Station advertised a 2nd radio.
+  const dualAvailable = useAnyPeerHasSecondRadio();
+  const [rightSource, setRightSource] = useState<RightChannelSource>("radio1");
+  const chooseRightSource = useCallback((src: RightChannelSource) => {
+    setRightSource(src);
+    void sendRightChannelSource(src);
+  }, []);
+
+  // Stereo controls are only meaningful on an actual stereo stream.
+  const stereoControlsEnabled = incomingStereo;
 
   if (!audio || !config) return null;
 
@@ -273,6 +364,101 @@ export default function OperatorControlHead({ serverId, serverKey }: Props) {
       </select>
 
       {whisperError && <span className={styles.err}>{whisperError}</span>}
+
+      {/* --- Stereo playback controls (operator output rendering) --- */}
+      <span
+        className={`${styles.stereoBadge} ${incomingStereo ? styles.stereoBadgeOn : ""}`}
+        title={tAudio("stereo.indicatorTitle")}
+      >
+        {tAudio("stereo.label")}
+      </span>
+
+      {/* Mix | L/R */}
+      <div
+        className={`${styles.segmented} ${stereoControlsEnabled ? "" : styles.disabled}`}
+        role="radiogroup"
+        aria-label={tAudio("stereo.modeLabel")}
+      >
+        <button
+          type="button"
+          role="radio"
+          aria-checked={isMix}
+          className={`${styles.segBtn} ${isMix ? styles.segBtnActive : ""}`}
+          onClick={() => stereoControlsEnabled && setMix(true)}
+          disabled={!stereoControlsEnabled}
+          title={tAudio("stereo.mixHint")}
+        >
+          {tAudio("stereo.mix")}
+        </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={!isMix}
+          className={`${styles.segBtn} ${!isMix ? styles.segBtnActive : ""}`}
+          onClick={() => stereoControlsEnabled && setMix(false)}
+          disabled={!stereoControlsEnabled}
+          title={tAudio("stereo.lrHint")}
+        >
+          {tAudio("stereo.lr")}
+        </button>
+      </div>
+
+      {/* Swap L/R — only in L/R mode */}
+      <button
+        type="button"
+        className={`${styles.hkBtn} ${isSwapped ? styles.segBtnActive : ""}`}
+        onClick={() => setSwap(!isSwapped)}
+        disabled={!stereoControlsEnabled || isMix}
+        title={tAudio("stereo.swapHint")}
+      >
+        {tAudio("stereo.swap")}
+      </button>
+
+      {/* Pan — greyed in Mix */}
+      <div className={styles.panWrap} title={tAudio("stereo.panHint")}>
+        <span className={styles.panLabel}>{tAudio("stereo.pan")}</span>
+        <input
+          type="range"
+          className={styles.pan}
+          min={-1}
+          max={1}
+          step={0.05}
+          value={pan}
+          onChange={(e) => setPan(parseFloat(e.target.value))}
+          disabled={!stereoControlsEnabled || isMix}
+          aria-label={tAudio("stereo.pan")}
+        />
+      </div>
+
+      {/* Radio 1 / Radio 2 right-channel source — only if a Station has a 2nd radio */}
+      <div
+        className={`${styles.segmented} ${dualAvailable ? "" : styles.disabled}`}
+        role="radiogroup"
+        aria-label={tAudio("stereo.rightSourceLabel")}
+      >
+        <button
+          type="button"
+          role="radio"
+          aria-checked={rightSource === "radio1"}
+          className={`${styles.segBtn} ${rightSource === "radio1" ? styles.segBtnActive : ""}`}
+          onClick={() => dualAvailable && chooseRightSource("radio1")}
+          disabled={!dualAvailable}
+          title={tAudio("stereo.radio1Hint")}
+        >
+          {tAudio("stereo.radio1")}
+        </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={rightSource === "radio2"}
+          className={`${styles.segBtn} ${rightSource === "radio2" ? styles.segBtnActive : ""}`}
+          onClick={() => dualAvailable && chooseRightSource("radio2")}
+          disabled={!dualAvailable}
+          title={tAudio("stereo.radio2Hint")}
+        >
+          {tAudio("stereo.radio2")}
+        </button>
+      </div>
     </div>
   );
 }
