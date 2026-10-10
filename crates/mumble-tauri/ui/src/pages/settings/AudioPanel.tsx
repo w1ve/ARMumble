@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
@@ -133,6 +133,12 @@ function AudioStatsSection() {
   );
 }
 
+/** Sentinel 2nd-radio device meaning "generate a test tone" instead of
+ *  opening real hardware. Must match `TEST_TONE_DEVICE` in the Rust backend
+ *  (commands/audio.rs). Lets an operator exercise the dual-radio right channel
+ *  with no second radio connected. */
+const TEST_TONE_DEVICE = "\u0001testtone";
+
 export function AudioPanel({
   devices,
   outputDevices,
@@ -222,6 +228,33 @@ export function AudioPanel({
     return () => { unlisten.then((f) => f()); };
   }, []);
 
+  // Test-tone 2nd radio: a sentinel device that makes the backend synthesise a
+  // tone on the right channel so dual-radio can be exercised with no 2nd radio.
+  // Toggling it on also forces the right channel to Radio 2 so it's audible
+  // immediately; toggling off restores whatever was selected before.
+  const toneOn = settings.selected_device_2 === TEST_TONE_DEVICE;
+  const prevSecondRadio = useRef<{
+    device: string | null;
+    source: AudioSettings["right_channel_source"];
+  }>({ device: null, source: "radio1" });
+  const toggleTestTone = () => {
+    if (toneOn) {
+      onChange({
+        selected_device_2: prevSecondRadio.current.device,
+        right_channel_source: prevSecondRadio.current.source,
+      });
+    } else {
+      prevSecondRadio.current = {
+        device: settings.selected_device_2 ?? null,
+        source: settings.right_channel_source,
+      };
+      onChange({
+        selected_device_2: TEST_TONE_DEVICE,
+        right_channel_source: "radio2",
+      });
+    }
+  };
+
   // The voice-gate calibration UI applies only in Voice-Activation mode.
   // Reconcile the legacy push_to_talk flag the same way the backend does.
   const effectiveMode =
@@ -292,14 +325,24 @@ export function AudioPanel({
                 <h3 className={styles.sectionTitle}>{t("audio.secondRadioDevice")}</h3>
                 <DeviceSelect
                   devices={secondInputDevices}
-                  value={settings.selected_device_2 ?? null}
+                  value={toneOn ? null : (settings.selected_device_2 ?? null)}
                   onChange={(selected_device_2) => onChange({ selected_device_2 })}
                   systemDefaultLabel={t("audio.systemDefault")}
                   noDeviceLabel={t("audio.noDevice")}
                   defaultSuffix={t("audio.deviceDefault")}
                   ariaLabel={t("audio.secondRadioDevice")}
+                  disabled={toneOn}
                 />
                 <p className={styles.fieldHint}>{t("audio.secondRadioHint")}</p>
+                <button
+                  type="button"
+                  className={styles.ghostBtn}
+                  aria-pressed={toneOn}
+                  onClick={toggleTestTone}
+                >
+                  {toneOn ? t("audio.testToneStop") : t("audio.testTonePlay")}
+                </button>
+                <p className={styles.fieldHint}>{t("audio.testToneHint")}</p>
               </>
             )}
           </div>

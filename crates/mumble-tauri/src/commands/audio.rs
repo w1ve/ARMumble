@@ -15,6 +15,17 @@ pub fn is_no_device(name: Option<&str>) -> bool {
     name == Some(NO_DEVICE)
 }
 
+/// Sentinel 2nd-radio device meaning "generate a test tone" instead of opening
+/// a real capture device. Lets an operator exercise the dual-radio right
+/// channel with no second radio present. Must match `TEST_TONE_DEVICE` in the
+/// frontend (AudioPanel.tsx).
+pub const TEST_TONE_DEVICE: &str = "\u{1}testtone";
+
+/// Returns `true` when the 2nd-radio selection is the test-tone sentinel.
+pub fn is_test_tone(name: Option<&str>) -> bool {
+    name == Some(TEST_TONE_DEVICE)
+}
+
 /// Enumerate input device display names only (no default flag). Shared by the
 /// device watcher. Mirrors `get_audio_devices`' name source so the watcher's
 /// view matches the dropdown's.

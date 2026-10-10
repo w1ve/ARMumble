@@ -106,6 +106,9 @@
     "radioModulationInput": "Radio Modulation Input",
     "secondRadioDevice": "Second Radio Device",
     "secondRadioHint": "Optional second radio input. Set to (No device) to disable the dual-radio feature.",
+    "testTonePlay": "Use Test Tone as 2nd Radio",
+    "testToneStop": "Stop Test Tone",
+    "testToneHint": "No second radio? Generate a test tone on the right channel to verify dual-radio routing. This forces the right channel to Radio 2 while active.",
     "stationDeviceExplainA": " is the audio from the radio going to audio input, and ",
     "stationDeviceExplainB": " is the output device that will modulate the radio.",
     "stereo": {

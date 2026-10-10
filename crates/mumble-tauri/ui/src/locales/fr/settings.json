@@ -106,6 +106,9 @@
     "radioModulationInput": "Entrée de modulation radio",
     "secondRadioDevice": "Deuxième radio",
     "secondRadioHint": "Entrée radio secondaire facultative. Réglez sur (Aucun périphérique) pour désactiver la double radio.",
+    "testTonePlay": "Utiliser la tonalité de test comme 2e radio",
+    "testToneStop": "Arrêter la tonalité de test",
+    "testToneHint": "Pas de seconde radio ? Générez une tonalité de test sur le canal droit pour vérifier le routage de la double radio. Le canal droit est forcé sur Radio 2 pendant l'activation.",
     "stationDeviceExplainA": " est l'audio de la radio vers l'entrée audio, et ",
     "stationDeviceExplainB": " est le périphérique de sortie qui module la radio.",
     "stereo": {

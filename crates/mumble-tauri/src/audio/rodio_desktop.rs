@@ -52,6 +52,9 @@ pub struct RodioCapture {
     sample_rx: Option<mpsc::Receiver<Vec<f32>>>,
     _capture_thread: Option<thread::JoinHandle<()>>,
     _radio2_thread: Option<thread::JoinHandle<()>>,
+    /// Set to stop a synthesised test-tone 2nd-radio thread (it has no device
+    /// to signal EOF). `None` when the 2nd radio is a real device or absent.
+    _radio2_stop: Option<Arc<AtomicBool>>,
     volume: Arc<AtomicU32>,
     pending: Vec<f32>,
     device_name: Option<String>,
@@ -103,6 +106,7 @@ impl RodioCapture {
             sample_rx: None,
             _capture_thread: None,
             _radio2_thread: None,
+            _radio2_stop: None,
             volume,
             pending: Vec::with_capacity(frame_size * 2),
             device_name: device_name.map(str::to_owned),
@@ -306,6 +310,30 @@ impl AudioCapture for RodioCapture {
         // reads the latest radio-2 samples when right_source == Radio2.
         let radio2: Option<Radio2Buffer> = if emit_stereo {
             self.device_name_2.as_deref().and_then(|name2| {
+                // Test-tone pseudo-device: no hardware is opened; a thread
+                // synthesises a 48 kHz sine straight into the ring so the
+                // operator can exercise the dual-radio right channel with no
+                // second radio present.
+                if crate::commands::audio::is_test_tone(Some(name2)) {
+                    let buf = Radio2Buffer::new();
+                    let buf_feed = buf.clone();
+                    let stop = Arc::new(AtomicBool::new(false));
+                    self._radio2_stop = Some(stop.clone());
+                    return match thread::Builder::new()
+                        .name("rodio-radio2-tone".into())
+                        .spawn(move || tone_capture_thread(buf_feed, stop))
+                    {
+                        Ok(h) => {
+                            self._radio2_thread = Some(h);
+                            debug!("rodio capture: 2nd radio = test tone");
+                            Some(buf)
+                        }
+                        Err(e) => {
+                            warn!("rodio capture: failed to spawn tone thread: {e}");
+                            None
+                        }
+                    };
+                }
                 match open_radio2(name2) {
                     Ok((mic2, ch2, rate2)) => {
                         let buf = Radio2Buffer::new();
@@ -352,6 +380,12 @@ impl AudioCapture for RodioCapture {
     fn stop(&mut self) -> Result<()> {
         self.sample_rx = None;
         self._capture_thread = None;
+        // A test-tone thread has no device to deliver EOF, so signal it to
+        // exit before dropping the handle (a real radio2 thread ends when its
+        // Microphone is dropped by the capture thread's end).
+        if let Some(stop) = self._radio2_stop.take() {
+            stop.store(true, Ordering::Relaxed);
+        }
         self._radio2_thread = None;
         self.pending.clear();
         Ok(())
@@ -439,6 +473,51 @@ fn radio2_capture_thread(
             buf.push(&out_48k);
             out_48k.clear();
         }
+    }
+}
+
+/// Synthetic 2nd-radio source: generate a sine "test tone" into the shared
+/// ring in place of a real device, so an operator can verify the dual-radio
+/// right channel with no second radio connected. Paced in real time (one
+/// 10 ms chunk per 10 ms) so the ring stays matched to the ~48 kHz consumer
+/// and never overflows. A slow 1 Hz gate (0.5 s on / 0.5 s off) makes the tone
+/// an unmistakable beep rather than a fatiguing drone, and the on/off edges are
+/// ramped to avoid clicks. Exits promptly when `stop` is set (it has no device
+/// to signal EOF).
+fn tone_capture_thread(buf: Radio2Buffer, stop: Arc<AtomicBool>) {
+    use std::f32::consts::TAU;
+    const RATE: f32 = 48_000.0;
+    const FREQ: f32 = 587.33; // D5 — clear of typical left-channel speech
+    const AMP: f32 = 0.25; // headroom; the operator still has volume control
+    const GATE_SAMPLES: usize = 24_000; // 0.5 s on, 0.5 s off (1 Hz beep)
+    const RAMP: usize = 240; // 5 ms click-free fade on each edge
+    let mut phase: f32 = 0.0;
+    let phase_inc = TAU * FREQ / RATE;
+    let mut n: usize = 0; // sample index within the current gate period
+    let mut chunk: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK);
+    while !stop.load(Ordering::Relaxed) {
+        chunk.clear();
+        for _ in 0..CAPTURE_CHUNK {
+            let pos = n % (GATE_SAMPLES * 2);
+            // Gate envelope: on for the first GATE_SAMPLES, off after, with a
+            // short linear ramp at both edges so there's no click.
+            let env = if pos < GATE_SAMPLES {
+                let into = pos;
+                let out = GATE_SAMPLES - pos;
+                (into.min(out).min(RAMP) as f32) / RAMP as f32
+            } else {
+                0.0
+            };
+            chunk.push(phase.sin() * AMP * env);
+            phase += phase_inc;
+            if phase >= TAU {
+                phase -= TAU;
+            }
+            n += 1;
+        }
+        buf.push(&chunk);
+        // Real-time pacing: 480 samples @ 48 kHz = 10 ms of audio.
+        thread::sleep(std::time::Duration::from_millis(10));
     }
 }
 

@@ -106,6 +106,9 @@
     "radioModulationInput": "电台调制输入",
     "secondRadioDevice": "第二电台设备",
     "secondRadioHint": "可选的第二电台输入。设为（无设备）可禁用双电台功能。",
+    "testTonePlay": "使用测试音作为第二电台",
+    "testToneStop": "停止测试音",
+    "testToneHint": "没有第二台电台？在右声道生成测试音以验证双电台路由。启用期间会将右声道强制设为电台 2。",
     "stationDeviceExplainA": " 是从电台进入音频输入的音频，而 ",
     "stationDeviceExplainB": " 是用于调制电台的输出设备。",
     "stereo": {

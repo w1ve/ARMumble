@@ -106,6 +106,9 @@
     "radioModulationInput": "Funk-Modulationseingang",
     "secondRadioDevice": "Zweites Funkgerät",
     "secondRadioHint": "Optionaler zweiter Funkeingang. Auf (Kein Gerät) setzen, um die Doppelfunk-Funktion zu deaktivieren.",
+    "testTonePlay": "Testton als 2. Funkgerät verwenden",
+    "testToneStop": "Testton stoppen",
+    "testToneHint": "Kein zweites Funkgerät? Erzeuge einen Testton auf dem rechten Kanal, um das Doppelfunk-Routing zu prüfen. Der rechte Kanal wird während der Aktivierung auf Funkgerät 2 gesetzt.",
     "stationDeviceExplainA": " ist das Audio vom Funkgerät zum Audioeingang, und ",
     "stationDeviceExplainB": " ist das Ausgabegerät, das das Funkgerät moduliert.",
     "stereo": {

@@ -26,6 +26,8 @@ interface DeviceSelectProps {
   /** Suffix shown after the OS default device, e.g. "(default)". */
   readonly defaultSuffix: string;
   readonly ariaLabel?: string;
+  /** When true, the picker is non-interactive (e.g. overridden by test tone). */
+  readonly disabled?: boolean;
 }
 
 interface Row {
@@ -47,6 +49,7 @@ export function DeviceSelect({
   noDeviceLabel,
   defaultSuffix,
   ariaLabel,
+  disabled = false,
 }: Readonly<DeviceSelectProps>) {
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -140,6 +143,7 @@ export function DeviceSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
+        disabled={disabled}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onKeyDown}
       >
