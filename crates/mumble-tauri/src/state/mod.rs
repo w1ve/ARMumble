@@ -270,28 +270,9 @@ pub struct AppState {
     /// Image sources pending pickup by freshly-opened image popout windows.
     /// Keyed by random id; each entry is consumed once by `take_popout_image`.
     pub(crate) popout_images: Mutex<HashMap<String, crate::commands::popout::PopoutImagePayload>>,
-    /// Stream-share contexts pending pickup by freshly-opened stream popout windows.
-    /// Keyed by random id; each entry is consumed once by `take_popout_stream`.
-    pub(crate) popout_streams: Mutex<HashMap<String, crate::commands::popout::PopoutStreamPayload>>,
     /// DM popout payloads pending pickup by freshly-opened DM popout windows.
     /// Keyed by random id; each entry is consumed once by `take_popout_dm`.
     pub(crate) popout_dms: Mutex<HashMap<String, crate::commands::popout::PopoutDmPayload>>,
-    /// Live stream-popout windows, keyed by window label
-    /// (`popout-stream-<id>`).  Value is the broadcaster session, used to
-    /// emit `stream-popout-state opened:false` when the OS destroys the
-    /// window (any close path - Alt+F4, X button, context menu, app exit).
-    #[cfg(not(target_os = "android"))]
-    pub(crate) popout_stream_sessions: Mutex<HashMap<String, u32>>,
-    /// Channel/session context for the (single) drawing-overlay window.
-    /// Read by the overlay via `take_drawing_overlay_context` once it
-    /// has spawned. `None` while no overlay is open.
-    pub(crate) draw_overlay_context:
-        Mutex<Option<crate::commands::draw_overlay::DrawOverlayContext>>,
-    /// Background task that follows the shared window's screen rect
-    /// (Windows only) and repositions the desktop overlay accordingly.
-    /// Aborted when the overlay closes.
-    #[cfg(not(target_os = "android"))]
-    pub(crate) draw_overlay_tracker: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// Live rig-PTT controller (serial keying / footswitch sensing) for the
     /// active session, if PTT is enabled. Replaced on config change; dropping
     /// it releases the key line. Desktop only.
@@ -338,13 +319,7 @@ impl AppState {
             http_client: file_server::new_http_client(),
             upload_cancels: Mutex::new(HashMap::new()),
             popout_images: Mutex::new(HashMap::new()),
-            popout_streams: Mutex::new(HashMap::new()),
             popout_dms: Mutex::new(HashMap::new()),
-            #[cfg(not(target_os = "android"))]
-            popout_stream_sessions: Mutex::new(HashMap::new()),
-            draw_overlay_context: Mutex::new(None),
-            #[cfg(not(target_os = "android"))]
-            draw_overlay_tracker: Mutex::new(None),
             #[cfg(not(target_os = "android"))]
             ptt_controller: Mutex::new(None),
             #[cfg(not(target_os = "android"))]

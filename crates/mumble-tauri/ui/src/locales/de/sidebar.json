@@ -229,17 +229,10 @@
     "serverDeafenedTitle": "Vom Server taubgeschaltet",
     "selfDeafenedTitle": "Selbst taubgeschaltet",
     "prioritySpeakerTitle": "Bevorzugter Sprecher",
-    "sharingScreenTitle": "Bildschirm wird geteilt",
-    "sharingScreenSfuTitle": "Bildschirm wird geteilt (über Server)",
-    "sharingScreenP2PTitle": "Bildschirm wird geteilt (Peer-to-Peer)",
-    "liveBadge": "Live",
-    "liveBadgeP2P": "P2P",
     "dmUnreadTitle_one": "{{count}} ungelesene Direktnachricht",
     "dmUnreadTitle_other": "{{count}} ungelesene Direktnachrichten"
   },
   "channelIconList": {
-    "liveBadgeTitle": "Bildschirm wird geteilt",
-    "liveBadgeLabel": "Live",
     "rootFallback": "Root",
     "lockBadgeTitle": "Keine Berechtigung zum Beitreten",
     "listenBadgeTitle": "Wird gehört",
@@ -257,8 +250,6 @@
     "member_one": "{{count}} Mitglied",
     "member_other": "{{count}} Mitglieder",
     "expand": "Erweitern",
-    "liveBadge": "Live",
-    "sharingScreen": "Bildschirm freigegeben",
     "dmUnread_one": "{{count}} ungelesene Direktnachricht",
     "dmUnread_other": "{{count}} ungelesene Direktnachrichten"
   },

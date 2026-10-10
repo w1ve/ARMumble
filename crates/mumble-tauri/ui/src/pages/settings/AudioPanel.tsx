@@ -27,6 +27,8 @@ import { ActivationModeSelector } from "./ActivationModeSelector";
 import { CalibrationPanel } from "./CalibrationPanel";
 import { PttPanel } from "./PttPanel";
 import { RadioCardGroup, type RadioCardOption } from "../../components/elements/RadioCardGroup";
+import { DeviceSelect } from "../../components/audio/DeviceSelect";
+import { InputOscilloscope, OutputOscilloscope } from "../../components/audio/Oscilloscope";
 import styles from "./SettingsPage.module.css";
 import panelStyles from "./AudioPanel.module.css";
 import { registerSettings } from "./settingsSearchRegistry";
@@ -250,23 +252,18 @@ export function AudioPanel({
         <div className={panelStyles.deviceColumns}>
           <div className={panelStyles.deviceColumn}>
             <h3 className={styles.sectionTitle}>{t("audio.inputDevice")}</h3>
-            <select
-              className={styles.select}
-              value={settings.selected_device ?? ""}
-              onChange={(e) =>
-                onChange({
-                  selected_device: e.target.value === "" ? null : e.target.value,
-                })
-              }
-            >
-              <option value="">{t("audio.systemDefault")}</option>
-              {devices.map((d, i) => (
-                <option key={`in-${i}-${d.name}`} value={d.name}>
-                  {d.name}
-                  {d.is_default ? ` ${t("audio.deviceDefault")}` : ""}
-                </option>
-              ))}
-            </select>
+            <DeviceSelect
+              devices={devices}
+              value={settings.selected_device ?? null}
+              onChange={(selected_device) => onChange({ selected_device })}
+              systemDefaultLabel={t("audio.systemDefault")}
+              noDeviceLabel={t("audio.noDevice")}
+              defaultSuffix={t("audio.deviceDefault")}
+              ariaLabel={t("audio.inputDevice")}
+            />
+            <div className={panelStyles.deviceScope}>
+              <InputOscilloscope ariaLabel={t("audio.inputDevice")} />
+            </div>
             <SliderField
               label={t("audio.microphoneVolume")}
               min={0}
@@ -280,24 +277,18 @@ export function AudioPanel({
 
           <div className={panelStyles.deviceColumn}>
             <h3 className={styles.sectionTitle}>{t("audio.outputDevice")}</h3>
-            <select
-              className={styles.select}
-              value={settings.selected_output_device ?? ""}
-              onChange={(e) =>
-                onChange({
-                  selected_output_device:
-                    e.target.value === "" ? null : e.target.value,
-                })
-              }
-            >
-              <option value="">{t("audio.systemDefault")}</option>
-              {outputDevices.map((d, i) => (
-                <option key={`out-${i}-${d.name}`} value={d.name}>
-                  {d.name}
-                  {d.is_default ? ` ${t("audio.deviceDefault")}` : ""}
-                </option>
-              ))}
-            </select>
+            <DeviceSelect
+              devices={outputDevices}
+              value={settings.selected_output_device ?? null}
+              onChange={(selected_output_device) => onChange({ selected_output_device })}
+              systemDefaultLabel={t("audio.systemDefault")}
+              noDeviceLabel={t("audio.noDevice")}
+              defaultSuffix={t("audio.deviceDefault")}
+              ariaLabel={t("audio.outputDevice")}
+            />
+            <div className={panelStyles.deviceScope}>
+              <OutputOscilloscope ariaLabel={t("audio.outputDevice")} />
+            </div>
             <SliderField
               label={t("audio.speakerVolume")}
               min={0}

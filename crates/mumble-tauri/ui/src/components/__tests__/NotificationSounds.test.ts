@@ -18,7 +18,6 @@ describe("NotificationSoundSettings types and defaults", () => {
       "userLeave",
       "userJoinChannel",
       "userLeaveChannel",
-      "streamStart",
       "voiceActivity",
       "selfMuted",
     ];

@@ -46,17 +46,21 @@ export interface ClassicChannelListProps {
 
 function StackedAvatar({ user, zIndex }: Readonly<{ user: UserEntry; zIndex: number }>) {
   const url = useUserAvatar(user.session, user.texture_size);
-  const isStation = useIsStation()(user.name);
+  const isStation = useIsStation()(user.name, user.session);
   return (
     <div
-      className={styles.stackedAvatar}
+      className={`${styles.stackedAvatar} ${isStation ? styles.stackedAvatarStation : ""}`}
       style={{
-        background: url || isStation ? "transparent" : colorFor(user.name),
+        background: isStation ? undefined : (url ? "transparent" : colorFor(user.name)),
         zIndex,
       }}
     >
       {url ? (
-        <img src={url} alt={user.name} className={styles.stackedAvatarImg} />
+        <img
+          src={url}
+          alt={user.name}
+          className={`${styles.stackedAvatarImg} ${isStation ? styles.stackedAvatarStationImg : ""}`}
+        />
       ) : (
         <StationGlyph isStation={isStation} size={12} fallback={user.name.charAt(0).toUpperCase()} />
       )}
@@ -66,14 +70,18 @@ function StackedAvatar({ user, zIndex }: Readonly<{ user: UserEntry; zIndex: num
 
 function TooltipUser({ user }: Readonly<{ user: UserEntry }>) {
   const url = useUserAvatar(user.session, user.texture_size);
-  const isStation = useIsStation()(user.name);
+  const isStation = useIsStation()(user.name, user.session);
   return (
     <div className={styles.tooltipUser}>
       {url ? (
-        <img src={url} alt={user.name} className={styles.tooltipAvatarImg} />
+        <img
+          src={url}
+          alt={user.name}
+          className={`${styles.tooltipAvatarImg} ${isStation ? styles.tooltipAvatarStationImg : ""}`}
+        />
       ) : (
         <div
-          className={styles.tooltipAvatar}
+          className={`${styles.tooltipAvatar} ${isStation ? styles.tooltipAvatarStation : ""}`}
           style={isStation ? undefined : { background: colorFor(user.name) }}
         >
           <StationGlyph isStation={isStation} size={14} fallback={user.name.charAt(0).toUpperCase()} />

@@ -78,7 +78,6 @@ export {
   Disc as RecordIcon,
   RefreshCw as RefreshCwIcon,
   RotateCw as RefreshIcon,
-  ScreenShare as ScreenShareIcon,
   Save as SaveIcon,
   Search as SearchIcon,
   Send as SendIcon,

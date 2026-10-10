@@ -53,16 +53,6 @@ export function useNotificationSounds(
       }),
     );
 
-    unlisteners.push(
-      listen("webrtc-signal", (event) => {
-        const { signal_type } = event.payload as { signal_type: number };
-        // signal_type 0 = START
-        if (signal_type === 0) {
-          playSoundForEvent(settingsRef.current, "streamStart");
-        }
-      }),
-    );
-
     // Self-mention notification (dispatched from MessageItem when a
     // newly-rendered message contains an @-mention targeting the user).
     const onSelfMention = () => {

@@ -177,22 +177,10 @@
     "back": "Back"
   },
   "pages": {
-    "drawOverlay": {
-      "contextUnavailable": "Drawing overlay context unavailable"
-    },
     "popout": {
       "imageUnavailable": "Image source unavailable",
       "missingId": "Missing popout id",
       "mediaLabel": "Image"
-    },
-    "streamPopout": {
-      "connectionLost": "Stream connection lost",
-      "contextUnavailable": "Stream context unavailable",
-      "missingId": "Missing popout id",
-      "connecting": "Connecting to stream...",
-      "screenshare": "Screen share",
-      "caption": "Live screen share",
-      "mediaLabel": "Stream"
     }
   },
   "updater": {

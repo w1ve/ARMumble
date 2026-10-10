@@ -2,7 +2,6 @@ import { useTranslation } from "react-i18next";
 import { InfoFilledIcon, MaximizeIcon, MinimizeIcon, WindowCloseIcon } from "../../icons";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isDesktopPlatform } from "../../utils/platform";
-import ServerTabsBar from "./ServerTabsBar";
 import styles from "./TitleBar.module.css";
 
 export default function TitleBar() {
@@ -37,9 +36,9 @@ export default function TitleBar() {
         <span className={styles.title}>{t("brand")}</span>
       </div>
 
-      <div className={styles.tabsSection} data-tauri-drag-region>
-        <ServerTabsBar />
-      </div>
+      {/* Spacer / drag region. Server tabs moved into the right pane
+          (ChatPage) so they sit directly above the station bar. */}
+      <div className={styles.tabsSection} data-tauri-drag-region />
 
       <div className={styles.controls}>
         <button

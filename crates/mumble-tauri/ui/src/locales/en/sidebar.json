@@ -229,17 +229,10 @@
     "serverDeafenedTitle": "Server deafened",
     "selfDeafenedTitle": "Self deafened",
     "prioritySpeakerTitle": "Priority speaker",
-    "sharingScreenTitle": "Sharing screen",
-    "sharingScreenSfuTitle": "Sharing screen (server-relayed)",
-    "sharingScreenP2PTitle": "Sharing screen (peer-to-peer)",
-    "liveBadge": "Live",
-    "liveBadgeP2P": "P2P",
     "dmUnreadTitle_one": "{{count}} unread direct message",
     "dmUnreadTitle_other": "{{count}} unread direct messages"
   },
   "channelIconList": {
-    "liveBadgeTitle": "Sharing screen",
-    "liveBadgeLabel": "Live",
     "rootFallback": "Root",
     "lockBadgeTitle": "No permission to join",
     "listenBadgeTitle": "Listening",
@@ -257,8 +250,6 @@
     "member_one": "{{count}} member",
     "member_other": "{{count}} members",
     "expand": "Expand",
-    "liveBadge": "Live",
-    "sharingScreen": "Sharing screen",
     "dmUnread_one": "{{count}} unread direct message",
     "dmUnread_other": "{{count}} unread direct messages"
   },

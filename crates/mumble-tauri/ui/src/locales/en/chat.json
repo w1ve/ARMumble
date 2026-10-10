@@ -50,11 +50,6 @@
     "persistedChatTooltip": "Messages in this channel are stored on the server",
     "searchInChannel": "Search in channel",
     "channelInfo": "Channel info",
-    "stopSharing": "Stop sharing",
-    "shareScreen": "Share screen",
-    "shareScreenRelayed": "Share screen (server-relayed)",
-    "shareScreenP2P": "Share screen (no SFU - peer-to-peer)",
-    "closeStream": "Close stream",
     "pinnedMessages": "Pinned messages",
     "downloads": "Downloads",
     "mySharedFiles": "My shared files",
@@ -242,12 +237,6 @@
     "pinnedBadge": "📌 pinned",
     "viewProfile": "View {{name}}'s profile"
   },
-  "multiStream": {
-    "watchStream": "Watch {{name}}'s stream",
-    "liveBadge": "LIVE",
-    "activeStreams_one": "{{count}} active stream",
-    "activeStreams_other": "{{count}} active streams"
-  },
   "pendingMessage": {
     "sendingLabel": "Sending message",
     "sending": "Sending…",
@@ -269,57 +258,6 @@
     "read": "Read",
     "readByCount": "Read by {{count}}",
     "readByEveryone": "Read by everyone"
-  },
-  "screenShare": {
-    "alreadySharingOtherServer": "You are already sharing your screen from another server. Stop that share first.",
-    "mute": "Mute",
-    "unmute": "Unmute",
-    "volume": "Volume",
-    "play": "Play",
-    "pause": "Pause",
-    "drawOn": "Draw on screen",
-    "drawOff": "Stop drawing",
-    "showOverlayTooltip": "Show desktop overlay (click-through, hidden from capture)",
-    "showOverlay": "Show desktop overlay",
-    "hideOverlay": "Hide desktop overlay",
-    "popout": "Open in separate window",
-    "fullscreen": "Fullscreen",
-    "exitFullscreen": "Exit fullscreen",
-    "settingUp": "Setting up stream...",
-    "connecting": "Connecting...",
-    "waitingForStream": "Waiting for stream",
-    "share": "Share screen",
-    "stopSharing": "Stop sharing",
-    "stopWatching": "Stop watching",
-    "p2pLabel": "P2P",
-    "p2pTooltip": "No SFU on this server - the stream connects directly between peers",
-    "banner": {
-      "isSharingScreen": "{{name}} is sharing their screen",
-      "watch": "Watch",
-      "dismiss": "Dismiss notification"
-    }
-  },
-  "streamFocus": {
-    "layout": {
-      "solo": "Solo",
-      "sideBySide": "Side by side",
-      "pip": "Picture-in-picture",
-      "grid2x2": "2x2 Grid",
-      "main2": "Main + 2",
-      "main3": "Main + 3"
-    },
-    "primaryStream": "Primary stream",
-    "dropToFocus": "Drop to focus",
-    "changeLayout": "Change layout",
-    "snapLayout": "Snap layout",
-    "showOtherStreams": "Show other streams",
-    "hideOtherStreams": "Hide other streams",
-    "otherStreams_one": "{{count}} other stream",
-    "otherStreams_other": "{{count}} other streams",
-    "dragOrClickToSwitch": "Drag or click to switch",
-    "switchToStream": "Switch to {{name}}'s stream",
-    "watchDrawerThumb": "Watch {{name}}",
-    "liveBadge": "LIVE"
   },
   "upload": {
     "progressLabel": "Upload progress",

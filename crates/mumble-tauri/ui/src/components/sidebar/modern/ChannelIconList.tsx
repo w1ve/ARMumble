@@ -1,4 +1,4 @@
-import { HashIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MegaphoneIcon, MicOffSmallIcon, ScreenShareIcon } from "../../../icons";
+import { HashIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MegaphoneIcon, MicOffSmallIcon } from "../../../icons";
 /**
  * ChannelIconList - a "Modern" channel viewer.
  *
@@ -19,7 +19,6 @@ import { useIsStation, StationGlyph } from "../../../stationIdentity";
 import { useUserAvatar, useUserComment, useChannelDescription } from "../../../lazyBlobs";
 import { parseComment } from "../../../profileFormat";
 import { useUserStats } from "../../../hooks/useUserStats";
-import { useStreamThumbnail } from "../../chat/stream/useStreamPreview";
 import SwipeableCard from "../../elements/SwipeableCard";
 import { isMobile } from "../../../utils/platform";
 import { useUserDrag, useChannelDropTarget } from "../../../utils/userMoveDnd";
@@ -46,7 +45,6 @@ export interface ChannelIconListProps {
   readonly listenedChannels: Set<number>;
   readonly unreadCounts: Record<number, number>;
   readonly talkingSessions: Set<number>;
-  readonly broadcastingSessions: Set<number>;
   readonly onSelectChannel: (id: number) => void;
   readonly onJoinChannel: (id: number) => void;
   readonly onContextMenu: (e: React.MouseEvent, channelId: number) => void;
@@ -123,14 +121,12 @@ function WhisperBadge({ channelId }: Readonly<{ channelId: number }>) {
 interface MemberRowProps {
   readonly user: UserEntry;
   readonly isTalking: boolean;
-  readonly isBroadcasting: boolean;
   readonly isActive?: boolean;
   readonly onContextMenu?: (e: React.MouseEvent, user: UserEntry) => void;
   readonly onClick?: (session: number) => void;
 }
 
-function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMenu, onClick }: MemberRowProps) {
-  const { t } = useTranslation("sidebar");
+function MemberRowImpl({ user, isTalking, isActive, onContextMenu, onClick }: MemberRowProps) {
   const ownSession = useAppStore((s) => s.ownSession);
   const selectedDmUser = useAppStore((s) => s.selectedDmUser);
   const dmUnread = useAppStore((s) => s.dmUnreadCounts[user.session] ?? 0);
@@ -142,9 +138,9 @@ function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMen
   });
   const roleColors = useContext(RoleColorsContext);
   const roleColor = user.user_id != null ? (roleColors.get(user.user_id) ?? null) : null;
-  const isStation = useIsStation()(user.name);
+  const isStation = useIsStation()(user.name, user.session);
   const url = useUserAvatar(user.session, user.texture_size);
-  const { showCard, cardPos, itemRef, handleEnter, handleLeave } = useHoverCardPosition(isBroadcasting);
+  const { showCard, cardPos, itemRef, handleEnter, handleLeave } = useHoverCardPosition();
   // Defer FancyProfile parsing (and the bio fetch) until the card is shown.
   const liveComment = useUserComment(user.session, user.comment_size, showCard);
   const parsed = useMemo(
@@ -156,7 +152,6 @@ function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMen
     [showCard, user.comment, liveComment],
   );
   const stats = useUserStats(user.session, showCard);
-  const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
@@ -194,11 +189,15 @@ function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMen
         style={dragHandlers.style}
       >
         <div
-          className={styles.memberAvatar}
-          style={{ background: url || isStation ? "transparent" : colorFor(user.name) }}
+          className={`${styles.memberAvatar} ${isStation ? styles.memberAvatarStation : ""}`}
+          style={isStation ? undefined : { background: url ? "transparent" : colorFor(user.name) }}
         >
           {url ? (
-            <img src={url} alt={user.name} className={styles.memberAvatarImg} />
+            <img
+              src={url}
+              alt={user.name}
+              className={`${styles.memberAvatarImg} ${isStation ? styles.memberAvatarStationImg : ""}`}
+            />
           ) : (
             <StationGlyph isStation={isStation} size={14} fallback={user.name.charAt(0).toUpperCase()} />
           )}
@@ -212,12 +211,6 @@ function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMen
         )}
         {user.self_deaf && (
           <HeadphonesOffIcon className={styles.statusIcon} width={12} height={12} />
-        )}
-        {isBroadcasting && (
-          <span className={styles.liveBadge} title={t("channelIconList.liveBadgeTitle")}>
-            <ScreenShareIcon width={10} height={10} />
-            {t("channelIconList.liveBadgeLabel")}
-          </span>
         )}
         {dmUnread > 0 && (
           <span className={styles.dmUnreadBadge} title={`${dmUnread} unread direct message${dmUnread === 1 ? "" : "s"}`}>
@@ -235,8 +228,6 @@ function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMen
           onlinesecs={stats?.onlinesecs}
           idlesecs={stats?.idlesecs}
           isRegistered={user.user_id != null && user.user_id > 0}
-          isBroadcasting={isBroadcasting}
-          thumbnail={streamThumbnail}
           isStation={isStation}
         />
       )}
@@ -268,7 +259,6 @@ function ChannelIconListImpl({
   listenedChannels,
   unreadCounts,
   talkingSessions,
-  broadcastingSessions,
   shakingChannelId,
   highlightChannelId,
   highlightUserSession,
@@ -451,7 +441,6 @@ function ChannelIconListImpl({
                 <MemberRow
                   user={u}
                   isTalking={talkingSessions.has(u.session)}
-                  isBroadcasting={broadcastingSessions.has(u.session)}
                   onContextMenu={onUserContextMenu}
                   onClick={onUserClick}
                 />
@@ -464,7 +453,7 @@ function ChannelIconListImpl({
     );
   }, [
     usersByChannel, unreadCounts, listenedChannels, selectedChannel,
-    currentChannel, collapsed, talkingSessions, broadcastingSessions,
+    currentChannel, collapsed, talkingSessions,
     shakingChannelId, highlightChannelId, highlightUserSession, toggleCollapsed, onSelectChannel, onJoinChannel, onContextMenu, onUserContextMenu, onUserClick,
   ]);
 

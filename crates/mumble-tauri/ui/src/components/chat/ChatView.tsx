@@ -8,7 +8,6 @@ import type { ChatMessage, TimeFormat, LiveDocDocLink } from "../../types";
 import { getPreferences } from "../../preferencesStorage";
 import { loadPersonalization, type PersonalizationData } from "../../personalizationStorage";
 import ChatHeader from "./ChatHeader";
-import type { BroadcastInfo } from "./ChatHeader";
 import MobileCallControls from "./mobile/MobileCallControls";
 import ResizableSplitPanel from "./ResizableSplitPanel";
 const PinnedMessagesPanel = lazy(() => import("./pinned/PinnedMessagesPanel"));
@@ -46,14 +45,6 @@ import TypingIndicator from "./typing/TypingIndicator";
 import { isMobile } from "../../utils/platform";
 import { htmlToMarkdown } from "./markdown/MarkdownInput";
 import type { MessageScope } from "../../messageOffload";
-import { useScreenShare } from "./stream/useScreenShare";
-const ScreenShareViewer = lazy(() => import("./stream/ScreenShareViewer"));
-const BroadcastBanner = lazy(() =>
-  import("./stream/ScreenShareViewer").then((m) => ({ default: m.BroadcastBanner })),
-);
-const WebRtcErrorBanner = lazy(() =>
-  import("./stream/ScreenShareViewer").then((m) => ({ default: m.WebRtcErrorBanner })),
-);
 const LiveDocPanel = lazy(() => import("./livedoc/LiveDocPanel"));
 const LiveDocLaunchDialog = lazy(() => import("./livedoc/LiveDocLaunchDialog"));
 const LiveDocLibraryPanel = lazy(() => import("./livedoc/LiveDocLibraryPanel"));
@@ -83,16 +74,6 @@ import { Lightbox, type LightboxHandle } from "../elements/Lightbox";
 
 const PollCreator = lazy(() => import("./poll/PollCreator"));
 const EmojiPicker = lazy(() => import("../elements/EmojiPicker"));
-const StreamFocusView = lazy(() => import("./stream/StreamFocusView"));
-const MultiStreamGrid = lazy(() => import("./stream/MultiStreamGrid"));
-
-/**
- * Minimum Fancy Mumble server version required for screen sharing.
- * Encoded as (major << 48) | (minor << 32) | (patch << 16).
- * 0.2.12 = (0 << 48) | (2 << 32) | (12 << 16)
- */
-const SCREEN_SHARE_MIN_VERSION = 2 * 2 ** 32 + 12 * 2 ** 16;
-
 
 interface ChatViewProps {
   readonly onChannelInfoToggle?: () => void;
@@ -101,10 +82,7 @@ interface ChatViewProps {
   readonly onScrollConsumed?: () => void;
   /**
    * True when this `ChatView` is hosted inside a DM popout window.
-   * Suppresses features that don't make sense in the popout context:
-   *   - the "Pop out DM" header button (we are already a popout)
-   *   - screen-share controls (popout is DM-only and would create a
-   *     parallel WebRTC peer connection from a second webview)
+   * Suppresses the "Pop out DM" header button (we are already a popout).
    */
   readonly inPopout?: boolean;
 }
@@ -148,13 +126,9 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   const selectUser = useAppStore((s) => s.selectUser);
   const toggleSilenceChannel = useAppStore((s) => s.toggleSilenceChannel);
   const silencedChannels = useAppStore((s) => s.silencedChannels);
-  const serverFancyVersion = useAppStore((s) => s.serverFancyVersion);
-  const sfuAvailable = useAppStore((s) => s.serverConfig.webrtc_sfu_available);
-  const webrtcError = useAppStore((s) => s.webrtcError);
   const pinMessage = useAppStore((s) => s.pinMessage);
   const clearUnseenPins = useAppStore((s) => s.clearUnseenPins);
   const unseenPinIds = useAppStore((s) => s.unseenPinIds);
-  const clearWebRtcError = useCallback(() => useAppStore.setState({ webrtcError: null }), []);
 
   // DM state
   const selectedDmUser = useAppStore((s) => s.selectedDmUser);
@@ -909,91 +883,12 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     getMessageReactions, toggleReaction,
   } = useReactions();
 
-  const screenShare = useScreenShare();
-
-  // Determine which screen share panel to show (own broadcast or watching someone).
-  // watchingSession takes priority: a broadcaster can watch another stream.
-  // If the watched stream is currently displayed in a detached popout window,
-  // suppress the in-chat panel so we do not run two viewer peer connections
-  // for the same broadcaster.  When the popout closes, the popped-out set
-  // clears and the in-chat viewer (or banner) reappears automatically.
-  const poppedOutStreamSessions = useAppStore((s) => s.poppedOutStreamSessions);
-  let activeScreenShare: { session: number; isOwn: boolean; stream: MediaStream | null } | null = null;
-  if (screenShare.watchingSession !== null
-      && !poppedOutStreamSessions.has(screenShare.watchingSession)) {
-    activeScreenShare = { session: screenShare.watchingSession, isOwn: false, stream: null };
-  } else if (screenShare.isBroadcasting) {
-    activeScreenShare = { session: ownSession!, isOwn: true, stream: screenShare.localStream };
-  }
-
-  // Other users broadcasting in the current channel (for the notification banner).
-  // Sessions whose stream is already open in a detached popout window are
-  // excluded so the user does not see a redundant "watch" prompt.
-  const channelBroadcasters = useMemo(() => {
-    if (screenShare.broadcastingSessions.size === 0) return [];
-    return users
-      .filter((u) => u.channel_id === selectedChannel
-        && screenShare.broadcastingSessions.has(u.session)
-        && u.session !== ownSession
-        && !poppedOutStreamSessions.has(u.session))
-      .map((u) => ({ session: u.session, name: u.name }));
-  }, [users, selectedChannel, screenShare.broadcastingSessions, ownSession, poppedOutStreamSessions]);
-
-  // Show StreamFocusView when watching someone, or broadcasting with others.
-  // Using a single instance keeps layout state stable across swap transitions.
-  const showFocusView = activeScreenShare !== null && (
-    !activeScreenShare.isOwn || channelBroadcasters.length > 0
-  );
-
-  // Secondary panels for the unified focus view.
-  const focusViewSecondaries = useMemo(() => {
-    if (!activeScreenShare) return [];
-    const secondaries: { session: number; name: string }[] = [];
-    if (!activeScreenShare.isOwn && screenShare.isBroadcasting && ownSession !== null) {
-      const ownName = users.find((u) => u.session === ownSession)?.name ?? "You";
-      secondaries.push({ session: ownSession, name: `${ownName} (you)` });
-    }
-    for (const b of channelBroadcasters) {
-      if (b.session !== activeScreenShare.session) {
-        secondaries.push(b);
-      }
-    }
-    return secondaries;
-  }, [activeScreenShare, screenShare.isBroadcasting, ownSession, users, channelBroadcasters]);
-
-  const handleFocusWatch = useCallback((session: number) => {
-    if (session === ownSession) {
-      screenShare.stopWatching();
-    } else {
-      screenShare.watchBroadcast(session);
-    }
-  }, [ownSession, screenShare.stopWatching, screenShare.watchBroadcast]);
-
   // Compute header values before any early returns (hooks can't be conditional).
   const [headerName, headerMemberCount] = computeHeader(
     isDmMode, dmPartner, channel, memberCount,
     t("header.directMessage"), t("header.unknown"),
   );
   const showJoinButton = !isDmMode && !isInChannel;
-
-  // Build broadcastInfo for the header when a stream is active.
-  const broadcastInfo = useMemo((): BroadcastInfo | undefined => {
-    if (!activeScreenShare) return undefined;
-    const broadcaster = users.find((u) => u.session === activeScreenShare.session);
-    const name = broadcaster?.name ?? "User";
-    const avatar = avatarBySession.get(activeScreenShare.session) ?? null;
-    const viewers = broadcaster
-      ? users.filter((u) => u.channel_id === broadcaster.channel_id).length - 1
-      : users.length - 1;
-    return {
-      broadcasterName: name,
-      avatarUrl: avatar,
-      viewerCount: viewers,
-      isOwnBroadcast: activeScreenShare.isOwn,
-      channelName: channel?.name ?? t("header.unknown"),
-      onClose: activeScreenShare.isOwn ? screenShare.stopSharing : screenShare.stopWatching,
-    };
-  }, [activeScreenShare, users, avatarBySession, screenShare.stopSharing, screenShare.stopWatching]);
 
   // Empty state - no channel or DM selected.
   if (selectedChannel === null && !isDmMode) {
@@ -1039,19 +934,6 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           onPollCreate={openPollCreator}
           isSilenced={selectedChannel !== null && silencedChannels.has(selectedChannel)}
           onToggleSilence={selectedChannel !== null ? () => toggleSilenceChannel(selectedChannel) : undefined}
-          isScreenSharing={screenShare.isBroadcasting}
-          onToggleScreenShare={
-            !inPopout && !isMobile && serverFancyVersion != null && serverFancyVersion >= SCREEN_SHARE_MIN_VERSION
-              ? (screenShare.isBroadcasting ? screenShare.stopSharing : screenShare.startSharing)
-              : undefined
-          }
-          screenShareDisabledReason={
-            screenShare.isBroadcastingFromOtherTab
-              ? t("screenShare.alreadySharingOtherServer")
-              : undefined
-          }
-          sfuAvailable={sfuAvailable}
-          broadcastInfo={broadcastInfo}
           hasNewPins={hasNewPins}
           onPinnedMessages={handleOpenPinnedPanel}
           hasNewDownloads={unseenDownloadCount > 0}
@@ -1156,73 +1038,6 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       {pendingLiveDocAnnounce && !activeLiveDoc && (
         <Suspense fallback={null}>
           <LiveDocBanner announce={pendingLiveDocAnnounce} onJoin={handleJoinLiveDoc} />
-        </Suspense>
-      )}
-
-      {/* Solo own broadcast preview (no other broadcasters) */}
-      {activeScreenShare?.isOwn && activeScreenShare.stream && !showFocusView && (
-        <ResizableSplitPanel
-          fillByDefault
-          minPx={200}
-          onClose={screenShare.stopSharing}
-          closeLabel={t("screenShare.stopSharing")}
-        >
-          <Suspense fallback={null}>
-            <ScreenShareViewer
-              isOwnBroadcast
-              localStream={activeScreenShare.stream}
-              channelId={selectedChannel ?? 0}
-              ownSession={ownSession ?? 0}
-            />
-          </Suspense>
-        </ResizableSplitPanel>
-      )}
-
-      {/* Unified focus view: single instance keeps layout stable across swaps */}
-      {showFocusView && activeScreenShare && (
-        <ResizableSplitPanel fillByDefault minPx={200}>
-          <Suspense fallback={null}>
-            <StreamFocusView
-              isOwnBroadcast={activeScreenShare.isOwn}
-              localStream={activeScreenShare.isOwn ? activeScreenShare.stream : null}
-              session={activeScreenShare.isOwn ? undefined : activeScreenShare.session}
-              ownBroadcastStream={screenShare.isBroadcasting ? screenShare.localStream : null}
-              otherBroadcasters={focusViewSecondaries}
-              onWatch={handleFocusWatch}
-              onClose={activeScreenShare.isOwn ? screenShare.stopSharing : screenShare.stopWatching}
-              closeLabel={
-                activeScreenShare.isOwn ? t("screenShare.stopSharing") : t("screenShare.stopWatching")
-              }
-            />
-          </Suspense>
-        </ResizableSplitPanel>
-      )}
-
-      {/* Multi-stream grid: shown when 2+ broadcasters and we are not sharing or watching */}
-      {!activeScreenShare && channelBroadcasters.length > 1 && (
-        <Suspense fallback={null}>
-          <MultiStreamGrid
-            broadcasters={channelBroadcasters}
-            onWatch={screenShare.watchBroadcast}
-          />
-        </Suspense>
-      )}
-
-      {/* Single broadcaster notification banner */}
-      {!activeScreenShare && channelBroadcasters.length === 1 && (
-        <Suspense fallback={null}>
-          <BroadcastBanner
-            broadcasters={channelBroadcasters}
-            onWatch={screenShare.watchBroadcast}
-            sfuAvailable={sfuAvailable}
-          />
-        </Suspense>
-      )}
-
-      {/* WebRTC error inline banner - same style as broadcast banner */}
-      {webrtcError && (
-        <Suspense fallback={null}>
-          <WebRtcErrorBanner message={webrtcError} onDismiss={clearWebRtcError} />
         </Suspense>
       )}
 

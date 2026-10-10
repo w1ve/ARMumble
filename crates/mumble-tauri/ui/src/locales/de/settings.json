@@ -99,6 +99,7 @@
     "outputDevice": "Ausgabegerät",
     "systemDefault": "Systemstandard",
     "deviceDefault": "(Standard)",
+    "noDevice": "(Kein Gerät)",
     "microphoneVolume": "Mikrofonlautstärke",
     "speakerVolume": "Lautsprecherlautstärke",
     "activationMode": "Aktivierungsmodus",

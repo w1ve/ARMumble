@@ -9,7 +9,7 @@ import { getSavedServers } from "../../serverStorage";
 import { RR_PORT, RR_FANCY_PORT } from "../../builtinServers";
 import { getPreferences, updatePreferences, getSavedAudioSettings, saveAudioSettings, saveVoiceMuted, AUDIO_DEFAULT_KEY } from "../../preferencesStorage";
 import { serializeProfile, dataUrlToBytes } from "../../profileFormat";
-import { useAppStore } from "../../store";
+import { useAppStore, isLocalStation } from "../../store";
 import {
   type ShortcutBindings,
   DEFAULT_SHORTCUTS,
@@ -421,6 +421,35 @@ export default function SettingsPage() {
     })();
   }, []);
 
+  // -- Re-enumerate devices on hotplug (plug/unplug) ------------
+  // The backend device watcher emits `audio-devices-changed` when the set of
+  // available input/output devices changes. Re-fetch the lists and the
+  // (possibly backend-adjusted) audio settings so a device that fell back to
+  // "(No device)" is reflected in the dropdowns.
+  useEffect(() => {
+    const unlistenP = listen("audio-devices-changed", () => {
+      const active = useAppStore.getState().activeServerId;
+      const serverId = active ?? undefined;
+      void (async () => {
+        try {
+          const [devs, outDevs, cfg] = await Promise.all([
+            invoke<AudioDevice[]>("get_audio_devices"),
+            invoke<AudioDevice[]>("get_output_devices"),
+            invoke<AudioSettings>("get_audio_settings", { serverId }),
+          ]);
+          setDevices(devs);
+          setOutputDevices(outDevs);
+          setAudioSettings(cfg);
+        } catch {
+          /* transient; ignore */
+        }
+      })();
+    });
+    return () => {
+      void unlistenP.then((un) => un());
+    };
+  }, []);
+
   // -- Listen for permission-denied events from the backend -----
 
   useEffect(() => {
@@ -595,8 +624,12 @@ export default function SettingsPage() {
         const comment = serializeProfile(profile, bio);
         await invoke("set_user_comment", { comment });
 
-        const texture = avatarDataUrl ? dataUrlToBytes(avatarDataUrl) : [];
-        await invoke("set_user_texture", { texture });
+        // A Station's avatar is the fixed antenna texture (published on
+        // connect). Don't let profile-avatar edits overwrite it.
+        if (!isLocalStation()) {
+          const texture = avatarDataUrl ? dataUrlToBytes(avatarDataUrl) : [];
+          await invoke("set_user_texture", { texture });
+        }
       } catch (e) {
         console.error("Auto-apply profile error:", e);
       }

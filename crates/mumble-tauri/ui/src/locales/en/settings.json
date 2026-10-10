@@ -99,6 +99,7 @@
     "outputDevice": "Output Device",
     "systemDefault": "System default",
     "deviceDefault": "(default)",
+    "noDevice": "(No device)",
     "microphoneVolume": "Microphone Volume",
     "speakerVolume": "Speaker Volume",
     "activationMode": "Activation Mode",

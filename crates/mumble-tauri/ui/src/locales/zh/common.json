@@ -174,22 +174,10 @@
     "back": "返回"
   },
   "pages": {
-    "drawOverlay": {
-      "contextUnavailable": "绘图浮层不可用"
-    },
     "popout": {
       "imageUnavailable": "图片资源不可用",
       "missingId": "缺少弹窗 ID",
       "mediaLabel": "图片"
-    },
-    "streamPopout": {
-      "connectionLost": "直播连接已断开",
-      "contextUnavailable": "直播上下文不可用",
-      "missingId": "缺少弹窗 ID",
-      "connecting": "正在连接直播……",
-      "screenshare": "屏幕共享",
-      "caption": "实时屏幕共享",
-      "mediaLabel": "直播"
     }
   },
   "updater": {

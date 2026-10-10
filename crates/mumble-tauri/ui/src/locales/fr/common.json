@@ -174,22 +174,10 @@
     "dismissAriaLabel": "Ignorer la bannière"
   },
   "pages": {
-    "drawOverlay": {
-      "contextUnavailable": "Contexte de l'overlay de dessin non disponible"
-    },
     "popout": {
       "imageUnavailable": "Source d'image non disponible",
       "missingId": "ID de popout manquant",
       "mediaLabel": "Image"
-    },
-    "streamPopout": {
-      "connectionLost": "Connexion au stream perdue",
-      "contextUnavailable": "Contexte du stream non disponible",
-      "missingId": "ID de popout manquant",
-      "connecting": "Connexion au stream...",
-      "screenshare": "Partage d'écran",
-      "caption": "Partage d'écran en direct",
-      "mediaLabel": "Stream"
     }
   },
   "updater": {

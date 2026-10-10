@@ -50,11 +50,6 @@
     "persistedChatTooltip": "本频道的消息会保存在服务器上",
     "searchInChannel": "在频道内搜索",
     "channelInfo": "频道信息",
-    "stopSharing": "停止共享",
-    "shareScreen": "共享屏幕",
-    "shareScreenRelayed": "共享屏幕（经服务器中转）",
-    "shareScreenP2P": "共享屏幕（无 SFU，点对点）",
-    "closeStream": "关闭直播",
     "pinnedMessages": "已置顶的消息",
     "downloads": "下载",
     "mySharedFiles": "我分享的文件",
@@ -242,12 +237,6 @@
     "pinnedBadge": "📌 已置顶",
     "viewProfile": "查看 {{name}} 的资料"
   },
-  "multiStream": {
-    "watchStream": "观看 {{name}} 的直播",
-    "liveBadge": "直播中",
-    "activeStreams_one": "{{count}} 路直播",
-    "activeStreams_other": "{{count}} 路直播"
-  },
   "pendingMessage": {
     "sendingLabel": "正在发送消息",
     "sending": "发送中…",
@@ -269,57 +258,6 @@
     "read": "已读",
     "readByCount": "{{count}} 人已读",
     "readByEveryone": "所有人已读"
-  },
-  "screenShare": {
-    "alreadySharingOtherServer": "你正在另一台服务器上共享屏幕，请先停止该共享。",
-    "mute": "静音",
-    "unmute": "取消静音",
-    "volume": "音量",
-    "play": "播放",
-    "pause": "暂停",
-    "drawOn": "在屏幕上涂鸦",
-    "drawOff": "停止涂鸦",
-    "showOverlayTooltip": "显示桌面浮层（可穿透点击，录屏时不可见）",
-    "showOverlay": "显示桌面浮层",
-    "hideOverlay": "隐藏桌面浮层",
-    "popout": "在新窗口中打开",
-    "fullscreen": "全屏",
-    "exitFullscreen": "退出全屏",
-    "settingUp": "正在准备直播…",
-    "connecting": "正在连接…",
-    "waitingForStream": "等待直播开始",
-    "share": "共享屏幕",
-    "stopSharing": "停止共享",
-    "stopWatching": "停止观看",
-    "p2pLabel": "P2P",
-    "p2pTooltip": "此服务器没有 SFU，直播直接在成员之间传输",
-    "banner": {
-      "isSharingScreen": "{{name}} 正在共享屏幕",
-      "watch": "观看",
-      "dismiss": "关闭通知"
-    }
-  },
-  "streamFocus": {
-    "layout": {
-      "solo": "单画面",
-      "sideBySide": "并排",
-      "pip": "画中画",
-      "grid2x2": "2x2 网格",
-      "main2": "主画面 + 2",
-      "main3": "主画面 + 3"
-    },
-    "primaryStream": "主直播",
-    "dropToFocus": "拖入以切换为焦点",
-    "changeLayout": "切换布局",
-    "snapLayout": "对齐布局",
-    "showOtherStreams": "显示其他直播",
-    "hideOtherStreams": "隐藏其他直播",
-    "otherStreams_one": "另外 {{count}} 路直播",
-    "otherStreams_other": "另外 {{count}} 路直播",
-    "dragOrClickToSwitch": "拖动或点击以切换",
-    "switchToStream": "切换到 {{name}} 的直播",
-    "watchDrawerThumb": "观看 {{name}}",
-    "liveBadge": "直播中"
   },
   "upload": {
     "progressLabel": "上传进度",

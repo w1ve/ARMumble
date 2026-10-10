@@ -1,7 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "../store";
+import { useAppStore, setExplicitRoleForServer } from "../store";
 import {
   getSavedServers,
   addServer,
@@ -227,9 +227,15 @@ export default function ConnectPage() {
    */
   const handleBuiltinConnect = useCallback(
     async (server: BuiltinServer, chosenRole: ClientRole) => {
-      // Built-in servers are not saved, so remember the Operator/Station choice
-      // per-host in preferences. resolveRoleForServer() reads this on connect so
-      // PTT direction, role announcement, and initial voice state are correct.
+      // Apply the exact Operator/Station choice to THIS connection directly,
+      // keyed by host:port, so it is used verbatim by the post-connect role
+      // effects (PTT direction, role announcement, station texture, initial
+      // voice state) instead of being re-derived and possibly falling back to
+      // operator.
+      setExplicitRoleForServer(server.host, server.port, chosenRole);
+
+      // Also remember the choice per-host in preferences so a later reconnect
+      // (which may not go through this handler) still resolves correctly.
       try {
         const prefs = await getPreferences();
         await updatePreferences({
@@ -400,7 +406,6 @@ export default function ConnectPage() {
           <>
             <BuiltinServerList
               onConnect={handleBuiltinConnect}
-              onAddNew={handleShowWizard}
               defaultRole={defaultRole}
               disabled={isConnecting}
             />

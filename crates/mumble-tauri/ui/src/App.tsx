@@ -43,9 +43,7 @@ const WelcomeMessageModal = lazy(() => import("./components/server/WelcomeMessag
 // into the main startup bundle/heap; lazying it keeps both out of every window
 // that doesn't show the translator.
 const PopoutPage = lazy(() => import("./pages/PopoutPage"));
-const StreamPopoutPage = lazy(() => import("./pages/StreamPopoutPage"));
 const DmPopoutPage = lazy(() => import("./pages/DmPopoutPage"));
-const DrawOverlayPage = lazy(() => import("./pages/DrawOverlayPage"));
 const TranslationPopoutPage = lazy(() => import("./pages/TranslationPopoutPage"));
 
 /**
@@ -64,16 +62,7 @@ function isPopoutWindow(): boolean {
   const label = tauriInternals?.metadata?.currentWindow?.label;
   return !!label
     && label.startsWith("popout-")
-    && !label.startsWith("popout-stream-")
     && !label.startsWith("popout-dm-");
-}
-
-/** True when this webview is a stream-share popout (`popout-stream-<id>`). */
-function isStreamPopoutWindow(): boolean {
-  if (new URLSearchParams(globalThis.location.search).has("stream-popout")) return true;
-  const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
-  const label = tauriInternals?.metadata?.currentWindow?.label;
-  return !!label && label.startsWith("popout-stream-");
 }
 
 /** True when this webview is a DM popout (`popout-dm-<id>`). */
@@ -92,26 +81,10 @@ function isTranslationPopoutWindow(): boolean {
   return label === "popout-translation";
 }
 
-/**
- * Returns true when this webview window is the desktop drawing
- * overlay window. Spawned by the Rust `open_drawing_overlay` command
- * with the fixed label `draw-overlay`.
- */
-function isDrawOverlayWindow(): boolean {
-  if (new URLSearchParams(globalThis.location.search).has("draw-overlay")) return true;
-  const tauriInternals = (globalThis as unknown as {
-    __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } };
-  }).__TAURI_INTERNALS__;
-  const label = tauriInternals?.metadata?.currentWindow?.label;
-  return label === "draw-overlay";
-}
-
-const enum WindowKind { Main, Popout, StreamPopout, DmPopout, TranslationPopout, Updater, DrawOverlay }
+const enum WindowKind { Main, Popout, DmPopout, TranslationPopout, Updater }
 
 function getWindowKind(): WindowKind {
   if (isUpdaterWindow()) return WindowKind.Updater;
-  if (isDrawOverlayWindow()) return WindowKind.DrawOverlay;
-  if (isStreamPopoutWindow()) return WindowKind.StreamPopout;
   if (isDmPopoutWindow()) return WindowKind.DmPopout;
   if (isTranslationPopoutWindow()) return WindowKind.TranslationPopout;
   if (isPopoutWindow()) return WindowKind.Popout;
@@ -121,8 +94,6 @@ function getWindowKind(): WindowKind {
 function renderWindowContent() {
   switch (getWindowKind()) {
     case WindowKind.Updater:           return <UpdaterWindow />;
-    case WindowKind.DrawOverlay:       return <DrawOverlayPage />;
-    case WindowKind.StreamPopout:      return <StreamPopoutPage />;
     case WindowKind.DmPopout:          return <DmPopoutPage />;
     case WindowKind.TranslationPopout: return <TranslationPopoutPage />;
     case WindowKind.Popout:            return <PopoutPage />;

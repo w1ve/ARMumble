@@ -50,11 +50,6 @@
     "persistedChatTooltip": "Les messages de ce canal sont stockés sur le serveur",
     "searchInChannel": "Rechercher dans le canal",
     "channelInfo": "Infos sur le canal",
-    "stopSharing": "Arrêter le partage",
-    "shareScreen": "Partager l'écran",
-    "shareScreenRelayed": "Partager l'écran (via serveur)",
-    "shareScreenP2P": "Partager l'écran (sans SFU - pair à pair)",
-    "closeStream": "Fermer le flux",
     "pinnedMessages": "Messages épinglés",
     "downloads": "Téléchargements",
     "mySharedFiles": "Mes fichiers partagés",
@@ -242,12 +237,6 @@
     "pinnedBadge": "📌 épinglé",
     "viewProfile": "Voir le profil de {{name}}"
   },
-  "multiStream": {
-    "watchStream": "Regarder le stream de {{name}}",
-    "liveBadge": "EN DIRECT",
-    "activeStreams_one": "{{count}} stream actif",
-    "activeStreams_other": "{{count}} streams actifs"
-  },
   "pendingMessage": {
     "sendingLabel": "Envoi du message",
     "sending": "Envoi en cours…",
@@ -269,57 +258,6 @@
     "read": "Lu",
     "readByCount": "Lu par {{count}}",
     "readByEveryone": "Lu par tout le monde"
-  },
-  "screenShare": {
-    "alreadySharingOtherServer": "Vous partagez déjà votre écran sur un autre serveur. Arrêtez d'abord ce partage.",
-    "mute": "Couper le son",
-    "unmute": "Réactiver le son",
-    "volume": "Volume",
-    "play": "Lire",
-    "pause": "Pause",
-    "drawOn": "Dessiner à l'écran",
-    "drawOff": "Arrêter de dessiner",
-    "showOverlayTooltip": "Afficher la surcouche sur le bureau (clics traversants, exclue de la capture)",
-    "showOverlay": "Afficher la surcouche sur le bureau",
-    "hideOverlay": "Masquer la surcouche",
-    "popout": "Ouvrir dans une fenêtre séparée",
-    "fullscreen": "Plein écran",
-    "exitFullscreen": "Quitter le plein écran",
-    "settingUp": "Préparation du stream...",
-    "connecting": "Connexion en cours...",
-    "waitingForStream": "En attente du stream",
-    "share": "Partager l'écran",
-    "stopSharing": "Arrêter le partage",
-    "stopWatching": "Arrêter de regarder",
-    "p2pLabel": "P2P",
-    "p2pTooltip": "Pas de SFU sur ce serveur - le flux passe directement entre les participants",
-    "banner": {
-      "isSharingScreen": "{{name}} partage son écran",
-      "watch": "Regarder",
-      "dismiss": "Ignorer la notification"
-    }
-  },
-  "streamFocus": {
-    "layout": {
-      "solo": "Solo",
-      "sideBySide": "Côte à côte",
-      "pip": "Incrustation",
-      "grid2x2": "Grille 2x2",
-      "main2": "Principal + 2",
-      "main3": "Principal + 3"
-    },
-    "primaryStream": "Flux principal",
-    "dropToFocus": "Déposer ici pour mettre au premier plan",
-    "changeLayout": "Changer la disposition",
-    "snapLayout": "Disposition rapide",
-    "showOtherStreams": "Afficher les autres flux",
-    "hideOtherStreams": "Masquer les autres flux",
-    "otherStreams_one": "{{count}} autre flux",
-    "otherStreams_other": "{{count}} autres flux",
-    "dragOrClickToSwitch": "Glissez ou cliquez pour changer",
-    "switchToStream": "Passer au flux de {{name}}",
-    "watchDrawerThumb": "Regarder {{name}}",
-    "liveBadge": "EN DIRECT"
   },
   "upload": {
     "progressLabel": "Progression de l'envoi",

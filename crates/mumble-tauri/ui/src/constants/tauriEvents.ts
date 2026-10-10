@@ -49,12 +49,10 @@ export enum TauriEvent {
   ServerVersion = "server-version",
   ServerLog = "server-log",
   StateChanged = "state-changed",
-  StreamPopoutState = "stream-popout-state",
   TypingIndicator = "typing-indicator",
   UnreadChanged = "unread-changed",
   UserTalking = "user-talking",
   VoiceStateChanged = "voice-state-changed",
   WatchSync = "watch-sync",
-  WebrtcSignal = "webrtc-signal",
   WhisperActive = "whisper-active",
 }

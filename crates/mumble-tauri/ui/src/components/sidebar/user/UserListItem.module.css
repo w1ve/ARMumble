@@ -109,7 +109,9 @@
 }
 
 .avatar.avatarStation {
-  background: linear-gradient(135deg, #4668ff 0%, #8a4dff 100%);
+  /* Burnt orange — the Remote.Radio station colour, matching the built-in
+     server badges and the station antenna avatar. */
+  background: linear-gradient(135deg, #c2410c 0%, #ea6a1f 100%);
 }
 
 .onlineDot {

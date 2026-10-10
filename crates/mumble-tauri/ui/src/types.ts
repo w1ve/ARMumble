@@ -688,7 +688,6 @@ export type NotificationEvent =
   | "userLeave"
   | "userJoinChannel"
   | "userLeaveChannel"
-  | "streamStart"
   | "voiceActivity"
   | "selfMuted";
 

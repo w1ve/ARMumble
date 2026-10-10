@@ -122,9 +122,21 @@ interface ChannelSidebarProps {
   onSearchChannelClear?: () => void;
   /** Called when a message search result is selected; receives channel+message IDs. */
   onSelectMessage?: (channelId: number, messageId: string) => void;
+  /**
+   * Show the mic/deafen voice toggles inside the self-user row. Defaults to
+   * true. The desktop layout sets this false because those controls live in
+   * the right-pane StationBar instead.
+   */
+  showSelfVoiceControls?: boolean;
+  /**
+   * Show the bottom voice panel (server info / settings / admin / record /
+   * disconnect). Defaults to true. The desktop layout sets this false because
+   * those controls live in the right-pane StationActionBar instead.
+   */
+  showVoicePanel?: boolean;
 }
 
-export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, onCollapse, searchChannelId, onSearchChannelClear, onSelectMessage }: Readonly<ChannelSidebarProps>) {
+export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, onCollapse, searchChannelId, onSearchChannelClear, onSelectMessage, showSelfVoiceControls = true, showVoicePanel = true }: Readonly<ChannelSidebarProps>) {
   const { t } = useTranslation(["sidebar", "common"]);
   const channels = useAppStore((s) => s.channels);
   const users = useAppStore((s) => s.users);
@@ -152,7 +164,6 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
 
   const ownSession = useAppStore((s) => s.ownSession);
   const talkingSessions = useAppStore((s) => s.talkingSessions);
-  const broadcastingSessions = useAppStore((s) => s.broadcastingSessions);
 
   const aclGroups = useAclGroups();
   const roleColors = useMemo(() => buildRoleColorMap(aclGroups), [aclGroups]);
@@ -551,7 +562,6 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             listenedChannels={listenedChannels}
             unreadCounts={unreadCounts}
             talkingSessions={talkingSessions}
-            broadcastingSessions={broadcastingSessions}
             shakingChannelId={shakingChannelId}
             highlightChannelId={highlightChannelId}
             highlightUserSession={highlightUserSession}
@@ -572,7 +582,6 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             listenedChannels={listenedChannels}
             unreadCounts={unreadCounts}
             talkingSessions={talkingSessions}
-            broadcastingSessions={broadcastingSessions}
             shakingChannelId={shakingChannelId}
             highlightChannelId={highlightChannelId}
             highlightUserSession={highlightUserSession}
@@ -622,7 +631,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
               onClick={() => selectUser(self.session)}
               onContextMenu={(e) => openUserCtxMenu(e, self)}
             />
-            {currentChannel != null && (
+            {showSelfVoiceControls && currentChannel != null && (
               <SelfVoiceControls
                 voiceState={voiceState}
                 inCall={inCall}
@@ -638,6 +647,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
       })()}
 
       {/* Voice panel */}
+      {showVoicePanel && (
       <div className={styles.voicePanel}>
         <div className={styles.voiceActions}>
           {onServerInfoToggle && (
@@ -687,6 +697,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
           </button>
         </div>
       </div>
+      )}
 
       {/* Context menu */}
       {ctxMenu && (() => {

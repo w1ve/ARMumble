@@ -1,27 +1,10 @@
-import { ArrowRightIcon, BellIcon, BellOffIcon, DatabaseIcon, FileTextIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, UsersGroupIcon } from "../../icons";
+import { ArrowRightIcon, BellIcon, BellOffIcon, DatabaseIcon, FileTextIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, SearchIcon } from "../../icons";
 import { useTranslation } from "react-i18next";
 import { isMobile } from "../../utils/platform";
 import type { KeyTrustLevel } from "../../types";
 import KeyTrustIndicator from "../security/KeyTrustIndicator";
 import KebabMenu, { type KebabMenuItem } from "../elements/KebabMenu";
 import styles from "./ChatView.module.css";
-import { colorFor } from "../sidebar/user/UserListItem";
-
-/** Info about the active broadcast, passed in when streaming is active. */
-export interface BroadcastInfo {
-  /** Name of the broadcaster. */
-  broadcasterName: string;
-  /** Avatar data URL (or null for initial-based avatar). */
-  avatarUrl: string | null;
-  /** Number of viewers in the channel (excluding the broadcaster). */
-  viewerCount: number;
-  /** Whether the current user is the broadcaster. */
-  isOwnBroadcast: boolean;
-  /** Channel name the broadcast is happening in. */
-  channelName: string;
-  /** Called when the user clicks the close/stop button in the stream header. */
-  onClose: () => void;
-}
 
 interface ChatHeaderProps {
   readonly channelName: string;
@@ -37,14 +20,6 @@ interface ChatHeaderProps {
   readonly onPollCreate?: () => void;
   readonly isSilenced?: boolean;
   readonly onToggleSilence?: () => void;
-  readonly isScreenSharing?: boolean;
-  readonly onToggleScreenShare?: () => void;
-  /** When set, the share button is shown but disabled with this tooltip. */
-  readonly screenShareDisabledReason?: string;
-  /** True when the server has a WebRTC SFU module for server-relayed screen sharing. */
-  readonly sfuAvailable?: boolean;
-  /** When a stream is active, display broadcast info in the header. */
-  readonly broadcastInfo?: BroadcastInfo;
   /** Whether there are unseen pin changes (shows red dot on kebab & menu item). */
   readonly hasNewPins?: boolean;
   /** Called when the user opens the pinned messages panel. */
@@ -162,11 +137,6 @@ export default function ChatHeader({
   onPollCreate,
   isSilenced,
   onToggleSilence,
-  isScreenSharing,
-  onToggleScreenShare,
-  screenShareDisabledReason,
-  sfuAvailable,
-  broadcastInfo,
   hasNewPins,
   onPinnedMessages,
   hasNewDownloads,
@@ -181,71 +151,27 @@ export default function ChatHeader({
   const subtitle = isDm ? t("header.directMessage") : t("header.members", { count: memberCount });
 
   const privateBadge = isDm;
-  const isStreaming = !!broadcastInfo;
 
   return (
-    <div className={`${styles.header} ${isStreaming ? styles.headerStreaming : ""}`}>
-      {/* Broadcaster info (replaces channel info when streaming) */}
-      {isStreaming ? (
-        <div className={styles.headerInfo}>
-          <div className={styles.broadcasterRow}>
-            <div
-              className={styles.broadcasterAvatar}
-              style={{
-                background: broadcastInfo.avatarUrl
-                  ? "transparent"
-                  : colorFor(broadcastInfo.broadcasterName),
-              }}
+    <div className={styles.header}>
+      <div className={styles.headerInfo}>
+        <h2 className={styles.channelName}>
+          {prefix} {channelName}
+          {isPersisted && (
+            <DatabaseIcon
+              className={styles.persistedIcon}
+              width={14}
+              height={14}
+              aria-label={t("header.persistedChat")}
             >
-              {broadcastInfo.avatarUrl ? (
-                <img
-                  src={broadcastInfo.avatarUrl}
-                  alt={broadcastInfo.broadcasterName}
-                  className={styles.broadcasterAvatarImg}
-                />
-              ) : (
-                broadcastInfo.broadcasterName.charAt(0).toUpperCase()
-              )}
-            </div>
-            <div className={styles.broadcasterMeta}>
-              <span className={styles.broadcasterName}>
-                {broadcastInfo.isOwnBroadcast ? t("header.you") : broadcastInfo.broadcasterName}
-                <span className={styles.broadcasterChannel}> - {broadcastInfo.channelName}</span>
-              </span>
-              <span className={styles.broadcastLabel}>
-                <span className={styles.liveDot} />
-                {t("liveDocBroadcast.sharing", { ns: "chat" })}
-              </span>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className={styles.headerInfo}>
-          <h2 className={styles.channelName}>
-            {prefix} {channelName}
-            {isPersisted && (
-              <DatabaseIcon
-                className={styles.persistedIcon}
-                width={14}
-                height={14}
-                aria-label={t("header.persistedChat")}
-              >
-                <title>{t("header.persistedChatTooltip")}</title>
-              </DatabaseIcon>
-            )}
-          </h2>
-          {!isMobile && (<span className={styles.memberCount}>{subtitle}</span>)}
-        </div>
-      )}
+              <title>{t("header.persistedChatTooltip")}</title>
+            </DatabaseIcon>
+          )}
+        </h2>
+        {!isMobile && (<span className={styles.memberCount}>{subtitle}</span>)}
+      </div>
 
       <div className={styles.headerActions}>
-        {/* Viewer count (when streaming, shown on the right) */}
-        {isStreaming && (
-          <span className={styles.viewerCount}>
-            <UsersGroupIcon width={14} height={14} />
-            {broadcastInfo.viewerCount}
-          </span>
-        )}
         {keyTrustLevel && !privateBadge && (
           <KeyTrustIndicator
             trustLevel={keyTrustLevel}
@@ -282,28 +208,6 @@ export default function ChatHeader({
             <FolderIcon width={18} height={18} />
           </button>
         )}
-        {onToggleScreenShare && !privateBadge && !broadcastInfo?.isOwnBroadcast && (
-          <button
-            className={`${styles.serverInfoBtn} ${isScreenSharing ? styles.screenShareActive : ""}`}
-            onClick={onToggleScreenShare}
-            disabled={!!screenShareDisabledReason}
-            aria-label={isScreenSharing ? t("header.stopSharing") : t("header.shareScreen")}
-            title={
-              screenShareDisabledReason ?? (
-                isScreenSharing
-                  ? t("header.stopSharing")
-                  : sfuAvailable
-                    ? t("header.shareScreenRelayed")
-                    : t("header.shareScreenP2P")
-              )
-            }
-          >
-            <ScreenShareIcon width={18} height={18} />
-          </button>
-        )}
-        {/* The stream close (×) now lives on the stream panel itself (top-right),
-            unified with the other chat-splitting panels - see ResizableSplitPanel
-            / StreamFocusView. */}
         {!privateBadge && (
           <KebabMenu
             items={buildKebabItems({ onPollCreate, isSilenced, onToggleSilence, hasNewPins, onPinnedMessages, hasNewDownloads, onDownloads, onMySharedFiles, onOpenDocLibrary, onChannelSearch: isMobile ? onChannelSearch : undefined, onChannelInfoToggle: isMobile ? onChannelInfoToggle : undefined, t: tStr })}

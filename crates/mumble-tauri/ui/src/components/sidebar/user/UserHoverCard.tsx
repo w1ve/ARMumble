@@ -3,7 +3,7 @@
  * (`ProfilePreviewCard`) for a connected user.
  *
  * It wraps the exact hover-card wiring used by `UserListItem` (positioning,
- * lazy stats / avatar / comment parsing, stream thumbnail) so other surfaces
+ * lazy stats / avatar / comment parsing) so other surfaces
  * - the admin file-server dashboard, the registered-users panel - show the
  * same card on hover without duplicating that logic.
  *
@@ -12,14 +12,12 @@
  */
 
 import { useContext, useMemo, type ReactNode } from "react";
-import { useAppStore } from "../../../store";
 import type { UserEntry } from "../../../types";
 import { parseComment } from "../../../profileFormat";
 import { useUserAvatar, useUserComment } from "../../../lazyBlobs";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { colorFor } from "../../../utils/format";
 import { useIsStation, StationGlyph } from "../../../stationIdentity";
-import { useStreamThumbnail } from "../../chat/stream/useStreamPreview";
 import { useHoverCardPosition, UserHoverCardPortal, RoleGroupsContext } from "./UserListItem";
 import styles from "./UserHoverCard.module.css";
 
@@ -32,12 +30,10 @@ interface UserHoverCardProps {
 }
 
 export default function UserHoverCard({ user, children, className }: UserHoverCardProps) {
-  const isBroadcasting = useAppStore((s) => s.broadcastingSessions.has(user.session));
   const roleGroups = useContext(RoleGroupsContext);
   const userGroups = user.user_id != null ? (roleGroups.get(user.user_id) ?? []) : [];
-  const { showCard, cardPos, itemRef, handleEnter, handleLeave } = useHoverCardPosition(isBroadcasting);
+  const { showCard, cardPos, itemRef, handleEnter, handleLeave } = useHoverCardPosition();
   const stats = useUserStats(user.session, showCard);
-  const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
   const url = useUserAvatar(user.session, user.texture_size);
   const liveComment = useUserComment(user.session, user.comment_size, showCard);
   const parsed = useMemo(
@@ -83,8 +79,6 @@ export default function UserHoverCard({ user, children, className }: UserHoverCa
           onlinesecs={stats?.onlinesecs}
           idlesecs={stats?.idlesecs}
           isRegistered={isRegistered}
-          isBroadcasting={isBroadcasting}
-          thumbnail={streamThumbnail}
           groups={userGroups.length > 0 ? userGroups : undefined}
           isStation={isStation}
         />

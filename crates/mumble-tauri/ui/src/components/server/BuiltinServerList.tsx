@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { PlusIcon, SearchIcon, RadioIcon, CircleDotIcon } from "../../icons";
+import { SearchIcon, CircleDotIcon } from "../../icons";
+import { StationIcon } from "../icons/StationIcon";
 import { filterBuiltinServers, builtinKey, type BuiltinServer } from "../../builtinServers";
 import type { ClientRole, ServerPingResult } from "../../types";
 import styles from "./BuiltinServerList.module.css";
@@ -12,8 +13,6 @@ type Avail = "checking" | "up" | "down";
 interface Props {
   /** Connect to the chosen built-in Remote Radio server with the selected role. */
   readonly onConnect: (server: BuiltinServer, role: ClientRole) => void;
-  /** Open the add-your-own-server wizard. */
-  readonly onAddNew: () => void;
   /** Role pre-selected in the Operator/Station toggle (user's default). */
   readonly defaultRole?: ClientRole;
   readonly disabled?: boolean;
@@ -22,12 +21,12 @@ interface Props {
 /**
  * The built-in Remote Radio server picker shown on the sign-in screen.
  *
- * Mirrors the sign-in mockup: a "Remote Radio Servers / + Add Server" header, a
- * search box, and a scrollable list of server cards each with a square city
- * badge. The list is hard-coded (see `builtinServers.ts`); there is deliberately
- * no edit/delete/browse.
+ * The Operator/Station toggle sits on top, then a fixed "remote.radio.org"
+ * directory of hard-coded server cards (see `builtinServers.ts`), each with a
+ * square city badge. This is a fixed-server architecture: there is deliberately
+ * no add/edit/delete/browse here.
  */
-export default function BuiltinServerList({ onConnect, onAddNew, defaultRole, disabled }: Props) {
+export default function BuiltinServerList({ onConnect, defaultRole, disabled }: Props) {
   const { t } = useTranslation("server");
   const [query, setQuery] = useState("");
   const [role, setRole] = useState<ClientRole>(defaultRole ?? "operator");
@@ -63,19 +62,6 @@ export default function BuiltinServerList({ onConnect, onAddNew, defaultRole, di
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.header}>
-        <span className={styles.heading}>Remote Radio Servers</span>
-        <button
-          type="button"
-          className={styles.addLink}
-          onClick={onAddNew}
-          disabled={disabled}
-        >
-          <PlusIcon width={16} height={16} />
-          Add Server
-        </button>
-      </div>
-
       {/* Connect-as role selector (applies to whichever server you tap). */}
       <div className={styles.roleRow} role="radiogroup" aria-label={t("builtin.connectAs")}>
         <span className={styles.roleRowLabel}>{t("builtin.connectAs")}</span>
@@ -101,10 +87,15 @@ export default function BuiltinServerList({ onConnect, onAddNew, defaultRole, di
             disabled={disabled}
             title={t("builtin.roleStationHint")}
           >
-            <RadioIcon width={13} height={13} />
+            <StationIcon width={13} height={13} />
             {t("builtin.roleStation")}
           </button>
         </div>
+      </div>
+
+      {/* Fixed built-in server directory — users cannot add/remove these. */}
+      <div className={styles.header}>
+        <span className={styles.heading}>remote.radio.org</span>
       </div>
 
       {/* Search box. */}

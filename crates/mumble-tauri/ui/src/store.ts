@@ -480,26 +480,6 @@ export interface AppState {
   /** Monotonic counter bumped whenever any watch session is mutated. */
   watchSessionsVersion: number;
 
-  // -- Screen share state (in-memory) ----------------------------
-  /** Whether we are currently sharing our own screen. */
-  isSharingOwn: boolean;
-  /** The Mumble session ID of the tab whose webcam/screen is being captured
-   *  locally.  Set when `startSharing` succeeds, cleared when broadcasting
-   *  stops.  Compared against the current tab's `ownSession` so that other
-   *  server tabs in the same window do not mistake themselves for the
-   *  broadcaster (which would render a phantom local stream and a stray
-   *  "Desktop overlay" button on the wrong tab). */
-  broadcastingOwnSession: number | null;
-  /** Whether the broadcaster WebRTC connection is still negotiating. */
-  webrtcConnecting: boolean;
-  /** Inline error message when a WebRTC operation fails (e.g. unreachable SFU). */
-  webrtcError: string | null;
-  /** Whether the click-through desktop drawing-overlay window is currently
-   *  open.  Persisted in the global store (rather than as React local state
-   *  in `OwnBroadcastPreview`) so that switching to a different server tab
-   *  - which unmounts the preview component - does not implicitly close
-   *  the overlay.  Cleared automatically when broadcasting stops. */
-  desktopDrawingOverlayOpen: boolean;
   /** Active Live Doc sessions, keyed by channel id.  Set when the
    *  local user opens or accepts a Live Doc invite; cleared on close.
    *  Defined inline (rather than a separate import) to avoid a circular
@@ -513,30 +493,6 @@ export interface AppState {
    *  freshly-opened doc.  Consumed once on first WS-connected mount
    *  by `LiveDocPanel`.  Keyed by `liveDocKey(activeServerId, channelId)`. */
   pendingLiveDocSeeds: Map<string, string>;
-  /** Channel IDs where the screen-share drawing tools (color picker,
-   *  width slider, clear button) are currently active.  Stored in the
-   *  global store so the toggle button in `StreamControls` and the
-   *  toolbar in `DrawingOverlay` stay in sync, and so switching tabs
-   *  preserves the active state. */
-  drawingActiveChannels: Set<number>;
-  /** Session IDs of other users currently broadcasting. */
-  broadcastingSessions: Set<number>;
-  /** Session IDs whose live screen-share is currently displayed in a
-   *  detached popout window.  The main window suppresses the
-   *  "is sharing" banner for these sessions so the user does not see
-   *  a redundant prompt to watch a stream they are already viewing. */
-  poppedOutStreamSessions: Set<number>;
-  /** Session ID we are currently watching (null if not watching). */
-  watchingSession: number | null;
-  /** The Mumble session ID of the tab whose viewer is currently watching
-   *  `watchingSession`.  Set when `watchBroadcast` runs, cleared when
-   *  `stopWatching` runs.  Compared against the current tab's `ownSession`
-   *  so that other server tabs in the same window do not mistake the
-   *  watch state as their own (which would render a stray RemoteViewer
-   *  - including on the broadcaster's tab, where it would try to render
-   *  the broadcaster's own session as a remote stream and hang on
-   *  "Connecting..."). */
-  watchingOwnSession: number | null;
 
   // -- Persistent chat state -------------------------------------
   /** Persistence metadata per channel (mode, retention, fetch state). */
@@ -711,8 +667,6 @@ export interface AppState {
     /** Optional password (only used when the file uses `mode=password`). */
     password?: string;
   }) => Promise<number>;
-  /** Send a WebRTC screen-sharing signaling message via native proto. */
-  sendWebRtcSignal: (targetSession: number, signalType: number, payload: string, serverId?: string | null) => Promise<void>;
   /** Send a reaction (add/remove) on a persistent chat message via native proto. */
   sendReaction: (channelId: number, messageId: string, emoji: string, action: "add" | "remove") => Promise<void>;
   /** Pin or unpin a message in a persistent channel. */
@@ -909,19 +863,9 @@ const INITIAL: Pick<
   | "typingUsers"
   | "watchSessions"
   | "watchSessionsVersion"
-  | "isSharingOwn"
-  | "broadcastingOwnSession"
-  | "webrtcConnecting"
-  | "webrtcError"
-  | "desktopDrawingOverlayOpen"
   | "activeLiveDocs"
   | "pendingLiveDocAnnounces"
   | "pendingLiveDocSeeds"
-  | "drawingActiveChannels"
-  | "broadcastingSessions"
-  | "poppedOutStreamSessions"
-  | "watchingSession"
-  | "watchingOwnSession"
   | "channelPersistence"
   | "keyTrust"
   | "custodianPins"
@@ -1003,19 +947,9 @@ const INITIAL: Pick<
   typingUsers: new Map(),
   watchSessions: new Map(),
   watchSessionsVersion: 0,
-  isSharingOwn: false,
-  broadcastingOwnSession: null,
-  webrtcConnecting: false,
-  webrtcError: null,
-  desktopDrawingOverlayOpen: false,
   activeLiveDocs: new Map(),
   pendingLiveDocAnnounces: new Map(),
   pendingLiveDocSeeds: new Map(),
-  drawingActiveChannels: new Set(),
-  broadcastingSessions: new Set(),
-  poppedOutStreamSessions: new Set(),
-  watchingSession: null,
-  watchingOwnSession: null,
   channelPersistence: {},
   keyTrust: {},
   custodianPins: {},
@@ -1557,26 +1491,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
       set({ channels, users, channelPersistence: nextPersistence, pushSubscribedChannels: new Set(pushSubscribed) });
-
-      // Clean up broadcastingSessions for users that are no longer connected.
-      const currentSessions = new Set(users.map((u) => u.session));
-      const { broadcastingSessions } = get();
-      if (broadcastingSessions.size > 0) {
-        const pruned = new Set([...broadcastingSessions].filter((s) => currentSessions.has(s)));
-        if (pruned.size !== broadcastingSessions.size) {
-          // Wipe drawings authored by anyone who disconnected mid-stream
-          // so their annotations vanish for every viewer.  Imported
-          // lazily to avoid a circular module dependency between the
-          // store and the chat-only DrawingOverlay module.
-          const dropped = [...broadcastingSessions].filter((s) => !currentSessions.has(s));
-          if (dropped.length > 0) {
-            void import("./components/chat/drawing/DrawingOverlay").then((m) => {
-              for (const s of dropped) m.clearStrokesFromSender(s);
-            }).catch(() => {});
-          }
-          set({ broadcastingSessions: pruned });
-        }
-      }
     } catch (e) {
       console.error("refresh error:", e);
     }
@@ -1809,19 +1723,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         credential,
       },
     });
-  },
-
-  sendWebRtcSignal: async (targetSession, signalType, payload, serverId) => {
-    try {
-      await invoke("send_webrtc_signal", {
-        targetSession,
-        signalType,
-        payload,
-        serverId: serverId ?? null,
-      });
-    } catch (e) {
-      console.error("send_webrtc_signal error:", e);
-    }
   },
 
   sendReaction: async (channelId, messageId, emoji, action) => {
@@ -2538,8 +2439,29 @@ function pluginResponseAllowed(
 let localIsStationFlag = false;
 
 /** Whether this client is the Station on the active server. */
-function isLocalStation(): boolean {
+export function isLocalStation(): boolean {
   return localIsStationFlag;
+}
+
+/**
+ * Publish the station antenna avatar as this user's Mumble texture (Option B).
+ *
+ * Called on connect when the resolved role is "station". Because a client can
+ * only set its own texture, operators cannot override it; and since it rides
+ * the standard Mumble texture field, every client in every channel sees the
+ * antenna. No-op for operators (so a station switching to operator later would
+ * need to re-apply its own avatar — handled by the normal profile auto-apply).
+ */
+async function applyStationAvatar(): Promise<void> {
+  try {
+    const { stationAvatarBytes } = await import("./stationAvatar");
+    const texture = stationAvatarBytes();
+    if (texture.length > 0) {
+      await invoke("set_user_texture", { texture });
+    }
+  } catch (e) {
+    console.warn("[store] applyStationAvatar failed:", e);
+  }
 }
 
 /**
@@ -2555,11 +2477,34 @@ function isLocalStation(): boolean {
  * `defaultRole`, then "operator". This is the single source of truth for role
  * resolution so built-in and saved connections behave identically.
  */
+/**
+ * Explicit per-connection role overrides, keyed by `host:port`. Set by the
+ * connect flow (e.g. built-in server picker) *before* calling `connect(...)`
+ * so the user's exact Operator/Station choice is applied directly, rather than
+ * being re-derived from saved servers / preferences (which could silently fall
+ * back to "operator" on a host-key collision, a saved server colliding on the
+ * same host:port, or a failed preference write). This is the authoritative
+ * source and always wins in {@link resolveRoleForServer}.
+ */
+const explicitRoleOverrides = new Map<string, import("./types").ClientRole>();
+
+/** Record the exact role chosen for an upcoming connection to `host:port`. */
+export function setExplicitRoleForServer(
+  host: string,
+  port: number,
+  role: import("./types").ClientRole,
+): void {
+  explicitRoleOverrides.set(`${host}:${port}`, role);
+}
+
 export async function resolveRoleForServer(
   host: string,
   port: number,
 ): Promise<import("./types").ClientRole> {
   const key = `${host}:${port}`;
+  // The user's explicit choice for this connection wins outright.
+  const override = explicitRoleOverrides.get(key);
+  if (override) return override;
   const servers = await getSavedServers();
   const match = servers.find((s) => `${s.host}:${s.port}` === key);
   if (match?.role) return match.role;
@@ -2966,20 +2911,6 @@ export function onPluginData(handler: PluginDataHandler): () => void {
   };
 }
 
-// --- WebRTC signal handler registry ---
-
-type WebRtcSignalHandler = (senderSession: number | null, targetSession: number | null, signalType: number, payload: string, serverId: string | null) => void;
-const webRtcSignalHandlers: WebRtcSignalHandler[] = [];
-
-/** Register a handler for incoming WebRTC screen-sharing signals. */
-export function onWebRtcSignal(handler: WebRtcSignalHandler): () => void {
-  webRtcSignalHandlers.push(handler);
-  return () => {
-    const idx = webRtcSignalHandlers.indexOf(handler);
-    if (idx >= 0) webRtcSignalHandlers.splice(idx, 1);
-  };
-}
-
 /** Set of request_ids already sent to avoid duplicate requests. */
 const pendingPreviewRequests = new Set<string>();
 
@@ -3368,9 +3299,21 @@ export async function initEventListeners(
             // Server info unavailable - leave as null.
           }
 
+          // A Station publishes the antenna avatar as its texture (Option B):
+          // visible on every client in every channel, and not overridable by an
+          // operator. This takes precedence over the user's own avatar.
+          const localStation = pending
+            ? (await resolveRoleForServer(pending.host, pending.port)) === "station"
+            : isLocalStation();
+          if (localStation) {
+            void applyStationAvatar();
+          }
+
           // Auto-apply the locally saved profile for unregistered users.
           // Registered users have their profile stored server-side, but
-          // unregistered users lose it on each connect.
+          // unregistered users lose it on each connect. For a Station we still
+          // publish the comment/bio but NOT the avatar texture (the antenna
+          // owns the texture slot).
           if (ownSession !== null) {
             const ownUser = useAppStore.getState().users.find((u) => u.session === ownSession);
             const isRegistered = ownUser?.user_id != null && ownUser.user_id > 0;
@@ -3382,9 +3325,11 @@ export async function initEventListeners(
                   if (comment) {
                     await invoke("set_user_comment", { comment });
                   }
-                  const texture = avatarDataUrl ? dataUrlToBytes(avatarDataUrl) : [];
-                  if (texture.length > 0) {
-                    await invoke("set_user_texture", { texture });
+                  if (!localStation) {
+                    const texture = avatarDataUrl ? dataUrlToBytes(avatarDataUrl) : [];
+                    if (texture.length > 0) {
+                      await invoke("set_user_texture", { texture });
+                    }
                   }
                 })
                 .catch((err) => console.error("Auto-apply profile error:", err));
@@ -3805,17 +3750,6 @@ export async function initEventListeners(
       useAppStore.setState({ udpActive: event.payload });
     }),
 
-    // Stream popout windows broadcast their open/close state so the main
-    // window can hide its "is sharing" banner for sessions whose stream
-    // is already being viewed in a detached window.
-    await listen<{ session: number; opened: boolean }>(TauriEvent.StreamPopoutState, (event) => {
-      const { session, opened } = event.payload;
-      const prev = useAppStore.getState().poppedOutStreamSessions;
-      const next = new Set(prev);
-      if (opened) next.add(session); else next.delete(session);
-      useAppStore.setState({ poppedOutStreamSessions: next });
-    }),
-
     // User talking state changed (audio transmission start/stop).
     await listen<[number, boolean]>(TauriEvent.UserTalking, (event) => {
       const [session, talking] = event.payload;
@@ -3954,21 +3888,6 @@ export async function initEventListeners(
       registerVote(vote);
       useAppStore.setState({});
     }),
-  );
-
-  // -- WebRTC signal events ----------------------------------------
-
-  unlisteners.push(
-    await listen<{ sender_session: number | null; target_session: number | null; signal_type: number; payload: string; serverId?: string | null }>(
-      TauriEvent.WebrtcSignal,
-      (event) => {
-        const { sender_session, target_session, signal_type, payload } = event.payload;
-        const serverId = event.payload.serverId ?? null;
-        for (const handler of webRtcSignalHandlers) {
-          handler(sender_session, target_session, signal_type, payload, serverId);
-        }
-      },
-    ),
   );
 
   // -- Link preview response events --------------------------------

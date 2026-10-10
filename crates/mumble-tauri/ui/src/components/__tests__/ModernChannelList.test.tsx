@@ -59,7 +59,6 @@ const BASE_PROPS = {
   listenedChannels: new Set<number>(),
   unreadCounts: {} as Record<number, number>,
   talkingSessions: new Set<number>(),
-  broadcastingSessions: new Set<number>(),
   onSelectChannel: vi.fn(),
   onJoinChannel: vi.fn(),
   onContextMenu: vi.fn(),

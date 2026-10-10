@@ -364,6 +364,15 @@
   color: white;
   flex-shrink: 0;
 }
+/* A radio station in the channel gets a rounded SQUARE badge in burnt orange,
+   so it reads as a station at a glance vs. a round person avatar. */
+.memberAvatarStation {
+  border-radius: 5px;
+  background: linear-gradient(135deg, #c2410c 0%, #ea6a1f 100%);
+}
+.memberAvatarStationImg {
+  border-radius: 5px;
+}
 
 .memberAvatarImg {
   width: 100%;

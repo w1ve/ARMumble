@@ -1,4 +1,5 @@
-import { CloseIcon, MoonIcon, RadioIcon, ShieldCheckIcon, UserFilledIcon } from "../../icons";
+import { CloseIcon, MoonIcon, ShieldCheckIcon, UserFilledIcon } from "../../icons";
+import { StationIcon } from "../icons/StationIcon";
 /**
  * Full-height right-side panel showing a user's full profile.
  *
@@ -229,7 +230,7 @@ function UserProfilePanel({
               />
             ) : (
               <span className={styles.avatarPlaceholder}>
-                {isStation ? <RadioIcon width={48} height={48} /> : <UserFilledIcon width={48} height={48} />}
+                {isStation ? <StationIcon width={48} height={48} /> : <UserFilledIcon width={48} height={48} />}
               </span>
             )}
             {decoration && decoration.id !== "none" && (

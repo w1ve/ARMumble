@@ -16,7 +16,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { getSavedServers } from "./serverStorage";
-import { RadioIcon } from "./icons";
+import { StationIcon } from "./components/icons/StationIcon";
 
 /** Event fired when the saved-server list changes, so hints refresh. */
 const SERVERS_CHANGED_EVENT = "rr:servers-changed";
@@ -131,7 +131,7 @@ export function StationGlyph({
   size: number;
   fallback: ReactNode;
 }): ReactNode {
-  return isStation ? <RadioIcon width={size} height={size} /> : fallback;
+  return isStation ? <StationIcon width={size} height={size} /> : fallback;
 }
 
 /**

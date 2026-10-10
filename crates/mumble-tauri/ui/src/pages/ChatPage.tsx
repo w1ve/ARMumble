@@ -17,6 +17,9 @@ import {
 } from "./settings/shortcutHelpers";
 import ChannelSidebar from "../components/sidebar/channel/ChannelSidebar";
 import ChatView from "../components/chat/ChatView";
+import ServerTabsBar from "../components/layout/ServerTabsBar";
+import StationBar from "../components/layout/StationBar";
+import StationActionBar from "../components/layout/StationActionBar";
 // MobileBottomSheet must be imported statically: MobileProfileSheet and
 // ServerEditSheet already import it statically, and a module that is BOTH
 // statically and dynamically imported makes rolldown emit it as a separate
@@ -451,15 +454,32 @@ export default function ChatPage() {
           searchChannelId={searchChannelId}
           onSearchChannelClear={() => setSearchChannelId(null)}
           onSelectMessage={(_, messageId) => setPendingScrollMessageId(messageId)}
+          /* Desktop: voice toggles + action row live in the right-pane
+             StationBar / StationActionBar instead of the sidebar. */
+          showSelfVoiceControls={useDrawer}
+          showVoicePanel={useDrawer}
         />
       </div>
 
-      <ChatView
-        onChannelInfoToggle={toggleChannelInfo}
-        onChannelSearch={openChannelSearch}
-        scrollToMessageId={pendingScrollMessageId}
-        onScrollConsumed={() => setPendingScrollMessageId(null)}
-      />
+      {/* Right pane: server tabs -> station bar -> text window -> action row.
+          On mobile/narrow (drawer mode) the tabs stay in the TitleBar and the
+          voice/action controls stay in the sidebar, so the right pane is just
+          the chat view. */}
+      <div className={styles.rightPane}>
+        {!isMobile && (
+          <div className={styles.serverTabsRow}>
+            <ServerTabsBar />
+          </div>
+        )}
+        {!useDrawer && <StationBar />}
+        <ChatView
+          onChannelInfoToggle={toggleChannelInfo}
+          onChannelSearch={openChannelSearch}
+          scrollToMessageId={pendingScrollMessageId}
+          onScrollConsumed={() => setPendingScrollMessageId(null)}
+        />
+        {!useDrawer && <StationActionBar onServerInfoToggle={toggleServerInfo} />}
+      </div>
       <SuperSearch
         open={superSearchOpen}
         onClose={() => setSuperSearchOpen(false)}

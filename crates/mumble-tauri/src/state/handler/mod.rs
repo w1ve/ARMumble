@@ -10,7 +10,6 @@ mod channel_remove;
 mod channel_state;
 mod codec_version;
 mod custom_reactions_config;
-mod draw_stroke;
 mod link_preview;
 mod onboarding;
 mod server_settings;
@@ -34,7 +33,6 @@ mod user_state;
 mod user_stats;
 mod version;
 mod watch_sync;
-mod webrtc_signal;
 
 #[cfg(test)]
 mod tests;
@@ -163,13 +161,11 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::PchatReactionFetchResponse(m) => m.handle(ctx),
         ControlMessage::PchatPinDeliver(m) => m.handle(ctx),
         ControlMessage::PchatPinFetchResponse(m) => m.handle(ctx),
-        ControlMessage::WebRtcSignal(m) => m.handle(ctx),
         ControlMessage::FancyCustomReactionsConfig(m) => m.handle(ctx),
         ControlMessage::FancyReadReceiptDeliver(m) => m.handle(ctx),
         ControlMessage::FancyTypingIndicator(m) => m.handle(ctx),
         ControlMessage::FancyLinkPreviewResponse(m) => m.handle(ctx),
         ControlMessage::FancyWatchSync(m) => m.handle(ctx),
-        ControlMessage::FancyDrawStroke(m) => m.handle(ctx),
         ControlMessage::FancyOnboardingConfig(m) => m.handle(ctx),
         ControlMessage::FancyOnboardingResponseDeliver(m) => m.handle(ctx),
         ControlMessage::FancyServerSettings(m) => m.handle(ctx),

@@ -1,0 +1,134 @@
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* --- Transmit-mode segmented control --- */
+.segmented {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.segBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-glass);
+  border: none;
+  border-left: 1px solid var(--color-glass-border);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.segBtn:first-child {
+  border-left: none;
+}
+
+.segBtn:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+
+.segBtnActive {
+  color: #fff;
+  background: var(--color-accent);
+}
+
+.segBtnActive:hover {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.segLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+/* --- Hotkey set/unset + keystrokes --- */
+.hotkeyGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.groupIcon {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.hkBtn {
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.hkBtn:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+  border-color: var(--color-glass-border-hover);
+}
+
+.capture {
+  width: 150px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--color-accent);
+  background: var(--color-glass-hover);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.keys {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+  background: var(--color-bg-subtle, rgba(127, 127, 127, 0.14));
+  border: 1px solid var(--color-glass-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+/* --- Whisper target channel dropdown --- */
+.channelSelect {
+  font: inherit;
+  font-size: 11px;
+  color: var(--color-text-primary);
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  cursor: pointer;
+  max-width: 160px;
+  flex-shrink: 0;
+}
+
+.err {
+  font-size: 11px;
+  color: var(--color-danger);
+}

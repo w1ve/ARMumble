@@ -285,6 +285,14 @@
   color: #fff;
   flex-shrink: 0;
 }
+/* Radio station: rounded SQUARE burnt-orange badge vs. round person avatar. */
+.memberAvatarStation {
+  border-radius: 5px;
+  background: linear-gradient(135deg, #c2410c 0%, #ea6a1f 100%);
+}
+.memberAvatarStationImg {
+  border-radius: 5px;
+}
 
 .memberAvatarImg {
   width: 100%;

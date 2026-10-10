@@ -4,30 +4,66 @@
 use crate::audio;
 use crate::state::{self, AppState, AudioDevice, AudioSettings, VoiceState};
 
+/// Sentinel device name meaning "(No device)" — the user explicitly chose to
+/// open nothing. Must match `NO_DEVICE` in the frontend (DeviceSelect.tsx).
+/// `None`/empty still means "System default".
+pub const NO_DEVICE: &str = "\u{0}none";
+
+/// Returns `true` when a selected-device value is the explicit "(No device)"
+/// sentinel (as opposed to `None` = system default, or a real device name).
+pub fn is_no_device(name: Option<&str>) -> bool {
+    name == Some(NO_DEVICE)
+}
+
+/// Enumerate input device display names only (no default flag). Shared by the
+/// device watcher. Mirrors `get_audio_devices`' name source so the watcher's
+/// view matches the dropdown's.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn enumerate_input_device_names() -> Vec<String> {
+    get_audio_devices().into_iter().map(|d| d.name).collect()
+}
+
+/// Enumerate output device display names only. Shared by the device watcher.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn enumerate_output_device_names() -> Vec<String> {
+    get_output_devices().into_iter().map(|d| d.name).collect()
+}
+
 /// List available audio input devices (microphones).
 /// Only available on desktop (cpal is not supported on Android).
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 pub(crate) fn get_audio_devices() -> Vec<AudioDevice> {
-    use cpal::traits::{DeviceTrait, HostTrait};
+    use cpal::traits::HostTrait;
+
+    // When the rodio backend is active (the default), enumerate inputs via
+    // rodio so the names in the list exactly match what the capture open path
+    // (`find_input_by_name`) compares against. This prevents the "I picked a
+    // device but a different one opened" class of bug.
+    if audio::is_rodio_backend() {
+        let devices: Vec<AudioDevice> = audio::rodio_desktop::enumerate_input_names()
+            .into_iter()
+            .map(|(name, is_default)| AudioDevice { name, is_default })
+            .collect();
+        if !devices.is_empty() {
+            return devices;
+        }
+        // Fall through to the cpal path if rodio enumeration came back empty.
+    }
 
     let host = cpal::default_host();
     let default_name = host
         .default_input_device()
-        .and_then(|d| {
-            d.description()
-                .ok()
-                .map(|desc| desc.name().to_string())
-        });
+        .and_then(|d| friendly_device_name(&d));
 
     host.input_devices()
         .map(|devices| {
             devices
                 .filter_map(|d| {
-                    let name = d
-                        .description()
-                        .ok()
-                        .map(|desc| desc.name().to_string())?;
+                    // Prefer the friendly description name; fall back to the
+                    // raw cpal name rather than DROPPING the device, so the
+                    // list matches the Windows Sound applet more closely.
+                    let name = friendly_device_name(&d)?;
                     Some(AudioDevice {
                         name: name.clone(),
                         is_default: default_name.as_deref() == Some(&name),
@@ -36,6 +72,21 @@ pub(crate) fn get_audio_devices() -> Vec<AudioDevice> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Best-effort friendly name for a cpal device: the endpoint description
+/// name when available, otherwise the raw device name. Returns `None` only
+/// when both fail (a truly unusable device).
+#[cfg(not(target_os = "android"))]
+fn friendly_device_name(d: &cpal::Device) -> Option<String> {
+    use cpal::traits::DeviceTrait;
+    if let Ok(desc) = d.description() {
+        return Some(desc.name().to_string());
+    }
+    // Intentional fallback to the raw (deprecated) name so a device whose
+    // endpoint description is unavailable is still listed rather than dropped.
+    #[allow(deprecated)]
+    d.name().ok()
 }
 
 /// Stub: on Android, return an empty device list.
@@ -50,25 +101,20 @@ pub(crate) fn get_audio_devices() -> Vec<AudioDevice> {
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 pub(crate) fn get_output_devices() -> Vec<AudioDevice> {
-    use cpal::traits::{DeviceTrait, HostTrait};
+    use cpal::traits::HostTrait;
 
     let host = cpal::default_host();
     let default_name = host
         .default_output_device()
-        .and_then(|d| {
-            d.description()
-                .ok()
-                .map(|desc| desc.name().to_string())
-        });
+        .and_then(|d| friendly_device_name(&d));
 
     host.output_devices()
         .map(|devices| {
             devices
                 .filter_map(|d| {
-                    let name = d
-                        .description()
-                        .ok()
-                        .map(|desc| desc.name().to_string())?;
+                    // Fall back to the raw cpal name rather than dropping the
+                    // device when the endpoint description is unavailable.
+                    let name = friendly_device_name(&d)?;
                     Some(AudioDevice {
                         name: name.clone(),
                         is_default: default_name.as_deref() == Some(&name),
@@ -164,6 +210,24 @@ pub(crate) async fn set_audio_settings(
 #[tauri::command]
 pub(crate) fn set_audio_backend(use_rodio: bool) {
     audio::set_use_rodio_backend(use_rodio);
+}
+
+/// Subscribe to oscilloscope sample frames for a source ("input" or
+/// "output"). Ref-counted: the backend only taps + emits `scope-data` while
+/// at least one scope is subscribed, so it is free when nothing is shown.
+#[tauri::command]
+pub(crate) fn scope_subscribe(source: String) {
+    if let Some(src) = audio::scope::ScopeSource::parse(&source) {
+        audio::scope::subscribe(src);
+    }
+}
+
+/// Unsubscribe a previously subscribed scope source.
+#[tauri::command]
+pub(crate) fn scope_unsubscribe(source: String) {
+    if let Some(src) = audio::scope::ScopeSource::parse(&source) {
+        audio::scope::unsubscribe(src);
+    }
 }
 
 /// Returns `true` if the rodio backend is selected, `false` for legacy cpal.

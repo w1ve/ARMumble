@@ -99,6 +99,7 @@
     "outputDevice": "输出设备",
     "systemDefault": "系统默认",
     "deviceDefault": "（默认）",
+    "noDevice": "（无设备）",
     "microphoneVolume": "麦克风音量",
     "speakerVolume": "扬声器音量",
     "activationMode": "激活方式",

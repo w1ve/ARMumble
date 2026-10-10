@@ -1,4 +1,5 @@
-import { MoonIcon, RadioIcon, ShieldCheckIcon, UserFilledIcon } from "../../icons";
+import { MoonIcon, ShieldCheckIcon, UserFilledIcon } from "../../icons";
+import { StationIcon } from "../../components/icons/StationIcon";
 import type { FancyProfile } from "../../types";
 import { useTranslation } from "react-i18next";
 import { SafeHtml } from "../../components/elements/SafeHtml";
@@ -156,7 +157,7 @@ export function ProfilePreviewCard({
             />
           ) : (
             <span className={styles.previewAvatarPlaceholder}>
-              {isStation ? <RadioIcon width={48} height={48} /> : <UserFilledIcon width={48} height={48} />}
+              {isStation ? <StationIcon width={48} height={48} /> : <UserFilledIcon width={48} height={48} />}
             </span>
           )}
           {decoration && decoration.id !== "none" && (

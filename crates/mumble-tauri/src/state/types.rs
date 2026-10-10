@@ -474,14 +474,6 @@ pub(crate) fn serialize_bytes_base64<S: Serializer>(
 }
 
 #[derive(Clone, Serialize)]
-pub(crate) struct WebRtcSignalPayload {
-    pub sender_session: Option<u32>,
-    pub target_session: Option<u32>,
-    pub signal_type: i32,
-    pub payload: String,
-}
-
-#[derive(Clone, Serialize)]
 pub(crate) struct CurrentChannelPayload {
     pub channel_id: u32,
 }

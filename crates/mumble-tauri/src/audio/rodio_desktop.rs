@@ -107,6 +107,51 @@ impl RodioCapture {
     }
 }
 
+/// Enumerate input device display names via rodio's `available_inputs()`.
+///
+/// These names are produced by the SAME source that `find_input_by_name`
+/// matches against (`Input::to_string()`), so a name returned here is
+/// guaranteed to resolve back to the correct device when the user selects
+/// it — unlike cpal `description().name()`, which can diverge from rodio's
+/// naming and cause a silent fall-back to the default device.
+///
+/// Returns `(name, is_default)` pairs. The default is reported by comparing
+/// against cpal's default input device description, best-effort.
+pub fn enumerate_input_names() -> Vec<(String, bool)> {
+    use cpal::traits::{DeviceTrait, HostTrait};
+
+    let default_name = cpal::default_host()
+        .default_input_device()
+        .and_then(|d| d.description().ok().map(|desc| desc.name().to_string()))
+        .or_else(|| {
+            #[allow(deprecated)]
+            cpal::default_host()
+                .default_input_device()
+                .and_then(|d| d.name().ok())
+        });
+
+    let Ok(inputs) = available_inputs() else {
+        return Vec::new();
+    };
+    inputs
+        .into_iter()
+        .map(|i| {
+            let name = i.to_string();
+            // rodio's Input display name and cpal's default name may differ
+            // in formatting; treat a case-insensitive substring match either
+            // way as "this is the default".
+            let is_default = default_name
+                .as_deref()
+                .map(|d| {
+                    let (a, b) = (d.to_lowercase(), name.to_lowercase());
+                    a == b || a.contains(&b) || b.contains(&a)
+                })
+                .unwrap_or(false);
+            (name, is_default)
+        })
+        .collect()
+}
+
 impl AudioCapture for RodioCapture {
     fn format(&self) -> AudioFormat {
         self.format
@@ -136,9 +181,20 @@ impl AudioCapture for RodioCapture {
 
         let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
         let mut data = Vec::with_capacity(frame_total * 4);
+        // Collect the volume-adjusted samples for the input oscilloscope tap
+        // (cheap no-op when no scope is subscribed).
+        let mut scope_samples: Vec<f32> = Vec::with_capacity(frame_total);
         for s in self.pending.drain(..frame_total) {
-            data.extend_from_slice(&(s * vol).to_ne_bytes());
+            let adjusted = s * vol;
+            scope_samples.push(adjusted);
+            data.extend_from_slice(&adjusted.to_ne_bytes());
         }
+        // Feed the transmit (input) oscilloscope.
+        crate::audio::scope::push(
+            crate::audio::scope::ScopeSource::Input,
+            &scope_samples,
+            if self.stereo { 2 } else { 1 },
+        );
         self.sequence += 1;
         Ok(AudioFrame {
             data,
@@ -568,6 +624,13 @@ impl MumbleMixerSource {
             self.consecutive_empty = 0;
             self.chunk_pos = 0;
             self.chunk_valid = valid_count;
+            // Feed the output oscilloscope with the final interleaved mix
+            // (cheap no-op when no output scope is subscribed).
+            crate::audio::scope::push(
+                crate::audio::scope::ScopeSource::Output,
+                &self.mixed_chunk[..valid_count],
+                PLAYBACK_CHANNELS,
+            );
         }
     }
 }

@@ -132,7 +132,9 @@
   font-size: 0.9rem;
   letter-spacing: 0.02em;
   color: #fff;
-  background: linear-gradient(135deg, #4668ff 0%, #8a4dff 100%);
+  /* Burnt orange — distinguishes fixed remote.radio.org servers from the
+     blue/purple user-added (saved) servers. */
+  background: linear-gradient(135deg, #c2410c 0%, #ea6a1f 100%);
 }
 
 .cardText {

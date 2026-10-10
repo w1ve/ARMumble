@@ -18,6 +18,12 @@
   gap: 4px;
 }
 
+/* Live waveform under each device selector in Voice settings. */
+.deviceScope {
+  height: 44px;
+  margin: 4px 0 2px;
+}
+
 /* --- Audio statistics ------------------------------------------ */
 
 .statsRow {

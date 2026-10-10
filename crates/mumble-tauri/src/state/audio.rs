@@ -148,6 +148,75 @@ impl AppState {
         Some((restart_outbound, restart_inbound, force_tcp_changed, mode_changed))
     }
 
+    /// React to a change in the set of available audio devices (hotplug).
+    ///
+    /// If the active session's currently-selected input or output device is a
+    /// real device name that is no longer present, fall back to "(No device)"
+    /// and reset the affected chain, so a yanked USB sound card doesn't leave
+    /// the pipeline pointed at a dead endpoint. A fresh selection by the user
+    /// rebuilds the chain through the normal `set_audio_settings` path.
+    ///
+    /// `inputs` / `outputs` are the current device-name sets.
+    pub fn handle_device_set_changed(&self, inputs: &[String], outputs: &[String]) {
+        let target = self.inner.snapshot();
+
+        // Read the active selection + whether voice is live.
+        let (selected_in, selected_out, voice_active) = {
+            let Ok(state) = target.lock() else { return };
+            (
+                state.audio.settings.selected_device.clone(),
+                state.audio.settings.selected_output_device.clone(),
+                state.audio.voice_state == VoiceState::Active,
+            )
+        };
+
+        // A selection is "dead" when it names a real device (not None = system
+        // default, not the (No device) sentinel) that is absent from the set.
+        let input_dead = selected_in.as_deref().is_some_and(|name| {
+            !crate::commands::audio::is_no_device(Some(name))
+                && !inputs.iter().any(|d| d == name)
+        });
+        let output_dead = selected_out.as_deref().is_some_and(|name| {
+            !crate::commands::audio::is_no_device(Some(name))
+                && !outputs.iter().any(|d| d == name)
+        });
+
+        if !input_dead && !output_dead {
+            return;
+        }
+
+        // Flip the dead selection(s) to (No device) and persist.
+        {
+            let Ok(mut state) = target.lock() else { return };
+            if input_dead {
+                tracing::warn!(
+                    "input device '{}' disappeared; falling back to (No device)",
+                    selected_in.as_deref().unwrap_or_default()
+                );
+                state.audio.settings.selected_device =
+                    Some(crate::commands::audio::NO_DEVICE.to_string());
+            }
+            if output_dead {
+                tracing::warn!(
+                    "output device '{}' disappeared; falling back to (No device)",
+                    selected_out.as_deref().unwrap_or_default()
+                );
+                state.audio.settings.selected_output_device =
+                    Some(crate::commands::audio::NO_DEVICE.to_string());
+            }
+        }
+
+        // Reset the affected chain(s) if voice is live.
+        if voice_active {
+            if input_dead {
+                let _ = self.restart_outbound();
+            }
+            if output_dead {
+                let _ = self.restart_inbound();
+            }
+        }
+    }
+
     /// Get the rig-PTT config for a specific server (or the active session when
     /// `server_id` is `None`).
     pub fn ptt_config_for(
@@ -430,6 +499,14 @@ mod voice_pipeline {
                 (state.audio.settings.clone(), state.conn.client_handle.clone())
             };
 
+            // "(No device)" selected: leave the capture pipeline torn down so
+            // nothing is transmitted. The chain rebuilds when a real device is
+            // chosen (which triggers needs_pipeline_restart again).
+            if crate::commands::audio::is_no_device(audio_settings.selected_device.as_deref()) {
+                info!("restart_outbound: input is (No device); capture left stopped");
+                return Ok(());
+            }
+
             self.start_outbound_pipeline(&audio_settings, &client_handle)
         }
 
@@ -452,6 +529,15 @@ mod voice_pipeline {
                 let state = __session.lock().map_err(|e| e.to_string())?;
                 state.audio.settings.clone()
             };
+
+            // "(No device)" selected: leave playback torn down so nothing is
+            // output. Rebuilds when a real output device is chosen.
+            if crate::commands::audio::is_no_device(
+                audio_settings.selected_output_device.as_deref(),
+            ) {
+                info!("restart_inbound: output is (No device); playback left stopped");
+                return Ok(());
+            }
 
             let output_vol = Arc::new(AtomicU32::new(audio_settings.output_volume.to_bits()));
 
@@ -494,6 +580,11 @@ mod voice_pipeline {
             audio_settings: &AudioSettings,
             client_handle: &Option<ClientHandle>,
         ) -> Result<(), String> {
+            // "(No device)" means transmit nothing: skip opening any capture.
+            if crate::commands::audio::is_no_device(audio_settings.selected_device.as_deref()) {
+                info!("start_outbound_pipeline: input is (No device); capture not started");
+                return Ok(());
+            }
             // Re-use existing input volume handle or create a new one.
             let (input_vol, app, own_session, max_bandwidth) = {
                 let __session = self.inner.snapshot();

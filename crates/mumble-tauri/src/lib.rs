@@ -355,28 +355,6 @@ pub fn run_with(context: tauri::Context, mode: Mode) {
             {
                 updater::show_main_window(&window.app_handle().clone());
             }
-            // Stream popout cleanup: when one of our `popout-stream-*`
-            // windows is destroyed (any cause), tell the main window so
-            // it can restore the in-chat viewer / watch banner.
-            #[cfg(not(target_os = "android"))]
-            if matches!(event, tauri::WindowEvent::Destroyed)
-                && window.label().starts_with("popout-stream-")
-            {
-                use tauri::{Emitter, Manager};
-                if let Some(state) = window.try_state::<AppState>() {
-                    let session = state
-                        .popout_stream_sessions
-                        .lock()
-                        .ok()
-                        .and_then(|mut m| m.remove(window.label()));
-                    if let Some(session) = session {
-                        let _ = window.app_handle().emit(
-                            "stream-popout-state",
-                            serde_json::json!({ "session": session, "opened": false }),
-                        );
-                    }
-                }
-            }
             // Translation popout cleanup: if the popout had the in-window
             // element picker enabled when it was destroyed (Alt+F4, tray
             // kill, ...) the main window never received a stop event and
@@ -452,6 +430,14 @@ fn init_app_state(app: &mut tauri::App) {
         tracing::warn!("Failed to initialise offload store: {e}");
     }
     hydrate_persisted_prefs(app.handle(), &state);
+
+    // Start the audio device hotplug watcher so the device dropdowns refresh
+    // when hardware is plugged/unplugged, and a yanked in-use device falls
+    // back to (No device) with a chain reset.
+    audio::device_watcher::start(app.handle().clone());
+
+    // Give the oscilloscope hub the app handle so it can emit `scope-data`.
+    audio::scope::set_app_handle(app.handle().clone());
 }
 
 /// Read `preferences.json` (written by `@tauri-apps/plugin-store`) and
@@ -708,6 +694,8 @@ macro_rules! all_command_handlers {
             commands::audio::set_audio_settings,
             commands::audio::set_audio_backend,
             commands::audio::get_audio_backend,
+            commands::audio::scope_subscribe,
+            commands::audio::scope_unsubscribe,
             commands::audio::get_voice_state,
             commands::audio::play_stereo_test,
             commands::audio::stop_stereo_test,
@@ -766,9 +754,7 @@ macro_rules! all_command_handlers {
             commands::messaging::query_read_receipts,
             commands::messaging::send_typing_indicator,
             commands::messaging::send_watch_sync,
-            commands::messaging::send_draw_stroke,
             commands::messaging::request_link_preview,
-            commands::realtime::send_webrtc_signal,
             commands::messaging::send_reaction,
             commands::messaging::pin_message,
             commands::messaging::delete_pchat_messages,
@@ -844,14 +830,9 @@ macro_rules! all_command_handlers {
             commands::plugin_info::decode_plugin_info,
             commands::popout::open_image_popout,
             commands::popout::take_popout_image,
-            commands::popout::open_stream_popout,
-            commands::popout::take_popout_stream,
             commands::popout::open_dm_popout,
             commands::popout::take_popout_dm,
             commands::popout::open_translation_popout,
-            commands::draw_overlay::open_drawing_overlay,
-            commands::draw_overlay::close_drawing_overlay,
-            commands::draw_overlay::take_drawing_overlay_context,
             commands::window::set_window_aspect_ratio,
             commands::window::app_mode,
             #[cfg(not(target_os = "android"))]

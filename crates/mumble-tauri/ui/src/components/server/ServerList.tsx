@@ -1,4 +1,5 @@
-import { CloseIcon, PauseIcon, SearchIcon, UserFilledIcon, RadioIcon, CircleDotIcon } from "../../icons";
+import { CloseIcon, PauseIcon, SearchIcon, UserFilledIcon, CircleDotIcon } from "../../icons";
+import { StationIcon } from "../icons/StationIcon";
 import { useMemo, useRef, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SavedServer, ServerPingResult } from "../../types";
@@ -92,7 +93,7 @@ function RoleBadge({ role }: Readonly<{ role?: "operator" | "station" }>) {
   return (
     <span className={styles.roleBadge} title={label} aria-label={label}>
       {isStation ? (
-        <RadioIcon width={12} height={12} />
+        <StationIcon width={12} height={12} />
       ) : (
         <CircleDotIcon width={12} height={12} />
       )}

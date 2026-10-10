@@ -99,6 +99,7 @@
     "outputDevice": "Périphérique de sortie",
     "systemDefault": "Système par défaut",
     "deviceDefault": "(défaut)",
+    "noDevice": "(Aucun périphérique)",
     "microphoneVolume": "Volume du microphone",
     "speakerVolume": "Volume des haut-parleurs",
     "activationMode": "Mode d'activation",

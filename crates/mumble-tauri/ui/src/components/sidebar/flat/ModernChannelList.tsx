@@ -1,4 +1,4 @@
-import { ChevronRightIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MegaphoneIcon, MicOffSmallIcon, ScreenShareIcon } from "../../../icons";
+import { ChevronRightIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MegaphoneIcon, MicOffSmallIcon } from "../../../icons";
 /**
  * ModernChannelList - a flat, always-visible channel viewer.
  *
@@ -21,7 +21,6 @@ import { useIsStation, StationGlyph } from "../../../stationIdentity";
 import { useUserAvatar, useUserComment } from "../../../lazyBlobs";
 import { parseComment } from "../../../profileFormat";
 import { useUserStats } from "../../../hooks/useUserStats";
-import { useStreamThumbnail } from "../../chat/stream/useStreamPreview";
 import SwipeableCard from "../../elements/SwipeableCard";
 import { isMobile } from "../../../utils/platform";
 import { PERM_MOVE, PERM_ENTER } from "../../../utils/permissions";
@@ -45,7 +44,6 @@ interface ModernChannelListProps {
   readonly listenedChannels: Set<number>;
   readonly unreadCounts: Record<number, number>;
   readonly talkingSessions: Set<number>;
-  readonly broadcastingSessions: Set<number>;
   readonly onSelectChannel: (id: number) => void;
   readonly onJoinChannel: (id: number) => void;
   readonly onContextMenu: (e: React.MouseEvent, channelId: number) => void;
@@ -75,13 +73,12 @@ function ChannelDropWrapper({
 interface MemberItemProps {
   readonly user: UserEntry;
   readonly isTalking: boolean;
-  readonly isBroadcasting: boolean;
   readonly isActive?: boolean;
   readonly onContextMenu?: (e: React.MouseEvent, user: UserEntry) => void;
   readonly onClick?: (session: number) => void;
 }
 
-function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMenu, onClick }: MemberItemProps) {
+function MemberItemImpl({ user, isTalking, isActive, onContextMenu, onClick }: MemberItemProps) {
   const { t } = useTranslation(["sidebar", "common"]);
   const ownSession = useAppStore((s) => s.ownSession);
   const selectedDmUser = useAppStore((s) => s.selectedDmUser);
@@ -94,9 +91,9 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
   });
   const roleColors = useContext(RoleColorsContext);
   const roleColor = user.user_id != null ? (roleColors.get(user.user_id) ?? null) : null;
-  const isStation = useIsStation()(user.name);
+  const isStation = useIsStation()(user.name, user.session);
   const url = useUserAvatar(user.session, user.texture_size);
-  const { showCard, cardPos, itemRef, handleEnter, handleLeave } = useHoverCardPosition(isBroadcasting);
+  const { showCard, cardPos, itemRef, handleEnter, handleLeave } = useHoverCardPosition();
   // Defer FancyProfile parsing until the hover card is actually shown.
   // The result is consumed only inside the portal below, and parsing
   // adds measurable mount cost when many members are visible.
@@ -110,7 +107,6 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
     [showCard, user.comment, liveComment],
   );
   const stats = useUserStats(user.session, showCard);
-  const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
@@ -149,11 +145,15 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
         style={dragHandlers.style}
       >
         <div
-          className={styles.memberAvatar}
-          style={{ background: url || isStation ? "transparent" : colorFor(user.name) }}
+          className={`${styles.memberAvatar} ${isStation ? styles.memberAvatarStation : ""}`}
+          style={isStation ? undefined : { background: url ? "transparent" : colorFor(user.name) }}
         >
           {url ? (
-            <img src={url} alt={user.name} className={styles.memberAvatarImg} />
+            <img
+              src={url}
+              alt={user.name}
+              className={`${styles.memberAvatarImg} ${isStation ? styles.memberAvatarStationImg : ""}`}
+            />
           ) : (
             <StationGlyph isStation={isStation} size={14} fallback={user.name.charAt(0).toUpperCase()} />
           )}
@@ -167,12 +167,6 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
         )}
         {user.self_deaf && (
           <HeadphonesOffIcon className={styles.statusIcon} width={12} height={12} />
-        )}
-        {isBroadcasting && (
-          <span className={styles.liveBadge} title={t("channelList.sharingScreen")}>
-            <ScreenShareIcon width={10} height={10} />
-            {t("channelList.liveBadge")}
-          </span>
         )}
         {dmUnread > 0 && (
           <span className={styles.dmUnreadBadge} title={t("channelList.dmUnread", { count: dmUnread })}>
@@ -190,8 +184,6 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
           onlinesecs={stats?.onlinesecs}
           idlesecs={stats?.idlesecs}
           isRegistered={user.user_id != null && user.user_id > 0}
-          isBroadcasting={isBroadcasting}
-          thumbnail={streamThumbnail}
           isStation={isStation}
         />
       )}
@@ -246,7 +238,6 @@ function ModernChannelListImpl({
   listenedChannels,
   unreadCounts,
   talkingSessions,
-  broadcastingSessions,
   shakingChannelId,
   highlightChannelId,
   highlightUserSession,
@@ -464,7 +455,6 @@ function ModernChannelListImpl({
                 <MemberItem
                   user={u}
                   isTalking={talkingSessions.has(u.session)}
-                  isBroadcasting={broadcastingSessions.has(u.session)}
                   onContextMenu={onUserContextMenu}
                   onClick={onUserClick}
                 />
@@ -477,7 +467,7 @@ function ModernChannelListImpl({
     );
   }, [
     usersByChannel, unreadCounts, listenedChannels, selectedChannel,
-    currentChannel, collapsed, talkingSessions, broadcastingSessions,
+    currentChannel, collapsed, talkingSessions,
     shakingChannelId, highlightChannelId, highlightUserSession, toggleCollapsed, onSelectChannel, onJoinChannel, onContextMenu, onUserContextMenu, onUserClick,
   ]);
 

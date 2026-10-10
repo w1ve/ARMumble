@@ -174,22 +174,10 @@
     "dismissAriaLabel": "Banner verwerfen"
   },
   "pages": {
-    "drawOverlay": {
-      "contextUnavailable": "Zeichnungs-Overlay-Kontext nicht verfügbar"
-    },
     "popout": {
       "imageUnavailable": "Bildquelle nicht verfügbar",
       "missingId": "Fehlende Popout-ID",
       "mediaLabel": "Bild"
-    },
-    "streamPopout": {
-      "connectionLost": "Stream-Verbindung verloren",
-      "contextUnavailable": "Stream-Kontext nicht verfügbar",
-      "missingId": "Fehlende Popout-ID",
-      "connecting": "Verbindung wird hergestellt...",
-      "screenshare": "Bildschirmfreigabe",
-      "caption": "Live-Bildschirmfreigabe",
-      "mediaLabel": "Stream"
     }
   },
   "updater": {

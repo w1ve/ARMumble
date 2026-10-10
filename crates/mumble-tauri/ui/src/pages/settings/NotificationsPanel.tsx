@@ -61,7 +61,6 @@ const EVENT_KEYS: readonly NotificationEvent[] = [
   "userLeave",
   "userJoinChannel",
   "userLeaveChannel",
-  "streamStart",
   "voiceActivity",
   "selfMuted",
 ];
@@ -75,7 +74,6 @@ function buildEventDefs(t: (key: string) => string): Array<{ key: NotificationEv
     { key: "userLeave", label: t("notifications.evtUserLeave"), description: t("notifications.evtUserLeaveDesc") },
     { key: "userJoinChannel", label: t("notifications.evtUserJoinChannel"), description: t("notifications.evtUserJoinChannelDesc") },
     { key: "userLeaveChannel", label: t("notifications.evtUserLeaveChannel"), description: t("notifications.evtUserLeaveChannelDesc") },
-    { key: "streamStart", label: t("notifications.evtStreamStart"), description: t("notifications.evtStreamStartDesc") },
     { key: "voiceActivity", label: t("notifications.evtVoiceActivity"), description: t("notifications.evtVoiceActivityDesc") },
     { key: "selfMuted", label: t("notifications.evtSelfMuted"), description: t("notifications.evtSelfMutedDesc") },
   ];
@@ -104,7 +102,6 @@ export const DEFAULT_NOTIFICATION_SOUNDS: NotificationSoundSettings = {
     userLeave: { enabled: true, sound: "univ-040", volume: 0.4 },
     userJoinChannel: { enabled: true, sound: "univ-036", volume: 0.5 },
     userLeaveChannel: { enabled: true, sound: "univ-040", volume: 0.5 },
-    streamStart: { enabled: true, sound: "univ-051", volume: 0.5 },
     voiceActivity: { enabled: false, sound: "none", volume: 0.3 },
     selfMuted: { enabled: true, sound: "univ-057", volume: 0.4 },
   },

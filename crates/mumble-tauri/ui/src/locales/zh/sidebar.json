@@ -229,17 +229,10 @@
     "serverDeafenedTitle": "被服务器屏蔽声音",
     "selfDeafenedTitle": "已自我屏蔽声音",
     "prioritySpeakerTitle": "优先发言者",
-    "sharingScreenTitle": "正在共享屏幕",
-    "sharingScreenSfuTitle": "正在共享屏幕（服务器中转）",
-    "sharingScreenP2PTitle": "正在共享屏幕（点对点）",
-    "liveBadge": "直播中",
-    "liveBadgeP2P": "P2P",
     "dmUnreadTitle_one": "{{count}} 条未读私信",
     "dmUnreadTitle_other": "{{count}} 条未读私信"
   },
   "channelIconList": {
-    "liveBadgeTitle": "正在共享屏幕",
-    "liveBadgeLabel": "直播中",
     "rootFallback": "根频道",
     "lockBadgeTitle": "没有加入权限",
     "listenBadgeTitle": "正在收听",
@@ -257,8 +250,6 @@
     "member_one": "{{count}} 位成员",
     "member_other": "{{count}} 位成员",
     "expand": "展开",
-    "liveBadge": "直播中",
-    "sharingScreen": "正在共享屏幕",
     "dmUnread_one": "{{count}} 条未读私信",
     "dmUnread_other": "{{count}} 条未读私信"
   },

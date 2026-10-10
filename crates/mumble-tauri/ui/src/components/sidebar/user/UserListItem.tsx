@@ -1,4 +1,5 @@
-import { HeadphonesOffIcon, MicOffIcon, RadioIcon, ScreenShareIcon, ShieldCheckIcon, StarIcon, VolumeIcon } from "../../../icons";
+import { HeadphonesOffIcon, MicOffIcon, ShieldCheckIcon, StarIcon, VolumeIcon } from "../../../icons";
+import { StationIcon } from "../../icons/StationIcon";
 import { memo, useState, useMemo, useCallback, useEffect, useRef, createContext, useContext } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -9,11 +10,10 @@ import { useUserAvatar, useUserComment } from "../../../lazyBlobs";
 import { ProfilePreviewCard } from "../../../pages/settings/ProfilePreviewCard";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { colorFor } from "../../../utils/format";
-import { useStationNames, isStationName } from "../../../stationIdentity";
+import { useIsStation } from "../../../stationIdentity";
 import { isMobile } from "../../../utils/platform";
 import { PERM_MOVE as PERM_MOVE_BIT } from "../../../utils/permissions";
 import { useUserDrag } from "../../../utils/userMoveDnd";
-import { useStreamThumbnail } from "../../chat/stream/useStreamPreview";
 import { TID } from "../../../testids";
 import styles from "./UserListItem.module.css";
 
@@ -119,7 +119,7 @@ interface HoverCardPosition {
 }
 
 /** Computes the hover card position relative to the hovered element. */
-export function useHoverCardPosition(isBroadcasting: boolean): HoverCardPosition {
+export function useHoverCardPosition(): HoverCardPosition {
   const [showCard, setShowCard] = useState(false);
   const [cardPos, setCardPos] = useState<{ top: number; left: number } | null>(null);
   const itemRef = useRef<HTMLButtonElement>(null);
@@ -144,7 +144,7 @@ export function useHoverCardPosition(isBroadcasting: boolean): HoverCardPosition
       if (itemRef.current) {
         const rect = itemRef.current.getBoundingClientRect();
         const rawTop = rect.top + rect.height / 2;
-        const effectiveH = isBroadcasting ? HOVER_CARD_H + 160 : HOVER_CARD_H;
+        const effectiveH = HOVER_CARD_H;
         const top = Math.max(
           effectiveH / 2 + HOVER_CARD_MARGIN,
           Math.min(rawTop, window.innerHeight - effectiveH / 2 - HOVER_CARD_MARGIN),
@@ -157,7 +157,7 @@ export function useHoverCardPosition(isBroadcasting: boolean): HoverCardPosition
       }
       setShowCard(true);
     }, 250);
-  }, [isBroadcasting, cancelTimer]);
+  }, [cancelTimer]);
 
   const handleLeave = useCallback(() => {
     cancelTimer();
@@ -180,8 +180,6 @@ interface UserHoverCardPortalProps {
   readonly onlinesecs?: number | null;
   readonly idlesecs?: number | null;
   readonly isRegistered: boolean;
-  readonly isBroadcasting: boolean;
-  readonly thumbnail: string | null;
   /** ACL groups this user belongs to, shown as chips on the card. */
   readonly groups?: readonly RoleChip[];
   /** Whether this user is a radio station (radio icon instead of person). */
@@ -198,8 +196,6 @@ export function UserHoverCardPortal({
   onlinesecs,
   idlesecs,
   isRegistered,
-  isBroadcasting,
-  thumbnail,
   groups,
   isStation,
 }: Readonly<UserHoverCardPortalProps>) {
@@ -208,17 +204,6 @@ export function UserHoverCardPortal({
       className={styles.profilePopover}
       style={{ top: cardPos.top, left: cardPos.left }}
     >
-      {isBroadcasting && (
-        <div className={styles.streamPreview}>
-          {thumbnail ? (
-            <img src={thumbnail} alt="Screen share preview" />
-          ) : (
-            <div className={styles.streamPreviewPlaceholder}>
-              <ScreenShareIcon width={24} height={24} />
-            </div>
-          )}
-        </div>
-      )}
       <ProfilePreviewCard
         profile={profile}
         bio={bio}
@@ -296,23 +281,22 @@ export const UserListItem = memo(function UserListItem({
   const userGroups = user.user_id != null ? (roleGroups.get(user.user_id) ?? []) : [];
   const dmUnread = useAppStore((s) => s.dmUnreadCounts[user.session] ?? 0);
   const volumePct = useAppStore((s) => user.hash ? (s.userVolumes[user.hash] ?? 100) : 100);
-  const isBroadcasting = useAppStore((s) => s.broadcastingSessions.has(user.session));
-  const sfuAvailable = useAppStore((s) => s.serverConfig.webrtc_sfu_available);
   const canMoveUser = useAppStore((s) => {
     const ch = s.channels.find((c) => c.id === user.channel_id);
     return ch?.permissions != null && (ch.permissions & PERM_MOVE_BIT) !== 0;
   });
-  const { showCard, cardPos, itemRef, handleEnter, handleLeave } = useHoverCardPosition(isBroadcasting);
+  const { showCard, cardPos, itemRef, handleEnter, handleLeave } = useHoverCardPosition();
   const stats = useUserStats(user.session, showCard);
-  const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
 
-  // Station vs operator hint: a station gets a square badge in a distinct
-  // colour. See `stationIdentity.ts` — a best-effort match until the Fancy
-  // plugin-data role broadcast replaces it.
-  const stationNames = useStationNames();
+  // Station vs operator: prefer the authoritative role (announced over the
+  // remote-radio/role broadcast, keyed by session), falling back to the
+  // saved-server name hint for peers that have not announced. This matches the
+  // channel-list viewers so the main sidebar no longer shows an operator glyph
+  // for a station.
+  const isStationFor = useIsStation();
   const isStation = useMemo(
-    () => isStationName(user.name, stationNames),
-    [user.name, stationNames],
+    () => isStationFor(user.name, user.session),
+    [isStationFor, user.name, user.session],
   );
 
   const url = useUserAvatar(user.session, user.texture_size);
@@ -384,7 +368,7 @@ export const UserListItem = memo(function UserListItem({
           />
         ) : isStation ? (
           <div className={`${styles.avatar} ${styles.avatarStation}`}>
-            <RadioIcon width={16} height={16} />
+            <StationIcon width={16} height={16} />
           </div>
         ) : (
           <div
@@ -437,15 +421,6 @@ export const UserListItem = memo(function UserListItem({
           )}
         </span>
       )}
-      {isBroadcasting && (
-        <span
-          className={`${styles.liveBadge} ${!sfuAvailable ? styles.liveBadgeP2P : ""}`}
-          title={sfuAvailable ? t("userListItem.sharingScreenSfuTitle") : t("userListItem.sharingScreenP2PTitle")}
-        >
-          <ScreenShareIcon width={10} height={10} />
-          {sfuAvailable ? t("userListItem.liveBadge") : t("userListItem.liveBadgeP2P")}
-        </span>
-      )}
       {dmUnread > 0 && (
         <span className={styles.unreadBadge}>
           {dmUnread > 99 ? "99+" : dmUnread}
@@ -462,8 +437,6 @@ export const UserListItem = memo(function UserListItem({
           onlinesecs={stats?.onlinesecs}
           idlesecs={stats?.idlesecs}
           isRegistered={isRegistered}
-          isBroadcasting={isBroadcasting}
-          thumbnail={streamThumbnail}
           groups={userGroups.length > 0 ? userGroups : undefined}
           isStation={isStation}
         />
