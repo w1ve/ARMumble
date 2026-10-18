@@ -2,10 +2,10 @@
   background: var(--color-bg-primary, #1a1d23);
   border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.08));
   border-radius: var(--radius-lg, 12px);
-  padding: 24px;
-  width: 520px;
+  padding: 18px;
+  width: 440px;
   max-width: 92vw;
-  max-height: 80vh;
+  max-height: 72vh;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -38,6 +38,17 @@
 
 .welcomeText a {
   color: var(--accent, #2aabee);
+}
+
+/* A server-sent welcome image renders at its intrinsic size by default and
+   overflows the dialog. Use the app's standard responsive image sizing so it
+   fits the (now smaller) dialog width. */
+.welcomeText img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 4px;
+  margin: 6px 0;
 }
 
 .checkboxRow {

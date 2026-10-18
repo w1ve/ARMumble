@@ -130,6 +130,7 @@
       "radio2Hint": "Le canal droit porte la deuxième radio de la station"
     },
     "microphoneVolume": "Volume du microphone",
+    "radioPlaybackLevel": "Niveau de lecture radio",
     "speakerVolume": "Volume des haut-parleurs",
     "activationMode": "Mode d'activation",
     "activationModeHint": "Choisissez comment votre microphone est activé.",
@@ -499,7 +500,7 @@
   },
   "tabs": {
     "profile": "Profil",
-    "voice": "Voix",
+    "voice": "Audio",
     "shortcuts": "Raccourcis",
     "identities": "Identités",
     "notifications": "Notifications",

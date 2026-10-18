@@ -309,7 +309,7 @@ export function AudioPanel({
               <InputLevelMeter ariaLabel={inputLabel} />
             </div>
             <SliderField
-              label={t("audio.microphoneVolume")}
+              label={isStation ? t("audio.radioPlaybackLevel") : t("audio.microphoneVolume")}
               min={0}
               max={2}
               step={0.01}

@@ -130,6 +130,7 @@
       "radio2Hint": "右声道承载电台的第二台电台"
     },
     "microphoneVolume": "麦克风音量",
+    "radioPlaybackLevel": "电台回放电平",
     "speakerVolume": "扬声器音量",
     "activationMode": "激活方式",
     "activationModeHint": "选择麦克风的激活方式。",
@@ -505,7 +506,7 @@
   },
   "tabs": {
     "profile": "资料",
-    "voice": "语音",
+    "voice": "音频",
     "shortcuts": "快捷键",
     "identities": "身份",
     "notifications": "通知",

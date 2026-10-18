@@ -610,6 +610,15 @@ mod voice_pipeline {
             };
             let input_vol =
                 input_vol.unwrap_or_else(|| Arc::new(AtomicU32::new(audio_settings.input_volume.to_bits())));
+            // Store the resolved handle back so the live volume update path
+            // (set_audio_settings_for) writes the SAME Arc the capture reads.
+            // Without this, a pipeline (re)start that created a fresh handle
+            // left the slider updating an orphan Arc — the input VU still
+            // reflected the capture's gain, but moving the slider changed
+            // nothing on the transmitted audio.
+            if let Ok(mut state) = self.inner.snapshot().lock() {
+                state.audio.input_volume_handle = Some(input_vol.clone());
+            }
 
             // A radio Station transmits STEREO so a dual-receiver rig (different
             // receivers on L and R) keeps its channel separation on the air. An

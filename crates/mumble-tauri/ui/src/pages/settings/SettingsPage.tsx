@@ -33,7 +33,7 @@ import { ProfilePreviewCard } from "./ProfilePreviewCard";
 import { loadPersonalization, savePersonalization, type PersonalizationData } from "../../personalizationStorage";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
 import {
-  UserIcon, MicIcon, KeyboardIcon, KeyIcon, BellIcon, LockIcon,
+  UserIcon, AudioWaveformIcon, KeyboardIcon, KeyIcon, BellIcon, LockIcon,
   PaletteIcon, GlobeIcon, PuzzleIcon, SlidersIcon, UsersGroupIcon,
 } from "../../icons";
 import ChannelsAndRolesPanel from "../../components/onboarding/ChannelsAndRolesPanel";
@@ -95,7 +95,7 @@ const TAB_ICON_SIZE = 16;
 function buildTabs(t: (key: string) => string, hasPlugins: boolean): TabDef<Tab>[] {
   const tabs: TabDef<Tab>[] = [
     { id: "profile",        label: t("tabs.profile"),        icon: <UserIcon     width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
-    { id: "voice",          label: t("tabs.voice"),          icon: <MicIcon      width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "voice",          label: t("tabs.voice"),          icon: <AudioWaveformIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
     { id: "shortcuts",      label: t("tabs.shortcuts"),      icon: <KeyboardIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
     { id: "identities",     label: t("tabs.identities"),     icon: <KeyIcon      width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
     { id: "notifications",  label: t("tabs.notifications"),  icon: <BellIcon     width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },

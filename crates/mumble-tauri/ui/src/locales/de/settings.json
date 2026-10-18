@@ -130,6 +130,7 @@
       "radio2Hint": "Rechter Kanal führt das zweite Funkgerät der Station"
     },
     "microphoneVolume": "Mikrofonlautstärke",
+    "radioPlaybackLevel": "Funk-Wiedergabepegel",
     "speakerVolume": "Lautsprecherlautstärke",
     "activationMode": "Aktivierungsmodus",
     "activationModeHint": "Wähle, wie dein Mikrofon aktiviert wird.",
@@ -499,7 +500,7 @@
   },
   "tabs": {
     "profile": "Profil",
-    "voice": "Sprache",
+    "voice": "Audio",
     "shortcuts": "Tastenkürzel",
     "identities": "Identitäten",
     "notifications": "Benachrichtigungen",

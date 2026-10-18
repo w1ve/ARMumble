@@ -58,6 +58,7 @@ export default function StationBar() {
   const isInactive = voiceState === "inactive";
   const inChannel = currentChannel != null;
   const isOperator = role === "operator";
+  const isStation = role === "station";
 
   const serverKey = activeSession ? `${activeSession.host}:${activeSession.port}` : "";
 
@@ -70,15 +71,19 @@ export default function StationBar() {
     <div className={styles.stationBar}>
       {/* mic + level meter + headphone cluster (left) */}
       <div className={styles.cluster}>
-        <button
-          type="button"
-          className={`${styles.voiceToggle} ${isActive ? styles.voiceActive : styles.voiceMuted}`}
-          onClick={toggleMute}
-          title={isActive ? t("channelSidebar.mute") : t("channelSidebar.unmute")}
-          aria-label={isActive ? t("channelSidebar.mute") : t("channelSidebar.unmute")}
-        >
-          {isActive ? <MicIcon width={18} height={18} /> : <MicOffIcon width={18} height={18} />}
-        </button>
+        {/* The self-mute control is hidden for a Station: a station is a radio,
+            always transmitting its receiver audio — there is nothing to mute. */}
+        {!isStation && (
+          <button
+            type="button"
+            className={`${styles.voiceToggle} ${isActive ? styles.voiceActive : styles.voiceMuted}`}
+            onClick={toggleMute}
+            title={isActive ? t("channelSidebar.mute") : t("channelSidebar.unmute")}
+            aria-label={isActive ? t("channelSidebar.mute") : t("channelSidebar.unmute")}
+          >
+            {isActive ? <MicIcon width={18} height={18} /> : <MicOffIcon width={18} height={18} />}
+          </button>
+        )}
         <div className={styles.meterWrap}>
           <InputLevelMeter />
         </div>

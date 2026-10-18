@@ -130,6 +130,7 @@
       "radio2Hint": "Right channel carries the station's second radio"
     },
     "microphoneVolume": "Microphone Volume",
+    "radioPlaybackLevel": "Radio Playback Level",
     "speakerVolume": "Speaker Volume",
     "activationMode": "Activation Mode",
     "activationModeHint": "Choose how your microphone is activated.",
@@ -499,7 +500,7 @@
   },
   "tabs": {
     "profile": "Profile",
-    "voice": "Voice",
+    "voice": "Audio",
     "shortcuts": "Shortcuts",
     "identities": "Identities",
     "notifications": "Notifications",
