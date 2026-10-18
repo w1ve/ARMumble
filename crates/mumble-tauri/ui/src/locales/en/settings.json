@@ -146,6 +146,7 @@
     "compression": "Compression",
     "quality": "Quality",
     "qualityHint": "Higher bitrate means better audio quality but more bandwidth.",
+    "qualityHintStation": "A station transmits full-fidelity stereo, so quality is floored at 128 kb/s to keep the channels clean. Raise it for even better audio.",
     "audioPerPacket": "Audio per packet",
     "audioPerPacketHint": "Smaller values reduce latency; larger values are more bandwidth-efficient.",
     "network": "Network",

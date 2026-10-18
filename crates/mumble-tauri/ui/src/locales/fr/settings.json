@@ -146,6 +146,7 @@
     "compression": "Compression",
     "quality": "Qualité",
     "qualityHint": "Un débit plus élevé améliore la qualité audio, mais consomme plus de bande passante.",
+    "qualityHintStation": "Une station transmet en stéréo haute fidélité ; la qualité est donc plancher à 128 kb/s pour garder les canaux propres. Augmentez-la pour un son encore meilleur.",
     "audioPerPacket": "Audio par paquet",
     "audioPerPacketHint": "Des valeurs plus faibles réduisent la latence ; des valeurs plus élevées économisent la bande passante.",
     "network": "Réseau",

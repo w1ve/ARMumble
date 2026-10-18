@@ -457,6 +457,12 @@ export function AudioPanel({
         )}
       </section>
 
+      {/* Noise suppression and auto-gain are hidden for a Station: its audio is
+          high-fidelity receiver output transmitted untouched (the backend runs
+          NO outbound DSP for a Station), so these voice-mic processors would
+          only degrade it. */}
+      {!isStation && (
+      <>
       {/* -- Noise Suppression --------------------------------------- */}
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>{t("audio.noiseSuppression")}</h3>
@@ -508,17 +514,22 @@ export function AudioPanel({
           />
         )}
       </section>
+      </>
+      )}
 
       {/* -- Compression ------------------------------------ */}
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>{t("audio.compression")}</h3>
+        {/* A Station transmits forced stereo; below ~96 kb/s Opus's channels
+            bleed and artifact, so the station quality floor is 128 kb/s to
+            match the backend (STATION_MIN_BITRATE). */}
         <SliderField
           label={t("audio.quality")}
-          hint={t("audio.qualityHint")}
-          min={8}
+          hint={isStation ? t("audio.qualityHintStation") : t("audio.qualityHint")}
+          min={isStation ? 128 : 8}
           max={320}
           step={8}
-          value={settings.bitrate_bps / 1000}
+          value={Math.max(isStation ? 128 : 8, settings.bitrate_bps / 1000)}
           onChange={(v) => onChange({ bitrate_bps: v * 1000 })}
           format={(v) => `${v} kb/s`}
         />

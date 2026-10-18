@@ -146,6 +146,7 @@
     "compression": "压缩",
     "quality": "音质",
     "qualityHint": "更高的比特率带来更好的音质，但会占用更多带宽。",
+    "qualityHintStation": "电台以全保真立体声发送，因此音质下限为 128 kb/s 以保持声道干净。可调高以获得更佳音质。",
     "audioPerPacket": "每包音频",
     "audioPerPacketHint": "数值越小延迟越低，数值越大带宽利用率越高。",
     "network": "网络",

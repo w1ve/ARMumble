@@ -611,31 +611,44 @@ mod voice_pipeline {
             let input_vol =
                 input_vol.unwrap_or_else(|| Arc::new(AtomicU32::new(audio_settings.input_volume.to_bits())));
 
-            let (bitrate_bps, frame_size_ms) = adjust_to_server_bandwidth(
-                audio_settings.bitrate_bps,
-                audio_settings.frame_size_ms,
-                max_bandwidth,
-            );
-            if (bitrate_bps, frame_size_ms)
-                != (audio_settings.bitrate_bps, audio_settings.frame_size_ms)
-            {
-                info!(
-                    "outbound audio clamped to server bandwidth limit {:?} bps: \
-                     {} bps @ {} ms (configured: {} bps @ {} ms)",
-                    max_bandwidth,
-                    bitrate_bps,
-                    frame_size_ms,
-                    audio_settings.bitrate_bps,
-                    audio_settings.frame_size_ms,
-                );
-            }
-            let frame_size_samples = AudioSettings::frame_ms_to_samples(frame_size_ms);
-
             // A radio Station transmits STEREO so a dual-receiver rig (different
             // receivers on L and R) keeps its channel separation on the air. An
             // operator is a single voice mic and stays mono.
             let station_stereo =
                 self.ptt_config_for(None).role == crate::state::types::PttRole::Station;
+
+            // A Station carries full-fidelity receiver audio as forced stereo,
+            // which splits the bitrate across two coded channels. Below Opus's
+            // ~96 kbps stereo-separation cliff the channels bleed and artifact,
+            // so floor a Station at 128 kbps (matching the stereo test tone)
+            // regardless of the quality slider. The server-bandwidth clamp still
+            // applies afterwards, so a genuinely tight server can lower it.
+            const STATION_MIN_BITRATE: i32 = 128_000;
+            let requested_bitrate = if station_stereo {
+                audio_settings.bitrate_bps.max(STATION_MIN_BITRATE)
+            } else {
+                audio_settings.bitrate_bps
+            };
+
+            let (bitrate_bps, frame_size_ms) = adjust_to_server_bandwidth(
+                requested_bitrate,
+                audio_settings.frame_size_ms,
+                max_bandwidth,
+            );
+            if (bitrate_bps, frame_size_ms)
+                != (requested_bitrate, audio_settings.frame_size_ms)
+            {
+                info!(
+                    "outbound audio clamped to server bandwidth limit {:?} bps: \
+                     {} bps @ {} ms (requested: {} bps @ {} ms)",
+                    max_bandwidth,
+                    bitrate_bps,
+                    frame_size_ms,
+                    requested_bitrate,
+                    audio_settings.frame_size_ms,
+                );
+            }
+            let frame_size_samples = AudioSettings::frame_ms_to_samples(frame_size_ms);
 
             // Dual-radio Station: when a 2nd radio input is configured, open
             // both devices and build one stereo stream whose right channel is
@@ -707,11 +720,14 @@ mod voice_pipeline {
             let encoder = OpusEncoder::new(encoder_config, capture_format)
                 .map_err(|e| format!("Encoder init: {e}"))?;
 
-            // Build the DSP chain. For a stereo Station, skip filters that assume
-            // a mono stream (they would corrupt interleaved L/R); the gate is
-            // already absent in Continuous mode which a Station uses.
-            let outbound_filters = if is_stereo {
-                build_outbound_filters_stereo(audio_settings)
+            // Build the DSP chain. A radio Station transmits receiver audio that
+            // should reach the far end at full fidelity (like a home stereo), so
+            // it runs NO outbound DSP at all — AGC pumps/soft-clips steady radio
+            // audio (fadeouts + distortion) and the denoiser/gate assume a mono
+            // voice mic. This holds even if a Station's hardware opened mono
+            // (mono sound card), so pass station_stereo, not is_stereo.
+            let outbound_filters = if station_stereo {
+                FilterChain::new()
             } else {
                 build_outbound_filters(audio_settings)
             };
@@ -1378,20 +1394,6 @@ mod voice_pipeline {
                 hold_frames: settings.hold_frames,
                 ..NoiseGateConfig::default()
             })));
-        }
-        filters
-    }
-
-    /// Outbound filter chain for a STEREO Station. Only channel-safe filters are
-    /// included: the AGC applies one linked gain per interleaved sample (safe for
-    /// stereo), while the spectral denoiser, low-pass, and noise gate all assume a
-    /// mono stream and would corrupt interleaved L/R — so they are omitted. A
-    /// Station is Continuous (no gate) and its audio is receiver output, not a
-    /// voice mic, so denoising/gating are undesirable here anyway.
-    pub(super) fn build_outbound_filters_stereo(settings: &AudioSettings) -> FilterChain {
-        let mut filters = FilterChain::new();
-        if let Some(agc) = build_agc_filter(settings) {
-            filters.push(Box::new(agc));
         }
         filters
     }

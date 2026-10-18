@@ -146,6 +146,7 @@
     "compression": "Kompression",
     "quality": "Qualität",
     "qualityHint": "Höhere Bitrate bedeutet bessere Audioqualität, verbraucht aber mehr Bandbreite.",
+    "qualityHintStation": "Eine Station überträgt Stereo in voller Klangtreue, daher ist die Qualität auf 128 kb/s angehoben, damit die Kanäle sauber bleiben. Höher einstellbar für noch besseres Audio.",
     "audioPerPacket": "Audio pro Paket",
     "audioPerPacketHint": "Kleinere Werte verringern die Latenz, größere sind effizienter bei der Bandbreite.",
     "network": "Netzwerk",
