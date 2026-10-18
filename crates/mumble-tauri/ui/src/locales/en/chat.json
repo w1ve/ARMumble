@@ -296,6 +296,7 @@
       "reasonLabel": "Reason",
       "reconnectingBtn": "Reconnecting...",
       "nextRetry": "Next attempt in {{time}}",
+      "goToServersBtn": "Go to server list",
       "reconnectBtn": "Reconnect",
       "reconnectNowBtn": "Reconnect now"
     },

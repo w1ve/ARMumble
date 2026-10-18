@@ -71,6 +71,7 @@ export default function ChatPage() {
   const pendingConnect = useAppStore((s) => s.pendingConnect);
   const dismissPasswordPrompt = useAppStore((s) => s.dismissPasswordPrompt);
   const connect = useAppStore((s) => s.connect);
+  const disconnect = useAppStore((s) => s.disconnect);
   const navigate = useNavigate();
 
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -309,6 +310,18 @@ export default function ChatPage() {
     }
   }, [sessions, activeServerId, connect]);
 
+  // Leave the disconnected session behind and return to the server list. This
+  // is the DEFAULT action on a disconnect: tear down the dangling session so
+  // auto-reconnect stops, then navigate home. Reconnect is the secondary path.
+  const handleGoToServers = useCallback(async () => {
+    try {
+      await disconnect();
+    } catch (e) {
+      console.warn("[disconnect] go-to-servers cleanup failed:", e);
+    }
+    navigate("/");
+  }, [disconnect, navigate]);
+
   // Show the reconnect / connecting overlay whenever the active session is
   // not fully bootstrapped (still connecting, or `connected` but its channel
   // list has not arrived yet - the backend flips to `connected` before the
@@ -389,14 +402,26 @@ export default function ChatPage() {
                   <p className={styles.reconnectError}>{error}</p>
                 </div>
               )}
-              <button
-                type="button"
-                className={styles.reconnectBtn}
-                onClick={() => void handleReconnect()}
-                disabled={isReconnecting}
-              >
-                {t("page.reconnect.reconnectBtn")}
-              </button>
+              <div className={styles.reconnectActions}>
+                {/* Default/primary action: go back to the server list. */}
+                <button
+                  type="button"
+                  className={styles.reconnectBtn}
+                  onClick={() => void handleGoToServers()}
+                  disabled={isReconnecting}
+                >
+                  {t("page.reconnect.goToServersBtn")}
+                </button>
+                {/* Secondary: try to reconnect to this server. */}
+                <button
+                  type="button"
+                  className={styles.reconnectBtnSecondary}
+                  onClick={() => void handleReconnect()}
+                  disabled={isReconnecting}
+                >
+                  {t("page.reconnect.reconnectBtn")}
+                </button>
+              </div>
             </>
           )}
         </div>

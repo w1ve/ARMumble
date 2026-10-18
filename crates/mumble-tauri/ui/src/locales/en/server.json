@@ -1,6 +1,8 @@
 ﻿{
   "builtin": {
     "connectAs": "Connect as",
+    "useDifferentName": "Use a different name",
+    "usernamePlaceholder": "Username / callsign",
     "roleOperator": "Operator",
     "roleStation": "Station",
     "roleOperatorHint": "You operate a station remotely",

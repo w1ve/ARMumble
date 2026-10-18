@@ -296,6 +296,7 @@
       "reasonLabel": "Grund",
       "reconnectingBtn": "Verbindung wird hergestellt...",
       "nextRetry": "Nächster Versuch in {{time}}",
+      "goToServersBtn": "Zur Serverliste",
       "reconnectBtn": "Erneut verbinden",
       "reconnectNowBtn": "Jetzt verbinden"
     },

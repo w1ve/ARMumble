@@ -11,10 +11,13 @@ import styles from "./BuiltinServerList.module.css";
 type Avail = "checking" | "up" | "down";
 
 interface Props {
-  /** Connect to the chosen built-in Remote Radio server with the selected role. */
-  readonly onConnect: (server: BuiltinServer, role: ClientRole) => void;
+  /** Connect to the chosen built-in Remote Radio server with the selected role
+   *  and username. An empty username means "use the app default / fallback". */
+  readonly onConnect: (server: BuiltinServer, role: ClientRole, username: string) => void;
   /** Role pre-selected in the Operator/Station toggle (user's default). */
   readonly defaultRole?: ClientRole;
+  /** The app-wide default username, shown as the starting value for the override. */
+  readonly defaultUsername?: string;
   readonly disabled?: boolean;
 }
 
@@ -26,11 +29,25 @@ interface Props {
  * square city badge. This is a fixed-server architecture: there is deliberately
  * no add/edit/delete/browse here.
  */
-export default function BuiltinServerList({ onConnect, defaultRole, disabled }: Props) {
+export default function BuiltinServerList({ onConnect, defaultRole, defaultUsername, disabled }: Props) {
   const { t } = useTranslation("server");
   const [query, setQuery] = useState("");
   const [role, setRole] = useState<ClientRole>(defaultRole ?? "operator");
   const filtered = useMemo(() => filterBuiltinServers(query), [query]);
+
+  // Username override: off by default (use the app-wide default username). When
+  // on, the operator can enter a different name for the built-in servers — the
+  // list has no per-server saved entry, so this is the only place to change it.
+  const [overrideName, setOverrideName] = useState(false);
+  const [customName, setCustomName] = useState(defaultUsername ?? "");
+  // Seed the field from the default username once it loads (async in the parent).
+  useEffect(() => {
+    if (!overrideName) setCustomName(defaultUsername ?? "");
+  }, [defaultUsername, overrideName]);
+
+  // The username handed to onConnect: the override when enabled and non-empty,
+  // otherwise "" so the parent applies its default/fallback.
+  const effectiveName = overrideName ? customName.trim() : "";
 
   // Per-entry availability (keyed by host:port). A TCP connect to the voice
   // port decides up/down; a down server is greyed out and not connectable.
@@ -93,6 +110,32 @@ export default function BuiltinServerList({ onConnect, defaultRole, disabled }: 
         </div>
       </div>
 
+      {/* Username override for the built-in servers (no saved entry exists for
+          them, so this is where you change the name used to connect). */}
+      <div className={styles.nameRow}>
+        <label className={styles.nameCheck}>
+          <input
+            type="checkbox"
+            checked={overrideName}
+            onChange={(e) => setOverrideName(e.target.checked)}
+            disabled={disabled}
+          />
+          {t("builtin.useDifferentName")}
+        </label>
+        {overrideName && (
+          <input
+            className={styles.nameInput}
+            type="text"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+            placeholder={t("builtin.usernamePlaceholder")}
+            aria-label={t("builtin.usernamePlaceholder")}
+            disabled={disabled}
+            autoFocus
+          />
+        )}
+      </div>
+
       {/* Fixed built-in server directory — users cannot add/remove these. */}
       <div className={styles.header}>
         <span className={styles.heading}>remote.radio.org</span>
@@ -135,7 +178,7 @@ export default function BuiltinServerList({ onConnect, defaultRole, disabled }: 
                 key={key}
                 type="button"
                 className={`${styles.card} ${isDown ? styles.cardOffline : ""}`}
-                onClick={() => { if (!cardDisabled) onConnect(s, role); }}
+                onClick={() => { if (!cardDisabled) onConnect(s, role, effectiveName); }}
                 disabled={cardDisabled}
                 aria-disabled={cardDisabled}
               >

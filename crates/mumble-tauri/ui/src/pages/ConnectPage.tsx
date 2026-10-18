@@ -226,7 +226,7 @@ export default function ConnectPage() {
    * connect dialog can prompt.
    */
   const handleBuiltinConnect = useCallback(
-    async (server: BuiltinServer, chosenRole: ClientRole) => {
+    async (server: BuiltinServer, chosenRole: ClientRole, overrideName?: string) => {
       // Apply the exact Operator/Station choice to THIS connection directly,
       // keyed by host:port, so it is used verbatim by the post-connect role
       // effects (PTT direction, role announcement, station texture, initial
@@ -234,22 +234,41 @@ export default function ConnectPage() {
       // operator.
       setExplicitRoleForServer(server.host, server.port, chosenRole);
 
-      // Also remember the choice per-host in preferences so a later reconnect
-      // (which may not go through this handler) still resolves correctly.
+      // Resolve the username with clear precedence:
+      //   1. an explicit override typed on the built-in list this time,
+      //   2. a per-host override remembered from a previous connect,
+      //   3. the app-wide default username,
+      //   4. the server abbreviation (last-ditch so we never send empty).
+      let prefs = null;
       try {
-        const prefs = await getPreferences();
+        prefs = await getPreferences();
+      } catch (e) {
+        console.warn("[connect] load preferences failed:", e);
+      }
+      const typed = (overrideName ?? "").trim();
+      const remembered = (prefs?.builtinUsernames?.[server.host] ?? "").trim();
+      const name =
+        typed || remembered || (defaultUsername || "").trim() || server.abbr;
+
+      // Remember the per-host role, and the per-host username when one was typed
+      // this time, so later reconnects (which may skip this handler) resolve the
+      // same way.
+      try {
         await updatePreferences({
-          builtinRoles: { ...(prefs.builtinRoles ?? {}), [server.host]: chosenRole },
+          builtinRoles: { ...(prefs?.builtinRoles ?? {}), [server.host]: chosenRole },
+          ...(typed
+            ? { builtinUsernames: { ...(prefs?.builtinUsernames ?? {}), [server.host]: typed } }
+            : {}),
         });
       } catch (e) {
-        console.warn("[connect] persist built-in role failed:", e);
+        console.warn("[connect] persist built-in role/username failed:", e);
       }
-      const name = (defaultUsername || "").trim();
+
       // Each entry carries its own voice port (64738 legacy / 54736 fancy).
       await connect(
         server.host,
         server.port,
-        name || server.abbr,
+        name,
         null,
         RR_PASSWORD,
       );
@@ -407,6 +426,7 @@ export default function ConnectPage() {
             <BuiltinServerList
               onConnect={handleBuiltinConnect}
               defaultRole={defaultRole}
+              defaultUsername={defaultUsername}
               disabled={isConnecting}
             />
             {savedServers.length > 0 && (

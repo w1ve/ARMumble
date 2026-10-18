@@ -296,6 +296,7 @@
       "reasonLabel": "原因",
       "reconnectingBtn": "正在重新连接…",
       "nextRetry": "{{time}}后重试",
+      "goToServersBtn": "返回服务器列表",
       "reconnectBtn": "重新连接",
       "reconnectNowBtn": "立即重新连接"
     },

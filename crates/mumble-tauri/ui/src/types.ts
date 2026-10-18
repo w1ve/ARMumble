@@ -592,6 +592,10 @@ export interface UserPreferences {
    *  Built-in servers are not saved as regular servers, so their Operator/Station
    *  choice is remembered here instead. Falls back to `defaultRole` when unset. */
   builtinRoles?: Record<string, ClientRole>;
+  /** Per-built-in-server username override, keyed by host. Built-in servers are
+   *  not saved entries, so a custom username for them is remembered here.
+   *  Falls back to `defaultUsername` (then the server abbreviation) when unset. */
+  builtinUsernames?: Record<string, string>;
   /** Preferred time format for message timestamps. */
   timeFormat: TimeFormat;
   /** Convert UTC timestamps to the local timezone before displaying. */

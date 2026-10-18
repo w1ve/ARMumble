@@ -247,3 +247,43 @@
   opacity: 0.5;
   cursor: default;
 }
+
+/* Username override (checkbox + optional field) for the built-in servers. */
+.nameRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nameCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #9aa);
+  cursor: pointer;
+  user-select: none;
+}
+
+.nameCheck input {
+  cursor: pointer;
+}
+
+.nameInput {
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #e8ebff);
+  font-size: 0.95rem;
+}
+
+.nameInput:focus {
+  outline: none;
+  border-color: var(--accent, #5b8cff);
+}
+
+.nameInput:disabled {
+  opacity: 0.6;
+}
