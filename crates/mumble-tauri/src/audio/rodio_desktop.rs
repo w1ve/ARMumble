@@ -1100,7 +1100,21 @@ impl super::MixingPlayback for RodioMixingPlayback {
             rodio::stream::DeviceSinkBuilder::from_default_device()
                 .map_err(|e| Error::InvalidState(format!("Open output device: {e}")))?
         };
+        // Pin the OS-sink to 48 kHz stereo (the rate/channels our mixer source
+        // actually produces) instead of accepting the device default. rodio's
+        // `from_device` otherwise adopts the device's default config — on Linux
+        // (Pulse/PipeWire) that is frequently 44.1 kHz with a ~50 ms period, so
+        // the Mixer resamples 48 kHz -> 44.1 kHz and the device period beats
+        // against our fixed 20 ms mix chunk, periodically starving the source
+        // and firing its underrun fade-out/fade-in — an audible ~2 Hz pulse.
+        // WASAPI on Windows defaults to 48 kHz with a clean period, which is
+        // why the same code is clean there. Forcing 48 kHz removes the extra
+        // resample/period beat; a fixed 2048-frame buffer (~43 ms) is rodio's
+        // recommended "general use / media playback" size for glitch-free out.
         let device_sink = builder
+            .with_sample_rate(SAMPLE_RATE_48K)
+            .with_channels(STEREO_CHANNELS)
+            .with_buffer_size(cpal::BufferSize::Fixed(2048))
             .open_stream()
             .map_err(|e| Error::InvalidState(format!("Open output stream: {e}")))?;
         let mixer = device_sink.mixer().clone();
