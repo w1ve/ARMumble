@@ -283,7 +283,16 @@ impl AudioEncoder for OpusEncoder {
             sequence: self.sequence,
             frame_samples: self.config.frame_size as u32,
         };
-        self.sequence += 1;
+        // Mumble counts `frame_number` in 10 ms units (480 samples/channel at
+        // 48 kHz), NOT in frames. A 20 ms (960-sample) frame therefore advances
+        // the sequence by TWO, a 40 ms frame by four, etc. Stepping by a flat 1
+        // made the receiver's jitter buffer see the timeline advance at half
+        // the true rate and repad/overlap every frame — heard as echo, and on a
+        // steady tone like CW sidetone the characters smear together. The
+        // receive mixer already accounts in these units (SAMPLES_PER_SEQ_UNIT
+        // = 480), as does the stereo-test path (SEQ_UNITS_PER_FRAME).
+        const SAMPLES_PER_SEQ_UNIT: u64 = 480;
+        self.sequence += (self.config.frame_size as u64 / SAMPLES_PER_SEQ_UNIT).max(1);
         Ok(packet)
     }
 
@@ -354,15 +363,19 @@ mod tests {
 
     #[test]
     fn sequence_increments() -> Result<()> {
+        // Mumble `frame_number` is in 10 ms (480-sample) units, so a 20 ms
+        // default frame advances the sequence by 2, not 1. Stepping by 1 made
+        // receivers repad/overlap every frame (echo; CW smears).
         let fmt = AudioFormat::MONO_48KHZ_F32;
         let config = OpusEncoderConfig::default();
         let frame_size = config.frame_size;
+        assert_eq!(frame_size, 960, "test assumes the 20 ms default frame");
         let mut enc = OpusEncoder::new(config, fmt)?;
         let frame = silent_frame(fmt, frame_size);
         let p0 = enc.encode(&frame)?;
         let p1 = enc.encode(&frame.clone())?;
         assert_eq!(p0.sequence, 0);
-        assert_eq!(p1.sequence, 1);
+        assert_eq!(p1.sequence, 2);
         Ok(())
     }
 

@@ -715,6 +715,18 @@ mod voice_pipeline {
                     ForceChannels::Auto
                 },
                 phase_inversion_disabled: is_stereo,
+                // A Station streams continuous, high-fidelity audio. In-band FEC
+                // re-embeds a low-bitrate copy of the PREVIOUS frame into each
+                // packet; on steady audio that redundant copy reads as a short
+                // echo (and smears CW). The stereo test path disables it for the
+                // same reason — so a Station sends clean, non-redundant frames.
+                // Operators keep FEC (it aids voice intelligibility on loss).
+                fec: if station_stereo { false } else { OpusEncoderConfig::default().fec },
+                packet_loss_percent: if station_stereo {
+                    0
+                } else {
+                    OpusEncoderConfig::default().packet_loss_percent
+                },
                 ..OpusEncoderConfig::default()
             };
             let encoder = OpusEncoder::new(encoder_config, capture_format)
