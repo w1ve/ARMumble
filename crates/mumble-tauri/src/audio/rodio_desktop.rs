@@ -1076,10 +1076,78 @@ impl RodioMixingPlayback {
                 == Some(name)
         })
     }
+
+    /// Pick the best default output device, avoiding the raw ALSA `default`
+    /// PCM on Linux.
+    ///
+    /// cpal's ALSA backend opens the system `default` PCM, which on a PipeWire
+    /// (or dmix) system is a timer-driven plugin whose `poll()` returns
+    /// spurious wakeups. cpal treats `"alsa::poll() spuriously returned"` as a
+    /// fatal `BackendSpecificError`, so the output stream worker exits and
+    /// audio silently dies — the exact "UI works but no sound" symptom on
+    /// PipeWire desktops. cpal's own source documents this as a dmix/plugin
+    /// artifact (kernel bug 202499).
+    ///
+    /// The `pipewire` (or `pulse`) PCM does NOT go through dmix and does not
+    /// exhibit the spurious wakeup, so prefer it. Falls back to `None` (rodio's
+    /// own default-device path) when neither is present, e.g. on Windows/macOS
+    /// where the raw default is fine.
+    #[cfg(target_os = "linux")]
+    fn preferred_default_output() -> Option<cpal::Device> {
+        use cpal::traits::{DeviceTrait, HostTrait};
+        let host = cpal::default_host();
+        let devices = host.output_devices().ok()?;
+        // Prefer "pipewire", then "pulse"; match case-insensitively on the
+        // device description name.
+        // cpal's description name for the ALSA PCM may be exactly "pipewire"
+        // or carry extra formatting, so match by substring. Prefer pipewire,
+        // then pulse.
+        let mut pipewire = None;
+        let mut pulse = None;
+        for d in devices {
+            let name = d
+                .description()
+                .ok()
+                .map(|desc| desc.name().to_lowercase())
+                .unwrap_or_default();
+            if name.contains("pipewire") && pipewire.is_none() {
+                pipewire = Some(d);
+            } else if name.contains("pulse") && pulse.is_none() {
+                pulse = Some(d);
+            }
+        }
+        pipewire.or(pulse)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn preferred_default_output() -> Option<cpal::Device> {
+        None
+    }
+
+    /// Build a DeviceSinkBuilder for the default output: use the preferred
+    /// device (PipeWire/Pulse on Linux) when available, otherwise rodio's own
+    /// default-device path.
+    fn default_builder() -> Result<rodio::stream::DeviceSinkBuilder> {
+        if let Some(device) = Self::preferred_default_output() {
+            debug!("rodio playback: using preferred default output (pipewire/pulse)");
+            rodio::stream::DeviceSinkBuilder::from_device(device)
+                .map_err(|e| Error::InvalidState(format!("Open preferred output: {e}")))
+        } else {
+            rodio::stream::DeviceSinkBuilder::from_default_device()
+                .map_err(|e| Error::InvalidState(format!("Open output device: {e}")))
+        }
+    }
 }
 
 impl super::MixingPlayback for RodioMixingPlayback {
     fn start(&mut self) -> Result<()> {
+        // Pick the output device:
+        //  - an explicit user selection, by name, if set;
+        //  - otherwise the "preferred default": on Linux this is the PipeWire
+        //    (or Pulse) PCM, chosen to avoid cpal's raw ALSA `default` whose
+        //    timer-driven poll() returns spurious wakeups that cpal treats as a
+        //    fatal error, killing the output stream (UI works but no sound).
+        //    On Windows/macOS this is None, so rodio's normal default is used.
         let builder = if let Some(name) = self.device_name.as_deref() {
             match Self::find_output_by_name(name) {
                 Some(device) => {
@@ -1092,26 +1160,25 @@ impl super::MixingPlayback for RodioMixingPlayback {
                     warn!(
                         "rodio playback: selected output device '{name}' not found, falling back to default"
                     );
-                    rodio::stream::DeviceSinkBuilder::from_default_device()
-                        .map_err(|e| Error::InvalidState(format!("Open output device: {e}")))?
+                    Self::default_builder()?
                 }
             }
         } else {
-            rodio::stream::DeviceSinkBuilder::from_default_device()
-                .map_err(|e| Error::InvalidState(format!("Open output device: {e}")))?
+            Self::default_builder()?
         };
-        // Open the sink with the device's own default config. An earlier
-        // attempt to pin 48 kHz / stereo / a fixed 2048-frame buffer here broke
-        // Linux output entirely: `with_buffer_size(Fixed(2048))` (and forcing a
-        // rate/channel count the device may not support in that combination)
-        // makes PipeWire/ALSA reject the stream, so the DeviceSink fails to run
-        // and is dropped ("Dropping DeviceSink ... / No output device"). rodio's
-        // Mixer already resamples our 48 kHz source to the device rate, so the
-        // default config plays correctly on both platforms. (Left as default to
-        // restore working audio; the Linux pulse is a separate issue to be
-        // diagnosed from the mixer-diag trace, not papered over with a device
-        // config the OS rejects.)
+        // Treat a transient `alsa::poll() spuriously returned` (the PipeWire/
+        // dmix wakeup) as non-fatal: log it instead of letting it bubble up.
+        // rodio's Mixer resamples our 48 kHz source to whatever rate the device
+        // opened at, so no rate/buffer pinning is needed here.
         let device_sink = builder
+            .with_error_callback(|e| {
+                let msg = e.to_string();
+                if msg.contains("spuriously returned") {
+                    trace!("rodio playback: ignoring spurious ALSA poll wakeup");
+                } else {
+                    warn!("rodio playback stream error: {msg}");
+                }
+            })
             .open_stream()
             .map_err(|e| Error::InvalidState(format!("Open output stream: {e}")))?;
         let mixer = device_sink.mixer().clone();
