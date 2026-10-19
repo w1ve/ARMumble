@@ -163,11 +163,6 @@ impl EventHandler for TauriEventHandler {
                     audio.frame_number,
                     is_terminator,
                 );
-                crate::audio::rodio_desktop::dbglog(&format!(
-                    "inbound: audio packet #{} session={} opus={}B seq={} term={}",
-                    self.inbound_audio_count, session, audio.opus_data.len(),
-                    audio.frame_number, is_terminator,
-                ));
             }
 
             // Determine what to emit INSIDE the lock, then emit OUTSIDE.
@@ -181,29 +176,15 @@ impl EventHandler for TauriEventHandler {
             // pipeline is initialised cost nothing.
             let emit_action: Option<bool> = 'action: {
                 let Ok(mut state) = self.shared.lock() else {
-                    if self.inbound_audio_count.is_multiple_of(500) {
-                        crate::audio::rodio_desktop::dbglog("inbound DROP: shared.lock() failed");
-                    }
                     break 'action None;
                 };
                 // Ignore audio from an orphaned event loop whose session a newer
                 // connect() has reclaimed - otherwise stale packets get mixed
                 // into (and attributed on) the new session. See on_disconnected.
                 if state.conn.epoch != self.epoch {
-                    if self.inbound_audio_count.is_multiple_of(500) {
-                        crate::audio::rodio_desktop::dbglog(&format!(
-                            "inbound DROP: epoch mismatch (state={} self={})",
-                            state.conn.epoch, self.epoch
-                        ));
-                    }
                     break 'action None;
                 }
                 let Some(ref mut mixer) = state.audio.mixer else {
-                    if self.inbound_audio_count == 1 || self.inbound_audio_count.is_multiple_of(500) {
-                        crate::audio::rodio_desktop::dbglog(
-                            "inbound DROP: state.audio.mixer is None (no inbound mixer)",
-                        );
-                    }
                     break 'action None;
                 };
 
@@ -213,22 +194,8 @@ impl EventHandler for TauriEventHandler {
                     frame_samples: 960,
                 };
 
-                match mixer.feed(session, &packet) {
-                    Ok(()) => {
-                        if self.inbound_audio_count == 1 || self.inbound_audio_count.is_multiple_of(500) {
-                            crate::audio::rodio_desktop::dbglog(&format!(
-                                "inbound FED: session={} packet#{} OK",
-                                session, self.inbound_audio_count
-                            ));
-                        }
-                    }
-                    Err(e) => {
-                        warn!("inbound audio decode error: {e}");
-                        crate::audio::rodio_desktop::dbglog(&format!(
-                            "inbound FEED ERROR: session={} #{}: {e}",
-                            session, self.inbound_audio_count
-                        ));
-                    }
+                if let Err(e) = mixer.feed(session, &packet) {
+                    warn!("inbound audio decode error: {e}");
                 }
 
                 if is_terminator {
