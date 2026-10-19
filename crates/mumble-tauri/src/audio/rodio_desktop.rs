@@ -846,31 +846,6 @@ impl MumbleMixerSource {
             self.primed = true;
         }
 
-        // Steady-state jitter buffer: once primed, only consume a chunk when a
-        // WHOLE MIX_CHUNK is buffered. Draining whatever is available (a partial
-        // chunk) empties the buffer on every pull, so the moment the host's pull
-        // cadence doesn't line up with the 20 ms network-frame arrival (it never
-        // does on PipeWire's 1024-frame quantum) the next pull finds the buffer
-        // dry and fires the underrun fade — an audible ~2 Hz pulse on Linux.
-        // Holding until a full chunk is available keeps ~a chunk of slack ahead
-        // of the consumer, so brief inter-frame jitter is absorbed silently.
-        // Windows/WASAPI happened to stay aligned, which is why it was clean.
-        let max_available = bufs.values().map(VecDeque::len).max().unwrap_or(0);
-        if max_available < MIX_CHUNK_SAMPLES {
-            self.consecutive_empty += 1;
-            self.diag.underrun_refills += 1;
-            // Only tear the prime down (forcing a full 100 ms re-cushion) after a
-            // sustained dry spell — a real talk gap, not inter-frame jitter.
-            if self.consecutive_empty >= REPRIME_AFTER {
-                self.primed = false;
-                self.diag.reprime_count += 1;
-            }
-            self.chunk_pos = 0;
-            self.chunk_valid = 0;
-            self.underrun_cooldown = UNDERRUN_BACKOFF_SAMPLES;
-            return;
-        }
-
         // try_lock avoids blocking the rodio output thread; on
         // contention we fall back to default volumes (1.0).  Borrow
         // the guard directly instead of cloning the HashMap - this
