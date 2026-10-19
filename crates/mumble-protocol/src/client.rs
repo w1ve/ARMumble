@@ -1,4 +1,4 @@
-﻿//! Client orchestrator - the async event loop that ties everything together.
+//! Client orchestrator - the async event loop that ties everything together.
 //!
 //! Spawns independent tasks for TCP reading, UDP reading, and a periodic
 //! ping timer, all feeding into the priority work queue. The main loop
@@ -14,6 +14,24 @@ use tracing::{debug, error, info, trace, warn};
 use crate::command::{BoxedCommand, CommandAction};
 use crate::error::{Error, Result};
 use crate::event::EventHandler;
+
+/// Unconditional debug log to `$HOME/rrmumble-debug.log` (temp dir if HOME is
+/// unset). Independent of the tracing subscriber so network-receive diagnostics
+/// are always captured. Best-effort; never panics.
+pub(crate) fn dbglog(msg: &str) {
+    use std::io::Write;
+    let dir = std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    let path = dir.join("rrmumble-debug.log");
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(f, "[{ts}] {msg}");
+    }
+}
 use crate::fancy_codec::{self, FancyCodec};
 use crate::message::{ControlMessage, ServerMessage, UdpMessage};
 use crate::transport::ocb2::Ocb2CryptState;
@@ -489,9 +507,15 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
                 }
                 if let ControlMessage::UdpTunnel(ref data) = ctrl {
                     trace!("handle_server_message: UdpTunnel ({} bytes)", data.len());
+                    dbglog(&format!(
+                        "net/tcp: UdpTunnel audio ({} bytes)", data.len()
+                    ));
                     match crate::transport::audio_codec::decode_tunnel_audio(data) {
                         Ok(audio) => self.handler.on_udp_message(&UdpMessage::Audio(audio)),
                         Err(e) => {
+                            dbglog(&format!(
+                                "net/tcp: UdpTunnel decode FAIL ({} bytes): {e}", data.len()
+                            ));
                             warn!(
                                 "UdpTunnel audio decode failed ({} bytes): {e}",
                                 data.len()
@@ -1037,6 +1061,8 @@ async fn udp_reader_loop(
 
     let mut buf = vec![0u8; 1024];
     let mut consecutive_failures: u32 = 0;
+    let mut udp_rx_count: u64 = 0;
+    let mut udp_decrypt_fail: u64 = 0;
     let mut last_resync_request = tokio::time::Instant::now()
         .checked_sub(RESYNC_REQUEST_COOLDOWN)
         .unwrap_or_else(tokio::time::Instant::now);
@@ -1078,6 +1104,13 @@ async fn udp_reader_loop(
             }
         };
 
+        udp_rx_count = udp_rx_count.wrapping_add(1);
+        if udp_rx_count == 1 || udp_rx_count % 200 == 0 {
+            dbglog(&format!(
+                "net/udp: recv #{udp_rx_count} ({n} bytes)"
+            ));
+        }
+
         let decrypted = match crypt.decrypt(&buf[..n]) {
             Ok(data) => {
                 consecutive_failures = 0;
@@ -1085,6 +1118,12 @@ async fn udp_reader_loop(
             }
             Err(e) => {
                 consecutive_failures = consecutive_failures.saturating_add(1);
+                udp_decrypt_fail = udp_decrypt_fail.wrapping_add(1);
+                if udp_decrypt_fail == 1 || udp_decrypt_fail % 50 == 0 {
+                    dbglog(&format!(
+                        "net/udp: DECRYPT FAIL #{udp_decrypt_fail}: {e}"
+                    ));
+                }
                 warn!("UDP decrypt failed, skipping: {e}");
                 if consecutive_failures >= RESYNC_FAILURE_THRESHOLD
                     && last_resync_request.elapsed() >= RESYNC_REQUEST_COOLDOWN
@@ -1122,11 +1161,18 @@ async fn udp_reader_loop(
 
         match crate::transport::udp::decode_udp_message(&decrypted) {
             Ok(msg) => {
+                let is_audio = matches!(msg, UdpMessage::Audio(_));
+                if udp_rx_count == 1 || udp_rx_count % 200 == 0 {
+                    dbglog(&format!(
+                        "net/udp: decoded #{udp_rx_count} is_audio={is_audio}"
+                    ));
+                }
                 if wq_sender.send_udp(msg).await.is_err() {
                     break;
                 }
             }
             Err(e) => {
+                dbglog(&format!("net/udp: DECODE FAIL: {e}"));
                 warn!("UDP decode failed, skipping: {e}");
             }
         }
