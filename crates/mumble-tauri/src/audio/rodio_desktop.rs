@@ -30,6 +30,26 @@ use rodio::microphone::{available_inputs, MicrophoneBuilder};
 use rodio::source::Source;
 use tracing::{debug, trace, warn};
 
+/// Unconditional debug log to `$HOME/rrmumble-debug.log` (or the OS temp dir if
+/// `$HOME` is unset). Independent of the tracing subscriber / RUST_LOG / the
+/// logToFile preference, so playback diagnostics are always captured without
+/// any configuration. Best-effort: never panics, never blocks meaningfully.
+pub(crate) fn dbglog(msg: &str) {
+    use std::io::Write;
+    let dir = std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    let path = dir.join("rrmumble-debug.log");
+    // SystemTime since epoch as a cheap timestamp (no chrono dependency here).
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(f, "[{ts}] {msg}");
+    }
+}
+
 // -- Capture (Microphone) -------------------------------------------
 
 /// Captures microphone input via rodio's [`Microphone`] source using a
@@ -929,6 +949,23 @@ impl Iterator for MumbleMixerSource {
                 self.consecutive_empty,
                 self.in_underrun,
             );
+            // Also write unconditionally to the debug file so playback health
+            // is captured with no logging config. `max_buf` > 0 means the
+            // inbound decode IS feeding the speaker buffers; peak > 0 means
+            // real (non-silent) audio reached the sink. If pulled grows but
+            // max_buf stays 0, the receive/decode side is not delivering.
+            dbglog(&format!(
+                "mixer: pulled={} primed={} refills={} underrun={} partial={} max_buf={} peak={:.4} reprimes={} in_underrun={}",
+                self.diag.samples_pulled,
+                self.primed,
+                self.diag.refills,
+                self.diag.underrun_refills,
+                self.diag.partial_refills,
+                self.diag.max_buf_depth,
+                self.diag.peak,
+                self.diag.reprime_count,
+                self.in_underrun,
+            ));
         }
 
         if self.chunk_pos < self.chunk_valid {
@@ -1129,10 +1166,14 @@ impl RodioMixingPlayback {
     /// default-device path.
     fn default_builder() -> Result<rodio::stream::DeviceSinkBuilder> {
         if let Some(device) = Self::preferred_default_output() {
+            use cpal::traits::DeviceTrait;
+            let nm = device.description().ok().map(|d| d.name().to_string()).unwrap_or_default();
             debug!("rodio playback: using preferred default output (pipewire/pulse)");
+            dbglog(&format!("playback: preferred default output device = '{nm}'"));
             rodio::stream::DeviceSinkBuilder::from_device(device)
                 .map_err(|e| Error::InvalidState(format!("Open preferred output: {e}")))
         } else {
+            dbglog("playback: no preferred device; using rodio from_default_device()");
             rodio::stream::DeviceSinkBuilder::from_default_device()
                 .map_err(|e| Error::InvalidState(format!("Open output device: {e}")))
         }
@@ -1141,6 +1182,10 @@ impl RodioMixingPlayback {
 
 impl super::MixingPlayback for RodioMixingPlayback {
     fn start(&mut self) -> Result<()> {
+        dbglog(&format!(
+            "playback: start() called; selected_device={:?}",
+            self.device_name
+        ));
         // Pick the output device:
         //  - an explicit user selection, by name, if set;
         //  - otherwise the "preferred default": on Linux this is the PipeWire
@@ -1189,6 +1234,13 @@ impl super::MixingPlayback for RodioMixingPlayback {
             cfg.sample_rate().get(),
             cfg.channel_count().get(),
         );
+        dbglog(&format!(
+            "playback: sink OPENED device_rate={} Hz channels={} (source reports {} Hz / {} ch)",
+            cfg.sample_rate().get(),
+            cfg.channel_count().get(),
+            SAMPLE_RATE_48K.get(),
+            STEREO_CHANNELS.get(),
+        ));
 
         self.running.store(true, Ordering::Relaxed);
 
