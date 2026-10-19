@@ -2680,8 +2680,11 @@ async function applySavedAudioSettingsOnConnect(host: string, port: number): Pro
  *   held). We never auto-open a PTT mic.
  * - **VOX / Continuous (operator)**: restore the per-server saved mute state;
  *   if none was ever saved, come up LIVE (unmuted).
- * - **Station** (always Continuous): first run (no saved state) comes up
- *   MUTED; thereafter restore the saved state.
+ * - **Station** (always Continuous): ALWAYS comes up LIVE (unmuted). A station
+ *   relays receiver audio and has no reason to self-mute; self-muting makes the
+ *   station appear muted/suppressed to every other client (incl. stock Mumble)
+ *   so nobody hears it. Any previously-saved muted state for a station is
+ *   ignored so it is never stuck muted.
  *
  * The resulting mute state is persisted per-server so the next run restores it.
  * Returns the VoiceState the backend was driven to.
@@ -2704,13 +2707,18 @@ async function applyInitialVoiceState(host: string, port: number): Promise<void>
 
     // Resolve the desired mute per the spec.
     let muted: boolean;
-    if (mode === "push_to_talk") {
+    if (role === "station") {
+      // A Station ALWAYS comes up live: it relays receiver audio. Self-muting
+      // would make it appear muted/suppressed to all other clients (so no one
+      // hears it). Ignore any saved muted state and any PTT quirk here.
+      muted = false;
+    } else if (mode === "push_to_talk") {
       muted = true; // PTT: never auto-live
     } else if (savedMuted !== null) {
       muted = savedMuted; // VOX/Continuous: honour saved state
     } else {
-      // No saved state: station first-run is muted, operator comes up live.
-      muted = role === "station";
+      // No saved state: operator comes up live.
+      muted = false;
     }
 
     if (muted) {
