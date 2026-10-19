@@ -1100,21 +1100,18 @@ impl super::MixingPlayback for RodioMixingPlayback {
             rodio::stream::DeviceSinkBuilder::from_default_device()
                 .map_err(|e| Error::InvalidState(format!("Open output device: {e}")))?
         };
-        // Pin the OS-sink to 48 kHz stereo (the rate/channels our mixer source
-        // actually produces) instead of accepting the device default. rodio's
-        // `from_device` otherwise adopts the device's default config — on Linux
-        // (Pulse/PipeWire) that is frequently 44.1 kHz with a ~50 ms period, so
-        // the Mixer resamples 48 kHz -> 44.1 kHz and the device period beats
-        // against our fixed 20 ms mix chunk, periodically starving the source
-        // and firing its underrun fade-out/fade-in — an audible ~2 Hz pulse.
-        // WASAPI on Windows defaults to 48 kHz with a clean period, which is
-        // why the same code is clean there. Forcing 48 kHz removes the extra
-        // resample/period beat; a fixed 2048-frame buffer (~43 ms) is rodio's
-        // recommended "general use / media playback" size for glitch-free out.
+        // Open the sink with the device's own default config. An earlier
+        // attempt to pin 48 kHz / stereo / a fixed 2048-frame buffer here broke
+        // Linux output entirely: `with_buffer_size(Fixed(2048))` (and forcing a
+        // rate/channel count the device may not support in that combination)
+        // makes PipeWire/ALSA reject the stream, so the DeviceSink fails to run
+        // and is dropped ("Dropping DeviceSink ... / No output device"). rodio's
+        // Mixer already resamples our 48 kHz source to the device rate, so the
+        // default config plays correctly on both platforms. (Left as default to
+        // restore working audio; the Linux pulse is a separate issue to be
+        // diagnosed from the mixer-diag trace, not papered over with a device
+        // config the OS rejects.)
         let device_sink = builder
-            .with_sample_rate(SAMPLE_RATE_48K)
-            .with_channels(STEREO_CHANNELS)
-            .with_buffer_size(cpal::BufferSize::Fixed(2048))
             .open_stream()
             .map_err(|e| Error::InvalidState(format!("Open output stream: {e}")))?;
         let mixer = device_sink.mixer().clone();
