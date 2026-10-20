@@ -67,7 +67,8 @@ pub(crate) fn get_audio_devices() -> Vec<AudioDevice> {
         .default_input_device()
         .and_then(|d| friendly_device_name(&d));
 
-    host.input_devices()
+    let list: Vec<AudioDevice> = host
+        .input_devices()
         .map(|devices| {
             devices
                 .filter_map(|d| {
@@ -82,7 +83,30 @@ pub(crate) fn get_audio_devices() -> Vec<AudioDevice> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    // On Linux, hide ambiguous virtual/bidirectional nodes so the mic list only
+    // offers real capture devices (see `is_real_hw_device`).
+    filter_real_hw_devices(list)
+}
+
+/// On Linux, drop ambiguous virtual/bidirectional nodes from a device list
+/// (keeping real card devices), unless that would empty the list. No-op on
+/// other platforms.
+#[cfg(not(target_os = "android"))]
+fn filter_real_hw_devices(list: Vec<AudioDevice>) -> Vec<AudioDevice> {
+    #[cfg(target_os = "linux")]
+    {
+        let filtered: Vec<AudioDevice> = list
+            .iter()
+            .filter(|d| audio::rodio_desktop::is_real_hw_device(&d.name))
+            .cloned()
+            .collect();
+        if !filtered.is_empty() {
+            return filtered;
+        }
+    }
+    list
 }
 
 /// Best-effort friendly name for a cpal device: the endpoint description
@@ -119,7 +143,8 @@ pub(crate) fn get_output_devices() -> Vec<AudioDevice> {
         .default_output_device()
         .and_then(|d| friendly_device_name(&d));
 
-    host.output_devices()
+    let list: Vec<AudioDevice> = host
+        .output_devices()
         .map(|devices| {
             devices
                 .filter_map(|d| {
@@ -133,7 +158,12 @@ pub(crate) fn get_output_devices() -> Vec<AudioDevice> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    // On Linux, hide ambiguous virtual/bidirectional nodes (see
+    // `is_real_hw_device`) so the speaker list only offers real output devices,
+    // keeping it distinct from the mic list.
+    filter_real_hw_devices(list)
 }
 
 /// Stub: on Android, return an empty device list.

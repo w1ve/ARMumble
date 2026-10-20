@@ -180,10 +180,22 @@ export function AudioPanel({
   // remote human: a microphone in, a listening device out.
   const inputLabel = isStation ? t("audio.radioAudioDevice") : t("audio.microphoneDevice");
   const outputLabel = isStation ? t("audio.radioModulationInput") : t("audio.operatorListeningDevice");
-  // The 2nd input (second radio) list excludes whatever the first input is set
-  // to, so the two radios can't be the same device.
-  const secondInputDevices = devices.filter(
+  // Mic and playback must be DIFFERENT devices: capturing the same node you
+  // play to means the "mic" records the received audio (full-duplex loopback).
+  // So the input list hides the currently-selected output device, and the
+  // output list hides the currently-selected input device.
+  const inputDevices = devices.filter(
+    (d) => d.name !== (settings.selected_output_device ?? ""),
+  );
+  const outputDevicesFiltered = outputDevices.filter(
     (d) => d.name !== (settings.selected_device ?? ""),
+  );
+  // The 2nd input (second radio) list excludes the first input AND the output,
+  // so the two radios can't be the same device, nor the same as playback.
+  const secondInputDevices = devices.filter(
+    (d) =>
+      d.name !== (settings.selected_device ?? "") &&
+      d.name !== (settings.selected_output_device ?? ""),
   );
   const denoiserOptions = buildDenoiserOptions(tStr);
   const stereoOptions: RadioCardOption<StereoMode>[] = [
@@ -297,7 +309,7 @@ export function AudioPanel({
           <div className={panelStyles.deviceColumn}>
             <h3 className={styles.sectionTitle}>{inputLabel}</h3>
             <DeviceSelect
-              devices={devices}
+              devices={inputDevices}
               value={settings.selected_device ?? null}
               onChange={(selected_device) => onChange({ selected_device })}
               systemDefaultLabel={t("audio.systemDefault")}
@@ -350,7 +362,7 @@ export function AudioPanel({
           <div className={panelStyles.deviceColumn}>
             <h3 className={styles.sectionTitle}>{outputLabel}</h3>
             <DeviceSelect
-              devices={outputDevices}
+              devices={outputDevicesFiltered}
               value={settings.selected_output_device ?? null}
               onChange={(selected_output_device) => onChange({ selected_output_device })}
               systemDefaultLabel={t("audio.systemDefault")}

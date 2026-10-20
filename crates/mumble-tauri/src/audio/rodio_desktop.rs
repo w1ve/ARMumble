@@ -143,6 +143,65 @@ impl RodioCapture {
     }
 }
 
+/// On Linux, decide whether an enumerated device name is a REAL, directional
+/// hardware device worth showing in the picker — as opposed to an ambiguous
+/// virtual/bidirectional ALSA node.
+///
+/// cpal/ALSA on a PipeWire system lists generic routing nodes ("PipeWire Sound
+/// Server", `pipewire`, `pulse`, `default`, `sysdefault`, `dmix`, `dsnoop`,
+/// `null`, …). These are the same node for input and output, so a user picking
+/// "PipeWire Sound Server" as the microphone actually captures the playback /
+/// received audio (mic == speaker). We therefore hide them from the dropdown
+/// and keep only real card devices (e.g. "HDA Intel PCH, CS4208 Analog" /
+/// `hw:CARD=PCH,DEV=0`), which are distinct for capture vs playback. The
+/// generic PipeWire node is still used as the DEFAULT when nothing is selected
+/// (see `preferred_default_output`), just not offered as an explicit choice.
+#[cfg(target_os = "linux")]
+pub fn is_real_hw_device(name: &str) -> bool {
+    let n = name.trim().to_lowercase();
+    if n.is_empty() {
+        return false;
+    }
+    // Exact virtual node names to hide.
+    const VIRTUAL_EXACT: &[&str] = &[
+        "pipewire",
+        "pipewire sound server",
+        "pulse",
+        "pulseaudio",
+        "default",
+        "sysdefault",
+        "null",
+        "jack",
+        "oss",
+        "speexrate",
+        "samplerate",
+        "upmix",
+        "vdownmix",
+    ];
+    if VIRTUAL_EXACT.contains(&n.as_str()) {
+        return false;
+    }
+    // Virtual ALSA plugin prefixes (these route through dmix/dsnoop/etc. or are
+    // surround/format aliases, not a distinct physical endpoint).
+    const VIRTUAL_PREFIX: &[&str] = &[
+        "sysdefault:",
+        "default:",
+        "dmix",
+        "dsnoop",
+        "front:",
+        "surround",
+        "iec958",
+        "hdmi:", // keep hw:CARD=HDMI... but hide the alias form (optional)
+        "spdif",
+        "modem",
+        "phoneline",
+    ];
+    if VIRTUAL_PREFIX.iter().any(|p| n.starts_with(p)) {
+        return false;
+    }
+    true
+}
+
 /// Enumerate input device display names via rodio's `available_inputs()`.
 ///
 /// These names are produced by the SAME source that `find_input_by_name`
@@ -169,7 +228,7 @@ pub fn enumerate_input_names() -> Vec<(String, bool)> {
     let Ok(inputs) = available_inputs() else {
         return Vec::new();
     };
-    inputs
+    let out: Vec<(String, bool)> = inputs
         .into_iter()
         .map(|i| {
             let name = i.to_string();
@@ -185,7 +244,22 @@ pub fn enumerate_input_names() -> Vec<(String, bool)> {
                 .unwrap_or(false);
             (name, is_default)
         })
-        .collect()
+        .collect();
+
+    // On Linux, hide ambiguous virtual/bidirectional nodes so the mic list
+    // only offers real capture devices (prevents picking the PipeWire routing
+    // node as the "mic", which captures the playback/received audio). Only
+    // apply when it leaves at least one real device, so a system with only
+    // virtual nodes is not left with an empty picker.
+    #[cfg(target_os = "linux")]
+    {
+        let filtered: Vec<(String, bool)> =
+            out.iter().filter(|(n, _)| is_real_hw_device(n)).cloned().collect();
+        if !filtered.is_empty() {
+            return filtered;
+        }
+    }
+    out
 }
 
 impl AudioCapture for RodioCapture {
