@@ -208,3 +208,28 @@ pre code {
     min-width: var(--touch-target-min);
   }
 }
+
+/* --- Native <select> dropdowns (all platforms) ------------------ *
+ * `appearance: auto` lets the OS theme paint native selects, which on Linux
+ * (WebKitGTK) renders a WHITE background that ignores the CSS colors — making
+ * dark-theme text unreadable. Force every native dropdown to the app's dark
+ * styling with a custom chevron so they are consistent on all platforms.
+ * Component-specific .select rules can still override padding/width. */
+select {
+  color: var(--color-text-primary, #e8ebff);
+  background-color: var(--color-bg-secondary, #1a1d23);
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 8px);
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239aa0b4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+}
+
+/* The popup list items: dark bg, light text (WebKitGTK honours these). */
+select option {
+  background-color: var(--color-bg-secondary, #1a1d23);
+  color: var(--color-text-primary, #e8ebff);
+}

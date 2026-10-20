@@ -2666,7 +2666,17 @@ async function applySavedAudioSettingsOnConnect(host: string, port: number): Pro
     const key = `${host}:${port}`;
     const saved = await getSavedAudioSettings(key);
     if (!saved) return;
-    await invoke("set_audio_settings", { settings: saved, serverId: undefined });
+    // A Station is always Continuous. Scrub any stale push_to_talk / VOX left
+    // in its saved profile BEFORE it reaches the backend, so transmit_mode()
+    // can't resolve to PushToTalk and self-mute the station (which would make
+    // every client show it muted/suppressed). The backend also guards this,
+    // but keeping the pushed settings consistent avoids a wrong UI mode too.
+    const role = await resolveRoleForServer(host, port);
+    const settings =
+      role === "station"
+        ? { ...saved, transmit_mode: "continuous", push_to_talk: false }
+        : saved;
+    await invoke("set_audio_settings", { settings, serverId: undefined });
   } catch (e) {
     console.warn("[store] applySavedAudioSettingsOnConnect failed:", e);
   }

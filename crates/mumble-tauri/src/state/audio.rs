@@ -347,12 +347,21 @@ mod voice_pipeline {
                 (state.conn.client_handle.clone(), state.audio.settings.clone())
             };
 
-            if audio_settings.transmit_mode() == TransmitMode::PushToTalk {
+            // A Station always transmits continuously and must come up LIVE.
+            // Never divert it into the PTT self-muted path: a stale
+            // `push_to_talk`/`transmit_mode` left in a station's saved profile
+            // would otherwise make transmit_mode() resolve to PushToTalk, send
+            // SetSelfMute{true}, and leave the station appearing muted/
+            // suppressed to every client (incl. stock Mumble) so no one hears
+            // it. The PTT shortcut applies to Operators only.
+            let is_station = self.ptt_config_for(None).role
+                == crate::state::types::PttRole::Station;
+            if !is_station && audio_settings.transmit_mode() == TransmitMode::PushToTalk {
                 info!("enable_voice: push-to-talk mode - entering muted (mic off until keyed)");
                 return self.enable_voice_muted().await;
             }
 
-            info!("enable_voice: starting audio pipelines");
+            info!("enable_voice: starting audio pipelines (station={is_station})");
 
             // Create shared volume handles for live updates.
             let input_vol = Arc::new(AtomicU32::new(audio_settings.input_volume.to_bits()));

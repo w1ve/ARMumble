@@ -170,16 +170,24 @@
 
 .select {
   width: 100%;
-  padding: 10px 14px;
+  padding: 10px 36px 10px 14px;
   font-size: 14px;
   font-family: inherit;
   color: var(--color-text-primary);
-  background: var(--color-bg-secondary);
+  background-color: var(--color-bg-secondary);
   border: 1px solid var(--color-glass-border);
   border-radius: var(--radius-sm);
   outline: none;
   cursor: pointer;
-  appearance: auto;
+  /* `appearance: auto` lets the OS theme paint the control, which on Linux
+     (WebKitGTK) renders a WHITE background regardless of the CSS color/bg,
+     making dark-theme text unreadable. Force `none` and paint it ourselves,
+     with a custom chevron, so every dropdown is dark on all platforms. */
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239aa0b4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
   transition: border-color 0.2s;
   margin-top: 6px;
 }
