@@ -972,7 +972,15 @@ pub struct PhotoEntry {
 /// An available audio input device.
 #[derive(Debug, Clone, Serialize)]
 pub struct AudioDevice {
+    /// Stable identifier used to OPEN the device (the cpal/ALSA device name the
+    /// capture/playback path resolves). Persisted as the user's selection.
     pub name: String,
+    /// Human-friendly name shown in the picker — on Linux this is the PipeWire
+    /// `node.description` (exactly what the Ubuntu volume control shows), e.g.
+    /// "Built-in Audio Analog Stereo". Falls back to `name` when no friendlier
+    /// label is available (Windows/mac, or enumeration without PipeWire).
+    #[serde(default)]
+    pub label: String,
     pub is_default: bool,
 }
 

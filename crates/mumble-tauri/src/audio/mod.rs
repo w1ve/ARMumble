@@ -33,6 +33,10 @@ mod desktop;
 #[cfg(not(target_os = "android"))]
 pub(crate) mod rodio_desktop;
 
+/// Linux: friendly (PipeWire) device-name enumeration for the device pickers.
+#[cfg(target_os = "linux")]
+pub(crate) mod pipewire_devices;
+
 pub(crate) mod device_watcher;
 
 pub(crate) mod scope;

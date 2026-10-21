@@ -63,7 +63,8 @@ export function DeviceSelect({
       { value: NO_DEVICE, label: noDeviceLabel },
     ];
     for (const d of devices) {
-      base.push({ value: d.name, label: d.is_default ? `${d.name} ${defaultSuffix}` : d.name });
+      const shown = d.label && d.label.length > 0 ? d.label : d.name;
+      base.push({ value: d.name, label: d.is_default ? `${shown} ${defaultSuffix}` : shown });
     }
     return base;
   }, [devices, systemDefaultLabel, noDeviceLabel, defaultSuffix]);

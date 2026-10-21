@@ -729,7 +729,11 @@ export interface DebugStats {
 // --- Audio / Voice ------------------------------------------------
 
 export interface AudioDevice {
+  /** Stable open-id used to select/open the device (persisted). */
   name: string;
+  /** Friendly display name (Ubuntu volume-control name on Linux). Falls back
+   *  to `name` when the backend provides no friendlier label. */
+  label?: string;
   is_default: boolean;
 }
 

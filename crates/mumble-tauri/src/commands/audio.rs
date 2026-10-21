@@ -47,47 +47,55 @@ pub(crate) fn enumerate_output_device_names() -> Vec<String> {
 pub(crate) fn get_audio_devices() -> Vec<AudioDevice> {
     use cpal::traits::HostTrait;
 
-    // When the rodio backend is active (the default), enumerate inputs via
-    // rodio so the names in the list exactly match what the capture open path
-    // (`find_input_by_name`) compares against. This prevents the "I picked a
-    // device but a different one opened" class of bug.
-    if audio::is_rodio_backend() {
-        let devices: Vec<AudioDevice> = audio::rodio_desktop::enumerate_input_names()
-            .into_iter()
-            .map(|(name, is_default)| AudioDevice { name, is_default })
-            .collect();
-        if !devices.is_empty() {
+    // The cpal/rodio openable names (the open-ids `find_input_by_name` matches).
+    let cpal_names: Vec<String> = cpal_input_names();
+
+    // Linux: prefer friendly PipeWire names (what the Ubuntu volume control
+    // shows), mapped back to a cpal open-id. Directional (Sources only),
+    // de-duplicated by friendly name.
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(devices) = audio::pipewire_devices::enumerate_inputs(&cpal_names) {
             return devices;
         }
-        // Fall through to the cpal path if rodio enumeration came back empty.
+        // else fall through to the technical-name list below.
     }
 
-    let host = cpal::default_host();
-    let default_name = host
+    // Non-Linux (or PipeWire unavailable): use the cpal/rodio names directly,
+    // label == name. Keep the Linux virtual-node filter as a safety net.
+    let default_name = cpal::default_host()
         .default_input_device()
         .and_then(|d| friendly_device_name(&d));
-
-    let list: Vec<AudioDevice> = host
-        .input_devices()
-        .map(|devices| {
-            devices
-                .filter_map(|d| {
-                    // Prefer the friendly description name; fall back to the
-                    // raw cpal name rather than DROPPING the device, so the
-                    // list matches the Windows Sound applet more closely.
-                    let name = friendly_device_name(&d)?;
-                    Some(AudioDevice {
-                        name: name.clone(),
-                        is_default: default_name.as_deref() == Some(&name),
-                    })
-                })
-                .collect()
+    let list: Vec<AudioDevice> = cpal_names
+        .into_iter()
+        .map(|name| AudioDevice {
+            is_default: default_name.as_deref() == Some(&name),
+            label: name.clone(),
+            name,
         })
-        .unwrap_or_default();
-
-    // On Linux, hide ambiguous virtual/bidirectional nodes so the mic list only
-    // offers real capture devices (see `is_real_hw_device`).
+        .collect();
     filter_real_hw_devices(list)
+}
+
+/// The openable input device names as enumerated by the active backend
+/// (rodio when active, else cpal). These are the identifiers the capture open
+/// path (`find_input_by_name`) matches against.
+#[cfg(not(target_os = "android"))]
+fn cpal_input_names() -> Vec<String> {
+    use cpal::traits::HostTrait;
+    if audio::is_rodio_backend() {
+        let names: Vec<String> = audio::rodio_desktop::enumerate_input_names()
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect();
+        if !names.is_empty() {
+            return names;
+        }
+    }
+    cpal::default_host()
+        .input_devices()
+        .map(|devs| devs.filter_map(|d| friendly_device_name(&d)).collect())
+        .unwrap_or_default()
 }
 
 /// On Linux, drop ambiguous virtual/bidirectional nodes from a device list
@@ -138,31 +146,31 @@ pub(crate) fn get_audio_devices() -> Vec<AudioDevice> {
 pub(crate) fn get_output_devices() -> Vec<AudioDevice> {
     use cpal::traits::HostTrait;
 
-    let host = cpal::default_host();
-    let default_name = host
-        .default_output_device()
-        .and_then(|d| friendly_device_name(&d));
-
-    let list: Vec<AudioDevice> = host
+    let cpal_names: Vec<String> = cpal::default_host()
         .output_devices()
-        .map(|devices| {
-            devices
-                .filter_map(|d| {
-                    // Fall back to the raw cpal name rather than dropping the
-                    // device when the endpoint description is unavailable.
-                    let name = friendly_device_name(&d)?;
-                    Some(AudioDevice {
-                        name: name.clone(),
-                        is_default: default_name.as_deref() == Some(&name),
-                    })
-                })
-                .collect()
-        })
+        .map(|devs| devs.filter_map(|d| friendly_device_name(&d)).collect())
         .unwrap_or_default();
 
-    // On Linux, hide ambiguous virtual/bidirectional nodes (see
-    // `is_real_hw_device`) so the speaker list only offers real output devices,
-    // keeping it distinct from the mic list.
+    // Linux: prefer friendly PipeWire names (Sinks only), mapped to a cpal
+    // open-id, de-duplicated by friendly name.
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(devices) = audio::pipewire_devices::enumerate_outputs(&cpal_names) {
+            return devices;
+        }
+    }
+
+    let default_name = cpal::default_host()
+        .default_output_device()
+        .and_then(|d| friendly_device_name(&d));
+    let list: Vec<AudioDevice> = cpal_names
+        .into_iter()
+        .map(|name| AudioDevice {
+            is_default: default_name.as_deref() == Some(&name),
+            label: name.clone(),
+            name,
+        })
+        .collect();
     filter_real_hw_devices(list)
 }
 

@@ -184,18 +184,20 @@ export function AudioPanel({
   // play to means the "mic" records the received audio (full-duplex loopback).
   // So the input list hides the currently-selected output device, and the
   // output list hides the currently-selected input device.
-  const inputDevices = devices.filter(
-    (d) => d.name !== (settings.selected_output_device ?? ""),
-  );
-  const outputDevicesFiltered = outputDevices.filter(
-    (d) => d.name !== (settings.selected_device ?? ""),
-  );
+  // Compare devices by their human identity. On Linux the same physical card's
+  // capture and playback can share an open-id (`name`), so we match on the
+  // friendly `label` (what the user sees) to decide "same device", not `name`.
+  const identOf = (list: readonly AudioDevice[], sel: string | null | undefined) =>
+    (sel ? (list.find((d) => d.name === sel)?.label ?? sel) : "");
+  const ident = (d: AudioDevice) => d.label ?? d.name;
+  const selOutIdent = identOf(outputDevices, settings.selected_output_device);
+  const selInIdent = identOf(devices, settings.selected_device);
+  const inputDevices = devices.filter((d) => ident(d) !== selOutIdent);
+  const outputDevicesFiltered = outputDevices.filter((d) => ident(d) !== selInIdent);
   // The 2nd input (second radio) list excludes the first input AND the output,
   // so the two radios can't be the same device, nor the same as playback.
   const secondInputDevices = devices.filter(
-    (d) =>
-      d.name !== (settings.selected_device ?? "") &&
-      d.name !== (settings.selected_output_device ?? ""),
+    (d) => ident(d) !== selInIdent && ident(d) !== selOutIdent,
   );
   const denoiserOptions = buildDenoiserOptions(tStr);
   const stereoOptions: RadioCardOption<StereoMode>[] = [
