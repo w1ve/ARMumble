@@ -92,7 +92,6 @@ pub(crate) fn parse_pchat_protocol_str(s: &str) -> PchatProtocol {
 
 /// Audio pipeline state: device settings, volume handles, mixer,
 /// playback, outbound capture, and test tasks.
-#[derive(Default)]
 pub(super) struct AudioPipelineState {
     pub settings: AudioSettings,
     /// Per-server rig-PTT configuration (serial port, line, timing, role).
@@ -101,8 +100,24 @@ pub(super) struct AudioPipelineState {
     pub mixer: Option<AudioMixer>,
     pub mixing_playback: Option<Box<dyn crate::audio::MixingPlayback>>,
     pub outbound_task_handle: Option<tokio::task::JoinHandle<()>>,
-    pub input_volume_handle: Option<Arc<AtomicU32>>,
-    pub output_volume_handle: Option<Arc<AtomicU32>>,
+    /// Live microphone-gain atomic (f32 bits, 0.0-2.0, 1.0 = unity).
+    ///
+    /// Permanent and never re-created: every outbound capture build is
+    /// handed a clone of *this* Arc, and `set_audio_settings` writes
+    /// *this* Arc, so the live gain the capture thread reads is always the
+    /// one the UI slider controls.  (Previously this was an `Option` that
+    /// each pipeline rebuild replaced with a fresh `Arc`, which could
+    /// detach the stored handle from the running pipeline - a volume
+    /// slider that silently did nothing.)
+    pub input_volume_handle: Arc<AtomicU32>,
+    /// Live speaker-gain atomic (f32 bits, 0.0-2.0, 1.0 = unity).
+    ///
+    /// Permanent and never re-created - see [`Self::input_volume_handle`].
+    /// Every playback build (`enable_voice`, `enable_voice_muted`,
+    /// `restart_inbound`) clones *this* Arc into the mixer source, and
+    /// `set_audio_settings` writes *this* Arc, so moving the speaker-volume
+    /// slider always reaches the audio that is actually playing.
+    pub output_volume_handle: Arc<AtomicU32>,
     /// Live playback stereo-fold / per-channel-gain control, shared with the
     /// active output backend. `None` when no playback is running.
     pub stereo_control: Option<Arc<mumble_protocol::audio::mixer::StereoControl>>,
@@ -121,6 +136,40 @@ pub(super) struct AudioPipelineState {
     pub voice_replay_stop: Option<tokio::sync::watch::Sender<bool>>,
     pub recording_handle: Option<recording::RecordingHandle>,
     pub talking_sessions: HashSet<u32>,
+}
+
+impl Default for AudioPipelineState {
+    fn default() -> Self {
+        use std::sync::atomic::Ordering;
+        // The volume atomics are permanent (see field docs) and must start
+        // at unity gain, not the 0.0 that `AtomicU32::default()` would give
+        // (which would play everything silent until the first slider move).
+        let unity = || {
+            let a = AtomicU32::new(0);
+            a.store(1.0_f32.to_bits(), Ordering::Relaxed);
+            Arc::new(a)
+        };
+        Self {
+            settings: AudioSettings::default(),
+            ptt_config: PttConfig::default(),
+            voice_state: VoiceState::default(),
+            mixer: None,
+            mixing_playback: None,
+            outbound_task_handle: None,
+            input_volume_handle: unity(),
+            output_volume_handle: unity(),
+            stereo_control: None,
+            right_source_control: None,
+            speaker_volumes: SpeakerVolumes::default(),
+            mic_test_handle: None,
+            latency_test_handle: None,
+            stereo_test_handle: None,
+            voice_replay_handle: None,
+            voice_replay_stop: None,
+            recording_handle: None,
+            talking_sessions: HashSet::new(),
+        }
+    }
 }
 
 /// Server-reported metadata: version info, config limits, and connection details.

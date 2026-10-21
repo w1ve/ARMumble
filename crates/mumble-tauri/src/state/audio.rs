@@ -124,14 +124,18 @@ impl AppState {
             is_active && old_settings.force_tcp_audio != settings.force_tcp_audio;
 
         // Update live volume + stereo handles (no pipeline restart needed).
+        // The volume atomics are permanent (never re-created), so this write
+        // always lands on the exact Arc the live capture/playback reads.
         if let Ok(state) = target.lock() {
             use std::sync::atomic::Ordering;
-            if let Some(ref h) = state.audio.input_volume_handle {
-                h.store(settings.input_volume.to_bits(), Ordering::Relaxed);
-            }
-            if let Some(ref h) = state.audio.output_volume_handle {
-                h.store(settings.output_volume.to_bits(), Ordering::Relaxed);
-            }
+            state
+                .audio
+                .input_volume_handle
+                .store(settings.input_volume.to_bits(), Ordering::Relaxed);
+            state
+                .audio
+                .output_volume_handle
+                .store(settings.output_volume.to_bits(), Ordering::Relaxed);
             if let Some(ref sc) = state.audio.stereo_control {
                 sc.set(
                     Self::stereo_out_mode(settings.playback_stereo_mode),
@@ -363,19 +367,30 @@ mod voice_pipeline {
 
             info!("enable_voice: starting audio pipelines (station={is_station})");
 
-            // Create shared volume handles for live updates.
-            let input_vol = Arc::new(AtomicU32::new(audio_settings.input_volume.to_bits()));
-            let output_vol = Arc::new(AtomicU32::new(audio_settings.output_volume.to_bits()));
+            // Use the session's PERMANENT output-volume atomic (never
+            // re-created), so the gain the playback reads is always the one the
+            // UI slider writes via set_audio_settings. Seed it to the saved
+            // settings value first so a non-unity saved volume is honoured on
+            // connect. (The outbound/mic side does the same in
+            // start_outbound_pipeline.)
+            let (output_vol, speaker_volumes) = {
+                use std::sync::atomic::Ordering;
+                let __session = self.inner.snapshot();
+                let state = __session.lock().map_err(|e| e.to_string())?;
+                state
+                    .audio
+                    .output_volume_handle
+                    .store(audio_settings.output_volume.to_bits(), Ordering::Relaxed);
+                (
+                    state.audio.output_volume_handle.clone(),
+                    state.audio.speaker_volumes.clone(),
+                )
+            };
 
             // Inbound: per-speaker decoders + mixing playback.
             let speaker_buffers: SpeakerBuffers = Arc::new(
                 std::sync::Mutex::new(std::collections::HashMap::new()),
             );
-            let speaker_volumes = {
-                let __session = self.inner.snapshot();
-                let state = __session.lock().map_err(|e| e.to_string())?;
-                state.audio.speaker_volumes.clone()
-            };
             // Inbound is stereo so dual-receiver radio audio stays separated; a
     // stereo decoder upmixes mono senders, so mono traffic is unaffected.
     let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::STEREO_48KHZ_F32);
@@ -396,8 +411,7 @@ mod voice_pipeline {
                 let mut state = __session.lock().map_err(|e| e.to_string())?;
                 state.audio.mixer = Some(mixer);
                 state.audio.mixing_playback = Some(mixing_playback);
-                state.audio.input_volume_handle = Some(input_vol);
-                state.audio.output_volume_handle = Some(output_vol);
+                // input/output volume handles are permanent; already seeded above.
                 state.audio.stereo_control = Some(stereo_ctrl);
             }
 
@@ -474,8 +488,9 @@ mod voice_pipeline {
                     let _ = playback.stop();
                 }
                 state.audio.mixer = None;
-                state.audio.input_volume_handle = None;
-                state.audio.output_volume_handle = None;
+                // input/output volume handles are permanent - keep them across
+                // a voice stop so the saved gain survives into the next
+                // enable_voice (and the slider keeps writing a live Arc).
                 state.audio.stereo_control = None;
 
                 // Collect sessions to notify OUTSIDE the lock.
@@ -560,23 +575,32 @@ mod voice_pipeline {
                 return Ok(());
             }
 
-            let output_vol = Arc::new(AtomicU32::new(audio_settings.output_volume.to_bits()));
+            // Permanent output-volume atomic: seed to the saved value, hand the
+            // playback a clone. The slider always writes this same Arc.
+            let (output_vol, speaker_volumes) = {
+                use std::sync::atomic::Ordering;
+                let __session = self.inner.snapshot();
+                let state = __session.lock().map_err(|e| e.to_string())?;
+                state
+                    .audio
+                    .output_volume_handle
+                    .store(audio_settings.output_volume.to_bits(), Ordering::Relaxed);
+                (
+                    state.audio.output_volume_handle.clone(),
+                    state.audio.speaker_volumes.clone(),
+                )
+            };
 
             let speaker_buffers: SpeakerBuffers = Arc::new(
                 std::sync::Mutex::new(std::collections::HashMap::new()),
             );
-            let speaker_volumes = {
-                let __session = self.inner.snapshot();
-                let state = __session.lock().map_err(|e| e.to_string())?;
-                state.audio.speaker_volumes.clone()
-            };
             // Inbound is stereo so dual-receiver radio audio stays separated; a
     // stereo decoder upmixes mono senders, so mono traffic is unaffected.
     let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::STEREO_48KHZ_F32);
             let stereo_ctrl = Self::make_stereo_control(&audio_settings);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
-                output_vol.clone(),
+                output_vol,
                 speaker_buffers,
                 speaker_volumes,
                 stereo_ctrl.clone(),
@@ -590,7 +614,7 @@ mod voice_pipeline {
             let mut state = __session.lock().map_err(|e| e.to_string())?;
             state.audio.mixer = Some(mixer);
             state.audio.mixing_playback = Some(mixing_playback);
-            state.audio.output_volume_handle = Some(output_vol);
+            // output volume handle is permanent; already seeded above.
             state.audio.stereo_control = Some(stereo_ctrl);
             Ok(())
         }
@@ -606,10 +630,19 @@ mod voice_pipeline {
                 info!("start_outbound_pipeline: input is (No device); capture not started");
                 return Ok(());
             }
-            // Re-use existing input volume handle or create a new one.
+            // Use the session's PERMANENT input-volume atomic (never
+            // re-created). Seed it to the saved value, then hand the capture a
+            // clone, so the live volume update path (set_audio_settings_for)
+            // always writes the SAME Arc the capture reads - moving the mic
+            // slider is guaranteed to reach the transmitted audio.
             let (input_vol, app, own_session, max_bandwidth) = {
+                use std::sync::atomic::Ordering;
                 let __session = self.inner.snapshot();
                 let state = __session.lock().map_err(|e| e.to_string())?;
+                state
+                    .audio
+                    .input_volume_handle
+                    .store(audio_settings.input_volume.to_bits(), Ordering::Relaxed);
                 (
                     state.audio.input_volume_handle.clone(),
                     state.conn.tauri_app_handle.clone(),
@@ -617,17 +650,6 @@ mod voice_pipeline {
                     state.server.max_bandwidth,
                 )
             };
-            let input_vol =
-                input_vol.unwrap_or_else(|| Arc::new(AtomicU32::new(audio_settings.input_volume.to_bits())));
-            // Store the resolved handle back so the live volume update path
-            // (set_audio_settings_for) writes the SAME Arc the capture reads.
-            // Without this, a pipeline (re)start that created a fresh handle
-            // left the slider updating an orphan Arc — the input VU still
-            // reflected the capture's gain, but moving the slider changed
-            // nothing on the transmitted audio.
-            if let Ok(mut state) = self.inner.snapshot().lock() {
-                state.audio.input_volume_handle = Some(input_vol.clone());
-            }
 
             // A radio Station transmits STEREO so a dual-receiver rig (different
             // receivers on L and R) keeps its channel separation on the air. An
@@ -796,7 +818,7 @@ mod voice_pipeline {
 
             let mut state = __session.lock().map_err(|e| e.to_string())?;
             state.audio.outbound_task_handle = outbound_handle;
-            state.audio.input_volume_handle = Some(input_vol);
+            // input volume handle is permanent; already seeded above.
             Ok(())
         }
 
@@ -813,23 +835,32 @@ mod voice_pipeline {
 
             info!("enable_voice_muted: starting inbound pipeline only");
 
-            let output_vol = Arc::new(AtomicU32::new(audio_settings.output_volume.to_bits()));
+            // Permanent output-volume atomic: seed to the saved value, hand the
+            // playback a clone. The slider always writes this same Arc.
+            let (output_vol, speaker_volumes) = {
+                use std::sync::atomic::Ordering;
+                let __session = self.inner.snapshot();
+                let state = __session.lock().map_err(|e| e.to_string())?;
+                state
+                    .audio
+                    .output_volume_handle
+                    .store(audio_settings.output_volume.to_bits(), Ordering::Relaxed);
+                (
+                    state.audio.output_volume_handle.clone(),
+                    state.audio.speaker_volumes.clone(),
+                )
+            };
 
             let speaker_buffers: SpeakerBuffers = Arc::new(
                 std::sync::Mutex::new(std::collections::HashMap::new()),
             );
-            let speaker_volumes = {
-                let __session = self.inner.snapshot();
-                let state = __session.lock().map_err(|e| e.to_string())?;
-                state.audio.speaker_volumes.clone()
-            };
             // Inbound is stereo so dual-receiver radio audio stays separated; a
     // stereo decoder upmixes mono senders, so mono traffic is unaffected.
     let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::STEREO_48KHZ_F32);
             let stereo_ctrl = Self::make_stereo_control(&audio_settings);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
-                output_vol.clone(),
+                output_vol,
                 speaker_buffers,
                 speaker_volumes,
                 stereo_ctrl.clone(),
@@ -844,7 +875,7 @@ mod voice_pipeline {
                 state.audio.voice_state = VoiceState::Muted;
                 state.audio.mixer = Some(mixer);
                 state.audio.mixing_playback = Some(mixing_playback);
-                state.audio.output_volume_handle = Some(output_vol);
+                // output volume handle is permanent; already seeded above.
                 state.audio.stereo_control = Some(stereo_ctrl);
             }
 
