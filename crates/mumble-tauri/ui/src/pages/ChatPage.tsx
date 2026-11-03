@@ -93,6 +93,10 @@ export default function ChatPage() {
   });
   const chatResizeRef = useRef<{ startY: number; startH: number } | null>(null);
 
+  // Mobile: the chat is a small pane at the bottom of the stack, collapsed by
+  // default (audio is the focus; text is secondary). Tap the header to expand.
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
+
   const onSplitterDown = useCallback(
     (e: React.PointerEvent) => {
       e.preventDefault();
@@ -484,8 +488,10 @@ export default function ChatPage() {
 
   return (
     <div ref={pageRef} className={styles.page}>
-      {/* Burger toggle - shown when sidebar is closed (both drawer and desktop modes) */}
-      {!sidebarOpen && (
+      {/* Desktop-only sidebar machinery. On narrow/mobile the channels are
+          rendered inline at the top of the mobile stack (right pane), so the
+          slide-out drawer, its burger, and backdrop are all suppressed. */}
+      {!useDrawer && !sidebarOpen && (
         <button
           className={styles.menuToggle}
           onClick={toggleSidebar}
@@ -495,39 +501,27 @@ export default function ChatPage() {
         </button>
       )}
 
-      {/* Backdrop overlay when drawer is open */}
-      {useDrawer && sidebarOpen && (
-        <button
-          className={styles.backdrop}
-          onClick={closeSidebar}
-          onKeyDown={(e) => e.key === "Escape" && closeSidebar()}
-          aria-label={t("page.closeChannelsAriaLabel")}
-          type="button"
-        />
+      {/* Desktop sidebar (collapsible with Ctrl+B). Not rendered in drawer mode. */}
+      {!useDrawer && (
+        <div
+          ref={drawerRef}
+          className={[
+            styles.sidebarContainer,
+            sidebarOpen ? "" : styles.sidebarCollapsed,
+          ].filter(Boolean).join(" ")}
+        >
+          <ChannelSidebar
+            onServerInfoToggle={toggleServerInfo}
+            searchChannelId={searchChannelId}
+            onSearchChannelClear={() => setSearchChannelId(null)}
+            onSelectMessage={(_, messageId) => setPendingScrollMessageId(messageId)}
+            /* Desktop: voice toggles + action row live in the right-pane
+               RadioControlPanel / StationActionBar instead of the sidebar. */
+            showSelfVoiceControls={false}
+            showVoicePanel={false}
+          />
+        </div>
       )}
-
-      {/* Sidebar: inline on wide desktop, slide-out drawer when narrow or mobile */}
-      <div
-        ref={drawerRef}
-        className={[
-          styles.sidebarContainer,
-          sidebarOpen ? styles.sidebarOpen : "",
-          !sidebarOpen && !useDrawer ? styles.sidebarCollapsed : "",
-        ].filter(Boolean).join(" ")}
-      >
-        <ChannelSidebar
-          onChannelSelect={closeSidebar}
-          onServerInfoToggle={toggleServerInfo}
-          onCollapse={useDrawer ? closeSidebar : undefined}
-          searchChannelId={searchChannelId}
-          onSearchChannelClear={() => setSearchChannelId(null)}
-          onSelectMessage={(_, messageId) => setPendingScrollMessageId(messageId)}
-          /* Desktop: voice toggles + action row live in the right-pane
-             RadioControlPanel / StationActionBar instead of the sidebar. */
-          showSelfVoiceControls={useDrawer}
-          showVoicePanel={useDrawer}
-        />
-      </div>
 
       {/* Right pane: server tabs -> station bar -> text window -> action row.
           On mobile/narrow (drawer mode) the tabs stay in the TitleBar and the
@@ -540,14 +534,52 @@ export default function ChatPage() {
           </div>
         )}
         {useDrawer ? (
-          /* Narrow / mobile: controls live in the sidebar; the right pane is
-             just the chat view, full-height, as before. */
-          <ChatView
-            onChannelInfoToggle={toggleChannelInfo}
-            onChannelSearch={openChannelSearch}
-            scrollToMessageId={pendingScrollMessageId}
-            onScrollConsumed={() => setPendingScrollMessageId(null)}
-          />
+          /* Narrow / mobile radio-first stack (top -> bottom):
+               Channels  ->  Mic/Listening + Stereo controls  ->  small chat.
+             Channels scroll at the top; the audio controls are the focus; the
+             chat is a collapsible pane pinned at the bottom. */
+          <div className={styles.mobileStack}>
+            <div className={styles.mobileChannels}>
+              <ChannelSidebar
+                onChannelSelect={undefined}
+                onServerInfoToggle={toggleServerInfo}
+                onSearchChannelClear={() => setSearchChannelId(null)}
+                searchChannelId={searchChannelId}
+                onSelectMessage={(_, messageId) => setPendingScrollMessageId(messageId)}
+                /* Controls live in the RadioControlPanel below, not the sidebar. */
+                showSelfVoiceControls={false}
+                showVoicePanel={false}
+              />
+            </div>
+            <div className={styles.mobileControls}>
+              <RadioControlPanel mobile />
+            </div>
+            <div
+              className={[
+                styles.mobileChat,
+                mobileChatOpen ? styles.mobileChatOpen : "",
+              ].filter(Boolean).join(" ")}
+            >
+              <button
+                type="button"
+                className={styles.mobileChatHeader}
+                onClick={() => setMobileChatOpen((v) => !v)}
+                aria-expanded={mobileChatOpen}
+              >
+                {t("page.messagesToggle")}
+              </button>
+              {mobileChatOpen && (
+                <div className={styles.mobileChatBody}>
+                  <ChatView
+                    onChannelInfoToggle={toggleChannelInfo}
+                    onChannelSearch={openChannelSearch}
+                    scrollToMessageId={pendingScrollMessageId}
+                    onScrollConsumed={() => setPendingScrollMessageId(null)}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
           /* Wide desktop, radio-first: the large audio/operator control panel
              dominates; the chat is a short, user-resizable pane below it. */

@@ -12,6 +12,7 @@ import type { AudioDevice, AudioSettings, ClientRole, TransmitMode } from "../..
 import { InputLevelMeter, OutputLevelMeter } from "../audio/LevelMeter";
 import { DeviceSelect, type DeviceValue } from "../audio/DeviceSelect";
 import OperatorControlHead from "./OperatorControlHead";
+import MobileRadioControls from "./MobileRadioControls";
 import styles from "./RadioControlPanel.module.css";
 
 /**
@@ -30,7 +31,7 @@ import styles from "./RadioControlPanel.module.css";
  * (get_audio_devices / get_output_devices / get_audio_settings /
  * set_audio_settings), so this panel and Settings stay in sync.
  */
-export default function RadioControlPanel() {
+export default function RadioControlPanel({ mobile = false }: { readonly mobile?: boolean }) {
   const { t } = useTranslation(["settings", "sidebar"]);
   const tAudio = (k: string) => (t as (x: string) => string)(`settings:audio.${k}`);
   const tSide = (k: string) => (t as (x: string) => string)(`sidebar:${k}`);
@@ -146,11 +147,11 @@ export default function RadioControlPanel() {
   const volPct = (v: number | undefined) => `${Math.round((v ?? 1) * 100)}%`;
 
   if (!inChannel || !audio) {
-    return <div className={styles.panel} />;
+    return <div className={`${styles.panel} ${mobile ? styles.panelMobile : ""}`} />;
   }
 
   return (
-    <div className={styles.panel}>
+    <div className={`${styles.panel} ${mobile ? styles.panelMobile : ""}`}>
       {/* --- Top row: input (mic/radio) and output (headphone) clusters --- */}
       <div className={styles.levelRow}>
         {/* INPUT cluster */}
@@ -244,10 +245,13 @@ export default function RadioControlPanel() {
         </section>
       </div>
 
-      {/* --- Operator live controls, big labeled groups --- */}
-      {isOperator && (
-        <OperatorControlHead serverId={serverId} serverKey={serverKey} variant="panel" />
-      )}
+      {/* --- Operator live controls --- */}
+      {isOperator &&
+        (mobile ? (
+          <MobileRadioControls serverId={serverId} serverKey={serverKey} />
+        ) : (
+          <OperatorControlHead serverId={serverId} serverKey={serverKey} variant="panel" />
+        ))}
     </div>
   );
 }

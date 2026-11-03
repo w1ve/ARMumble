@@ -302,7 +302,8 @@
     },
     "openChannelsAriaLabel": "Ouvrir les canaux",
     "closeChannelsAriaLabel": "Fermer les canaux",
-    "resizeChatAriaLabel": "Redimensionner la zone de messages"
+    "resizeChatAriaLabel": "Redimensionner la zone de messages",
+    "messagesToggle": "Messages"
   },
   "emptyState": {
     "noMessages": "Aucun message pour l'instant. Dites bonjour !"

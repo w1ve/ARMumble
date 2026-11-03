@@ -88,6 +88,8 @@
       "clearHotkey": "Clear PTT Hotkey",
       "hotkeyRecording": "Press a modifier + key...",
       "onAir": "On Air",
+      "holdToTransmit": "Hold to Transmit",
+      "holdToWhisper": "Hold to Whisper",
       "footswitchStatus": "FootSwitch {port} via {line}",
       "whisper": "Whisper",
       "whisperGroupTitle": "Whisper to Another Operator",

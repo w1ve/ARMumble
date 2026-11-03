@@ -302,7 +302,8 @@
     },
     "openChannelsAriaLabel": "Kanäle öffnen",
     "closeChannelsAriaLabel": "Kanäle schließen",
-    "resizeChatAriaLabel": "Nachrichtenbereich anpassen"
+    "resizeChatAriaLabel": "Nachrichtenbereich anpassen",
+    "messagesToggle": "Nachrichten"
   },
   "emptyState": {
     "noMessages": "Noch keine Nachrichten. Sag Hallo!"

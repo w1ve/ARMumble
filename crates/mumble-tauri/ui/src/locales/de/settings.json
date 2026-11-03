@@ -88,6 +88,8 @@
       "clearHotkey": "PTT-Taste löschen",
       "hotkeyRecording": "Modifikator + Taste drücken...",
       "onAir": "Auf Sendung",
+      "holdToTransmit": "Zum Senden halten",
+      "holdToWhisper": "Zum Flüstern halten",
       "footswitchStatus": "Fußschalter {port} über {line}",
       "whisper": "Flüstern",
       "whisperGroupTitle": "Einem anderen Operator zuflüstern",

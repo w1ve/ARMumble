@@ -1,0 +1,189 @@
+/* --- Mobile operator controls (touch-first, VOX/PTT only) --------- */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Segmented control (VOX | PTT, Mix | L/R) - full width, big touch targets. */
+.segmented {
+  display: flex;
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.segBtn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 10px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-glass);
+  border: none;
+  border-left: 1px solid var(--color-glass-border);
+  cursor: pointer;
+}
+
+.segBtn:first-child {
+  border-left: none;
+}
+
+.segBtnActive {
+  color: #fff;
+  background: var(--color-accent);
+}
+
+/* Large press-and-hold buttons for TRANSMIT and WHISPER. */
+.holdBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 18px;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-primary);
+  background: var(--color-glass);
+  border: 2px solid var(--color-glass-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  transition: transform 0.05s, background 0.15s, border-color 0.15s;
+}
+
+.holdBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.holdPtt {
+  border-color: var(--color-danger-border, rgba(255, 77, 79, 0.5));
+  color: var(--color-danger, #ff4d4f);
+}
+
+.holdWhisper {
+  border-color: var(--color-accent, #2aabee);
+  color: var(--color-accent, #2aabee);
+}
+
+/* Pressed / on-air state: filled, slightly depressed. */
+.holdActive {
+  color: #fff;
+  background: var(--color-danger, #ff4d4f);
+  border-color: var(--color-danger, #ff4d4f);
+  transform: scale(0.98);
+  box-shadow: 0 0 16px var(--color-danger, #ff4d4f);
+}
+
+.holdWhisper.holdActive {
+  background: var(--color-accent, #2aabee);
+  border-color: var(--color-accent, #2aabee);
+  box-shadow: 0 0 16px var(--color-accent-glow, rgba(42, 171, 238, 0.6));
+}
+
+.select {
+  width: 100%;
+  font: inherit;
+  font-size: 15px;
+  padding: 11px 12px;
+  color: var(--color-text-primary);
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+}
+
+.stereoRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.smallBtn {
+  flex: 0 0 auto;
+  padding: 11px 16px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.smallBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.panWrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.panLabel {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  flex: 0 0 auto;
+}
+
+.pan {
+  flex: 1;
+  height: 26px;
+  cursor: ew-resize;
+}
+
+.pan:disabled {
+  opacity: 0.45;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+}
+
+.badgeOn {
+  color: #fff;
+  background: var(--color-online);
+  border-color: var(--color-online);
+}

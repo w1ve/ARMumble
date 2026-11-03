@@ -302,7 +302,8 @@
     },
     "openChannelsAriaLabel": "打开频道列表",
     "closeChannelsAriaLabel": "关闭频道列表",
-    "resizeChatAriaLabel": "调整消息区域大小"
+    "resizeChatAriaLabel": "调整消息区域大小",
+    "messagesToggle": "消息"
   },
   "emptyState": {
     "noMessages": "还没有消息，打个招呼吧！"

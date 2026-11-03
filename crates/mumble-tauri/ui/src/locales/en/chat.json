@@ -302,7 +302,8 @@
     },
     "openChannelsAriaLabel": "Open channels",
     "closeChannelsAriaLabel": "Close channels",
-    "resizeChatAriaLabel": "Resize message area"
+    "resizeChatAriaLabel": "Resize message area",
+    "messagesToggle": "Messages"
   },
   "emptyState": {
     "noMessages": "No messages yet. Say hello!"

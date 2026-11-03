@@ -23,6 +23,21 @@
   gap: 14px;
 }
 
+/* Mobile: the panel is one section of a vertical stack, not the dominant
+   region, so drop the bottom divider/blur and stack the level cards. */
+.panelMobile {
+  padding: 12px;
+  gap: 14px;
+  background: transparent;
+  border-bottom: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.panelMobile .levelRow {
+  grid-template-columns: 1fr;
+}
+
 .levelCard {
   display: flex;
   flex-direction: column;
