@@ -100,20 +100,30 @@ function codeToAcceleratorToken(code: string): string | null {
 }
 
 export function eventToShortcut(e: React.KeyboardEvent): string | null {
-  const parts: string[] = [];
-  if (e.ctrlKey) parts.push("Ctrl");
-  if (e.altKey) parts.push("Alt");
-  if (e.shiftKey) parts.push("Shift");
-  if (e.metaKey) parts.push("Super");
+  const mods: string[] = [];
+  if (e.ctrlKey) mods.push("Ctrl");
+  if (e.altKey) mods.push("Alt");
+  if (e.shiftKey) mods.push("Shift");
+  if (e.metaKey) mods.push("Super");
   // Modifier-only presses are not a complete shortcut.
   if (["ControlLeft", "ControlRight", "AltLeft", "AltRight", "ShiftLeft",
        "ShiftRight", "MetaLeft", "MetaRight"].includes(e.code)) {
     return null;
   }
+  // A GLOBAL shortcut is registered OS-wide via RegisterHotKey, which consumes
+  // the combo from every other application. A modifier-less accelerator (a
+  // bare letter/digit) would therefore swallow that key everywhere - e.g. a
+  // bare "T" stops you typing "t" in any app. Require at least one modifier so
+  // a plain key can never be captured as a global hotkey. (Shift alone is also
+  // disallowed: "Shift+T" still collides with normal capital-letter typing;
+  // require Ctrl, Alt, or Super.) This is the fix for the "Alt+T blocked the
+  // letter t" bug, which happened when Alt was released a frame before the key
+  // and a bare "KeyT" got registered.
+  const hasRealModifier = e.ctrlKey || e.altKey || e.metaKey;
+  if (!hasRealModifier) return null;
   const token = codeToAcceleratorToken(e.code);
   if (!token) return null;
-  parts.push(token);
-  return parts.join("+");
+  return [...mods, token].join("+");
 }
 
 export async function applyGlobalShortcut(

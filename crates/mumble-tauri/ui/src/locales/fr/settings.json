@@ -88,6 +88,7 @@
       "clearHotkey": "Effacer le raccourci PTT",
       "hotkeyRecording": "Appuyez sur un modificateur + une touche...",
       "onAir": "À l'antenne",
+      "footswitchStatus": "Pédale {port} via {line}",
       "whisper": "Chuchotement",
       "whisperGroupTitle": "Chuchoter à un autre opérateur",
       "whisperHint": "Maintenez la touche de chuchotement pour parler dans un autre canal sans quitter le vôtre. Choisissez le canal cible, puis définissez une touche (un modificateur plus une lettre) différente du raccourci PTT.",

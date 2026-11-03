@@ -2599,29 +2599,23 @@ async function applySavedPttConfigOnConnect(host: string, port: number): Promise
       await invoke("set_ptt_config", { config, serverId: undefined }).catch(() => {});
     }
 
-    const shortcuts = await import("./pages/settings/shortcutHelpers");
-
-    // Register the operator software-PTT hotkey app-wide so it works anywhere,
-    // not only while the Voice settings panel (which also registers it) is
-    // open. This is INDEPENDENT of serial PTT (`saved.enabled`): the hotkey
-    // opens the Mumble mic and keys the remote station via the `operator_ptt`
-    // command whether or not a serial rig controller is in use. Requiring
-    // `saved.enabled` here was a bug that left keyboard-only operators with a
-    // dead PTT hotkey.
-    if (role === "operator" && saved.ptt_hotkey) {
-      await shortcuts.applyOperatorPttShortcut(saved.ptt_hotkey);
-      activeOperatorHotkey = saved.ptt_hotkey;
-      console.info("[store] registered operator PTT hotkey on connect", { hotkey: saved.ptt_hotkey });
-    }
-
-    // Register the operator Whisper hotkey app-wide (independent of serial PTT).
-    if (role === "operator" && saved.whisper_hotkey && saved.whisper_target_channel != null) {
-      await shortcuts.applyWhisperShortcut(saved.whisper_hotkey);
-      activeWhisperHotkey = saved.whisper_hotkey;
-      useAppStore.setState({ whisperTargetChannel: saved.whisper_target_channel });
-      console.info("[store] registered whisper hotkey on connect", {
-        hotkey: saved.whisper_hotkey,
-        target: saved.whisper_target_channel,
+    // Register the operator PTT + whisper hotkeys app-wide through the single
+    // owner (syncOperatorHotkeys) so they work anywhere, not only while the
+    // Voice/Operator panels are open, and so the three former registration
+    // sites can't desync each other. INDEPENDENT of serial PTT (`saved.enabled`):
+    // the hotkey opens the Mumble mic and keys the remote via `operator_ptt`
+    // whether or not a serial rig controller is in use. A Station has no
+    // operator hotkeys.
+    if (role === "operator") {
+      await syncOperatorHotkeys(
+        saved.ptt_hotkey ?? null,
+        saved.whisper_hotkey ?? null,
+        saved.whisper_target_channel ?? null,
+      );
+      console.info("[store] synced operator hotkeys on connect", {
+        ptt: saved.ptt_hotkey ?? null,
+        whisper: saved.whisper_hotkey ?? null,
+        target: saved.whisper_target_channel ?? null,
       });
     }
   } catch (e) {
@@ -2650,6 +2644,70 @@ async function clearOperatorHotkeyOnDisconnect(): Promise<void> {
     try { await clearGlobalShortcut(hk); } catch (e) { console.warn("[store] clear whisper hotkey:", e); }
   }
   useAppStore.setState({ whisperTargetChannel: null, whisperActive: false });
+}
+
+/** Serialises concurrent syncOperatorHotkeys calls so two rapid config edits
+ *  can't interleave register/unregister and desync the OS registration. */
+let hotkeySyncChain: Promise<void> = Promise.resolve();
+
+/**
+ * SINGLE OWNER of the operator PTT + whisper global-hotkey registration.
+ *
+ * Previously three places registered these same accelerators (connect in
+ * store.ts, the PttPanel useEffect, and the OperatorControlHead useEffect).
+ * Because each did isRegistered->unregister->register on its own, whichever
+ * component unmounted or re-ran its effect would tear the OS registration out
+ * from under the others, leaving the hotkey half-registered or dead. This
+ * function is the only path that touches the registration: callers just pass
+ * the desired state and it diffs against what is currently registered,
+ * (un)registering ONLY on an actual change. Calls are serialised so rapid
+ * edits can't interleave.
+ *
+ * @param pttHotkey      desired operator PTT accelerator, or null/"" to clear.
+ * @param whisperHotkey  desired whisper accelerator, or null/"" to clear.
+ * @param whisperTarget  whisper target channel id; whisper only registers when
+ *                       both a hotkey and a target are set.
+ */
+export function syncOperatorHotkeys(
+  pttHotkey: string | null,
+  whisperHotkey: string | null,
+  whisperTarget: number | null,
+): Promise<void> {
+  hotkeySyncChain = hotkeySyncChain.then(async () => {
+    const shortcuts = await import("./pages/settings/shortcutHelpers");
+    const desiredPtt = pttHotkey || null;
+    const desiredWhisper = whisperHotkey && whisperTarget != null ? whisperHotkey : null;
+
+    // --- PTT ---
+    if (activeOperatorHotkey !== desiredPtt) {
+      if (activeOperatorHotkey) {
+        try { await shortcuts.clearGlobalShortcut(activeOperatorHotkey); } catch { /* ignore */ }
+      }
+      activeOperatorHotkey = desiredPtt;
+      if (desiredPtt) {
+        try { await shortcuts.applyOperatorPttShortcut(desiredPtt); } catch (e) {
+          console.warn("[store] register PTT hotkey:", e);
+        }
+      }
+    }
+
+    // --- Whisper ---
+    if (activeWhisperHotkey !== desiredWhisper) {
+      if (activeWhisperHotkey) {
+        try { await shortcuts.clearGlobalShortcut(activeWhisperHotkey); } catch { /* ignore */ }
+      }
+      activeWhisperHotkey = desiredWhisper;
+      if (desiredWhisper) {
+        try { await shortcuts.applyWhisperShortcut(desiredWhisper); } catch (e) {
+          console.warn("[store] register whisper hotkey:", e);
+        }
+      }
+    }
+    if (whisperTarget != null) {
+      useAppStore.setState({ whisperTargetChannel: whisperTarget });
+    }
+  }).catch((e) => console.warn("[store] syncOperatorHotkeys failed:", e));
+  return hotkeySyncChain;
 }
 
 /**

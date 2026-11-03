@@ -24,14 +24,9 @@ import type {
 } from "../../types";
 import { Toggle, SliderField } from "./SharedControls";
 import { KeyIcon, MegaphoneIcon } from "../../icons";
-import { useAppStore } from "../../store";
+import { useAppStore, syncOperatorHotkeys } from "../../store";
 import { savePttConfig } from "../../preferencesStorage";
-import {
-  eventToShortcut,
-  applyOperatorPttShortcut,
-  applyWhisperShortcut,
-  clearGlobalShortcut,
-} from "./shortcutHelpers";
+import { eventToShortcut } from "./shortcutHelpers";
 import styles from "./SettingsPage.module.css";
 
 /** Default config used until the backend value loads. */
@@ -126,37 +121,23 @@ export function PttPanel({
   const channels = useAppStore((s) => s.channels);
   const ownChannel = useAppStore((s) => s.currentChannel);
 
-  // Register (or clear) the global hotkey whenever it changes. Usable whenever
-  // an operator has a hotkey set — INDEPENDENT of serial PTT (`config.enabled`):
-  // the hotkey opens the Mumble mic and keys the remote via `operator_ptt`
-  // regardless of whether a serial rig controller is in use. (Previously gated
-  // on `config.enabled`, which left keyboard-only operators with a dead hotkey.)
+  // Hotkey registration is owned SOLELY by the store (syncOperatorHotkeys).
+  // This panel only edits the config and reports the desired state to the
+  // owner, so it never fights the connect-time registration or the
+  // OperatorControlHead for the same accelerator. INDEPENDENT of serial PTT
+  // (`config.enabled`): the hotkey opens the Mumble mic and keys the remote via
+  // `operator_ptt` whether or not a serial rig controller is in use.
   const hotkey = config.ptt_hotkey ?? "";
-  const hotkeyActive = showOperatorPtt && hotkey !== "";
-  useEffect(() => {
-    if (hotkeyActive) {
-      void applyOperatorPttShortcut(hotkey);
-      return () => {
-        void clearGlobalShortcut(hotkey);
-      };
-    }
-    return undefined;
-  }, [hotkeyActive, hotkey]);
-
-  // Register (or clear) the whisper hotkey. Usable when an operator has both a
-  // hotkey and a target channel set. Independent of serial-PTT enabled/mode.
   const whisperHotkey = config.whisper_hotkey ?? "";
-  const whisperActive =
-    showWhisper && whisperHotkey !== "" && config.whisper_target_channel != null;
+  const whisperTargetChannel = config.whisper_target_channel ?? null;
   useEffect(() => {
-    if (whisperActive) {
-      void applyWhisperShortcut(whisperHotkey);
-      return () => {
-        void clearGlobalShortcut(whisperHotkey);
-      };
-    }
-    return undefined;
-  }, [whisperActive, whisperHotkey]);
+    // Only an operator in PTT mode drives the PTT hotkey; whisper is any
+    // operator. A Station has none. Pass null for anything not applicable so
+    // the owner unregisters it.
+    const desiredPtt = showOperatorPtt ? hotkey || null : null;
+    const desiredWhisper = showWhisper ? whisperHotkey || null : null;
+    void syncOperatorHotkeys(desiredPtt, desiredWhisper, whisperTargetChannel);
+  }, [showOperatorPtt, showWhisper, hotkey, whisperHotkey, whisperTargetChannel]);
 
   // Load the backend config + port list on mount / server change.
   useEffect(() => {
@@ -264,8 +245,12 @@ export function PttPanel({
           {/* Control line. A Station always shows its key-output line. An
               Operator's footswitch sense line is only meaningful when it is
               actually gating transmit, i.e. Push-to-Talk mode. */}
-          {(isStation || showOperatorPtt) && (
-            <>
+          {/* The footswitch sense line (operator) / key-output line (station)
+              is a HARDWARE wiring choice tied to the serial port, so show it
+              whenever serial PTT is enabled - independent of the software
+              activation mode. A footswitch on CTS/DSR/CD/RI is equally valid
+              whether the operator is in VOX, Continuous, or PTT. */}
+          <>
               <h4 className={styles.groupTitle}>
                 {isStation ? tStr("ptt.keyLine") : tStr("ptt.senseLine")}
               </h4>
@@ -291,7 +276,6 @@ export function PttPanel({
                 />
               </div>
             </>
-          )}
 
           {/* Operator software PTT hotkey (Push-to-Talk mode only). Held, it
               opens the Mumble mic and keys the remote station deterministically. */}
@@ -323,8 +307,7 @@ export function PttPanel({
                     className={styles.ghostBtn}
                     onClick={() => {
                       if (hotkey) {
-                        // Clear.
-                        void clearGlobalShortcut(hotkey);
+                        // Clear via config; the store (sole owner) unregisters.
                         patch({ ptt_hotkey: null });
                       } else {
                         setRecording(true);
@@ -465,7 +448,6 @@ export function PttPanel({
                 className={styles.ghostBtn}
                 onClick={() => {
                   if (whisperHotkey) {
-                    void clearGlobalShortcut(whisperHotkey);
                     patch({ whisper_hotkey: null });
                     setWhisperError(null);
                   } else {

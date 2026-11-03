@@ -3,16 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import { ActivityIcon, AudioWaveformIcon, KeyboardIcon, KeyIcon, MegaphoneIcon } from "../../icons";
-import { useAppStore, sendRightChannelSource } from "../../store";
+import { useAppStore, sendRightChannelSource, syncOperatorHotkeys } from "../../store";
 import { useAnyPeerHasSecondRadio } from "../../stationIdentity";
 import type { AudioSettings, PttConfig, RightChannelSource, StereoMode, TransmitMode } from "../../types";
 import { savePttConfig } from "../../preferencesStorage";
-import {
-  eventToShortcut,
-  applyOperatorPttShortcut,
-  applyWhisperShortcut,
-  clearGlobalShortcut,
-} from "../../pages/settings/shortcutHelpers";
+import { eventToShortcut } from "../../pages/settings/shortcutHelpers";
 import styles from "./OperatorControlHead.module.css";
 
 /**
@@ -129,25 +124,15 @@ export default function OperatorControlHead({ serverId, serverKey, variant = "ba
 
   const pttHotkey = config?.ptt_hotkey ?? "";
   const whisperHotkey = config?.whisper_hotkey ?? "";
+  const whisperTarget = config?.whisper_target_channel ?? null;
 
-  // Register / clear the operator PTT hotkey live, mirroring PttPanel.
+  // Hotkey registration is owned SOLELY by the store (syncOperatorHotkeys);
+  // this panel only EDITS the config and tells the owner the desired state, so
+  // it never fights the connect-time registration or the PttPanel for the same
+  // accelerator. The owner diffs and (un)registers only on a real change.
   useEffect(() => {
-    if (pttHotkey) {
-      void applyOperatorPttShortcut(pttHotkey);
-      return () => { void clearGlobalShortcut(pttHotkey); };
-    }
-    return undefined;
-  }, [pttHotkey]);
-
-  // Register / clear the whisper hotkey live (needs a target channel too).
-  const whisperReady = whisperHotkey !== "" && config?.whisper_target_channel != null;
-  useEffect(() => {
-    if (whisperReady) {
-      void applyWhisperShortcut(whisperHotkey);
-      return () => { void clearGlobalShortcut(whisperHotkey); };
-    }
-    return undefined;
-  }, [whisperReady, whisperHotkey]);
+    void syncOperatorHotkeys(pttHotkey || null, whisperHotkey || null, whisperTarget);
+  }, [pttHotkey, whisperHotkey, whisperTarget]);
 
   // --- Stereo playback controls (operator output side) ---------------
   // "Stereo" indicator reflects whether the INCOMING stream is actually
@@ -325,7 +310,8 @@ export default function OperatorControlHead({ serverId, serverKey, variant = "ba
             className={styles.hkBtn}
             onClick={() => {
               if (pttHotkey) {
-                void clearGlobalShortcut(pttHotkey);
+                // Clearing the config triggers the sync effect, which the store
+                // (sole owner) uses to unregister the OS hotkey.
                 patchConfig({ ptt_hotkey: null });
               } else {
                 setRecordingPtt(true);
@@ -336,8 +322,24 @@ export default function OperatorControlHead({ serverId, serverKey, variant = "ba
             {pttHotkey ? tAudio("ptt.clearHotkey") : tAudio("ptt.setHotkey")}
           </button>
         )}
-        {pttHotkey && !recordingPtt && <span className={styles.keys}>{pttHotkey}</span>}
+        {/* In bar mode the key chip stays inline; in panel mode it drops to its
+            own line (below) so a long combo like "Alt+G" is never clipped. */}
+        {!isPanel && pttHotkey && !recordingPtt && (
+          <span className={styles.keys}>{pttHotkey}</span>
+        )}
       </div>
+      {/* Panel mode: the set hotkey on its own line below the Set/Clear button,
+          then the footswitch status line when a serial footswitch is enabled. */}
+      {isPanel && pttHotkey && !recordingPtt && (
+        <span className={`${styles.keys} ${styles.keysBlock}`}>{pttHotkey}</span>
+      )}
+      {isPanel && config.enabled && config.port && (
+        <span className={styles.footswitchLine}>
+          {tAudio("ptt.footswitchStatus")
+            .replace("{port}", config.port)
+            .replace("{line}", config.line.toUpperCase())}
+        </span>
+      )}
      </Group>
 
      <Group title={tAudio("ptt.whisperGroupTitle")}>
@@ -372,7 +374,6 @@ export default function OperatorControlHead({ serverId, serverKey, variant = "ba
             className={styles.hkBtn}
             onClick={() => {
               if (whisperHotkey) {
-                void clearGlobalShortcut(whisperHotkey);
                 patchConfig({ whisper_hotkey: null });
                 setWhisperError(null);
               } else {

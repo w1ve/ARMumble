@@ -88,6 +88,7 @@
       "clearHotkey": "Clear PTT Hotkey",
       "hotkeyRecording": "Press a modifier + key...",
       "onAir": "On Air",
+      "footswitchStatus": "FootSwitch {port} via {line}",
       "whisper": "Whisper",
       "whisperGroupTitle": "Whisper to Another Operator",
       "whisperHint": "Hold the whisper key to speak into another channel without leaving yours. Pick the target channel, then set a key (a modifier plus a letter) that differs from the PTT hotkey.",

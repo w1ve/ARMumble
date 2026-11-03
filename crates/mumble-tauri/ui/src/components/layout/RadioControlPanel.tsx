@@ -8,7 +8,7 @@ import {
   MicOffIcon,
 } from "../../icons";
 import { useAppStore, resolveRoleForServer } from "../../store";
-import type { AudioDevice, AudioSettings, ClientRole } from "../../types";
+import type { AudioDevice, AudioSettings, ClientRole, TransmitMode } from "../../types";
 import { InputLevelMeter, OutputLevelMeter } from "../audio/LevelMeter";
 import { DeviceSelect, type DeviceValue } from "../audio/DeviceSelect";
 import OperatorControlHead from "./OperatorControlHead";
@@ -41,6 +41,8 @@ export default function RadioControlPanel() {
   const toggleMute = useAppStore((s) => s.toggleMute);
   const toggleDeafen = useAppStore((s) => s.toggleDeafen);
   const currentChannel = useAppStore((s) => s.currentChannel);
+  const ownSession = useAppStore((s) => s.ownSession);
+  const talkingSessions = useAppStore((s) => s.talkingSessions);
 
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeServerId),
@@ -106,6 +108,24 @@ export default function RadioControlPanel() {
   const isOperator = role === "operator";
   const isStation = role === "station";
 
+  // ON-AIR: is THIS client transmitting right now?
+  //  - Continuous: always, while voice is active (the mic is permanently open).
+  //  - VOX: while the voice gate is actually passing audio.
+  //  - PTT: while the key/footswitch is held.
+  // VOX and PTT both surface through `talkingSessions` (the backend emits
+  // user-talking for our own session as the gate/key opens and closes); a
+  // Station is always-on air while active. Continuous is forced true so a
+  // momentary gap in the talking event can't blink the indicator off.
+  const effectiveMode: TransmitMode | undefined = audio
+    ? audio.transmit_mode === "voice_activity" && audio.push_to_talk
+      ? "push_to_talk"
+      : audio.transmit_mode
+    : undefined;
+  const selfTalking = ownSession != null && talkingSessions.has(ownSession);
+  const onAir =
+    isActive &&
+    ((effectiveMode === "continuous" || isStation) ? true : selfTalking);
+
   // Role-based device labels (mirrors AudioPanel).
   const inputLabel = isStation
     ? tAudio("radioAudioDevice")
@@ -149,6 +169,11 @@ export default function RadioControlPanel() {
               </button>
             )}
             <span className={styles.levelLabel}>{inputLabel}</span>
+            {onAir && (
+              <span className={styles.onAir} aria-label={tAudio("ptt.onAir")}>
+                <span className={styles.onAirDot} /> {tAudio("ptt.onAir")}
+              </span>
+            )}
           </div>
           <InputLevelMeter className={styles.meter} />
           <label className={styles.sliderRow}>

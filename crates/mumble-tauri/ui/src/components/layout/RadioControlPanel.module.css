@@ -49,6 +49,38 @@
   white-space: nowrap;
 }
 
+/* ON-AIR indicator: small red, pulsing dot, sits right of the mic label. */
+.onAir {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-danger, #ff4d4f);
+}
+
+.onAirDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-danger, #ff4d4f);
+  box-shadow: 0 0 6px var(--color-danger, #ff4d4f);
+  animation: onAirPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes onAirPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onAirDot { animation: none; }
+}
+
 .toggle {
   width: 40px;
   height: 40px;

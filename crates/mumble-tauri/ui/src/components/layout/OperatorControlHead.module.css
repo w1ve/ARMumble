@@ -290,3 +290,22 @@
 .headPanel .panLabel {
   font-size: 13px;
 }
+
+/* Panel PTT group: the set hotkey on its own line (so it is never clipped),
+   and the footswitch status line beneath it. */
+.keysBlock {
+  /* flex-basis:100% forces this onto its own line within the wrapping group
+     body, directly below the Set/Clear button, so a long combo is never
+     clipped by the button beside it. */
+  flex: 0 0 100%;
+  width: max-content;
+  max-width: 100%;
+  font-size: 14px;
+  padding: 5px 10px;
+}
+
+.footswitchLine {
+  flex: 0 0 100%;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
