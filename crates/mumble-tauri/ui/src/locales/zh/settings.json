@@ -90,6 +90,8 @@
       "onAir": "发射中",
       "holdToTransmit": "按住发射",
       "holdToWhisper": "按住私语",
+      "devicesSection": "音频设备",
+      "transmitSection": "发射",
       "footswitchStatus": "脚踏开关 {port} 经 {line}",
       "whisper": "私语",
       "whisperGroupTitle": "私语给另一位操作员",

@@ -90,6 +90,8 @@
       "onAir": "À l'antenne",
       "holdToTransmit": "Maintenir pour émettre",
       "holdToWhisper": "Maintenir pour chuchoter",
+      "devicesSection": "Périphériques audio",
+      "transmitSection": "Émission",
       "footswitchStatus": "Pédale {port} via {line}",
       "whisper": "Chuchotement",
       "whisperGroupTitle": "Chuchoter à un autre opérateur",

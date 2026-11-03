@@ -6,6 +6,7 @@ import { ActivityIcon, KeyboardIcon, MegaphoneIcon, MicIcon } from "../../icons"
 import { useAppStore } from "../../store";
 import type { AudioSettings, PttConfig, StereoMode, TransmitMode } from "../../types";
 import { savePttConfig } from "../../preferencesStorage";
+import Collapsible from "./Collapsible";
 import styles from "./MobileRadioControls.module.css";
 
 /**
@@ -205,9 +206,8 @@ export default function MobileRadioControls({ serverId, serverKey }: Props) {
 
   return (
     <div className={styles.root}>
-      {/* Transmit mode: VOX | PTT */}
-      <div className={styles.section}>
-        <h4 className={styles.sectionTitle}>{tAudio("activationMode")}</h4>
+      {/* TRANSMIT fold - open by default (the one control a ham needs fast). */}
+      <Collapsible title={tAudio("transmitSection")} storageKey="mobile-transmit" defaultOpen>
         <div className={styles.segmented} role="radiogroup" aria-label={tAudio("activationMode")}>
           {MODE_PATCHES.map((m) => {
             const active = mode === m.value;
@@ -227,26 +227,24 @@ export default function MobileRadioControls({ serverId, serverKey }: Props) {
             );
           })}
         </div>
-      </div>
+        {/* Press-and-hold TRANSMIT (PTT mode only) */}
+        {isPtt && (
+          <button
+            type="button"
+            className={`${styles.holdBtn} ${styles.holdPtt} ${pttHeld ? styles.holdActive : ""}`}
+            onPointerDown={pttDown}
+            onPointerUp={pttUp}
+            onPointerCancel={pttUp}
+            aria-pressed={pttHeld}
+          >
+            <MicIcon width={22} height={22} />
+            <span>{pttHeld ? tAudio("ptt.onAir") : tAudio("ptt.holdToTransmit")}</span>
+          </button>
+        )}
+      </Collapsible>
 
-      {/* Press-and-hold TRANSMIT (PTT mode only) */}
-      {isPtt && (
-        <button
-          type="button"
-          className={`${styles.holdBtn} ${styles.holdPtt} ${pttHeld ? styles.holdActive : ""}`}
-          onPointerDown={pttDown}
-          onPointerUp={pttUp}
-          onPointerCancel={pttUp}
-          aria-pressed={pttHeld}
-        >
-          <MicIcon width={22} height={22} />
-          <span>{pttHeld ? tAudio("ptt.onAir") : tAudio("ptt.holdToTransmit")}</span>
-        </button>
-      )}
-
-      {/* Whisper: hold button + target channel */}
-      <div className={styles.section}>
-        <h4 className={styles.sectionTitle}>{tAudio("ptt.whisperGroupTitle")}</h4>
+      {/* WHISPER fold - collapsed by default. */}
+      <Collapsible title={tAudio("ptt.whisperGroupTitle")} storageKey="mobile-whisper" defaultOpen={false}>
         <select
           className={styles.select}
           value={whisperTarget ?? ""}
@@ -274,16 +272,13 @@ export default function MobileRadioControls({ serverId, serverKey }: Props) {
           <MegaphoneIcon width={20} height={20} />
           <span>{tAudio("ptt.holdToWhisper")}</span>
         </button>
-      </div>
+      </Collapsible>
 
-      {/* Stereo */}
-      <div className={styles.section}>
-        <h4 className={styles.sectionTitle}>
-          {tAudio("stereo.modeLabel")}
-          <span className={`${styles.badge} ${incomingStereo ? styles.badgeOn : ""}`}>
-            {tAudio("stereo.label")}
-          </span>
-        </h4>
+      {/* STEREO fold - collapsed by default. */}
+      <Collapsible title={tAudio("stereo.modeLabel")} storageKey="mobile-stereo" defaultOpen={false}>
+        <span className={`${styles.badge} ${incomingStereo ? styles.badgeOn : ""}`}>
+          {tAudio("stereo.label")}
+        </span>
         <div className={styles.segmented} role="radiogroup" aria-label={tAudio("stereo.modeLabel")}>
           <button
             type="button"
@@ -328,7 +323,7 @@ export default function MobileRadioControls({ serverId, serverKey }: Props) {
             />
           </div>
         </div>
-      </div>
+      </Collapsible>
     </div>
   );
 }

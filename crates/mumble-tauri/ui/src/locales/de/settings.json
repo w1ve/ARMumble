@@ -90,6 +90,8 @@
       "onAir": "Auf Sendung",
       "holdToTransmit": "Zum Senden halten",
       "holdToWhisper": "Zum Flüstern halten",
+      "devicesSection": "Audiogeräte",
+      "transmitSection": "Senden",
       "footswitchStatus": "Fußschalter {port} über {line}",
       "whisper": "Flüstern",
       "whisperGroupTitle": "Einem anderen Operator zuflüstern",

@@ -13,6 +13,7 @@ import { InputLevelMeter, OutputLevelMeter } from "../audio/LevelMeter";
 import { DeviceSelect, type DeviceValue } from "../audio/DeviceSelect";
 import OperatorControlHead from "./OperatorControlHead";
 import MobileRadioControls from "./MobileRadioControls";
+import Collapsible from "./Collapsible";
 import styles from "./RadioControlPanel.module.css";
 
 /**
@@ -150,11 +151,12 @@ export default function RadioControlPanel({ mobile = false }: { readonly mobile?
     return <div className={`${styles.panel} ${mobile ? styles.panelMobile : ""}`} />;
   }
 
-  return (
-    <div className={`${styles.panel} ${mobile ? styles.panelMobile : ""}`}>
-      {/* --- Top row: input (mic/radio) and output (headphone) clusters --- */}
-      <div className={styles.levelRow}>
-        {/* INPUT cluster */}
+  // On mobile the two device cards become a single collapsible "Devices" fold
+  // (collapsed by default) so the channel/operator list is the primary surface;
+  // on desktop they render inline as before.
+  const levelRow = (
+    <div className={styles.levelRow}>
+      {/* INPUT cluster */}
         <section className={styles.levelCard}>
           <div className={styles.levelHead}>
             {/* Station has nothing to mute (it's a radio, always TX). */}
@@ -243,15 +245,28 @@ export default function RadioControlPanel({ mobile = false }: { readonly mobile?
             ariaLabel={outputLabel}
           />
         </section>
-      </div>
+    </div>
+  );
 
-      {/* --- Operator live controls --- */}
-      {isOperator &&
-        (mobile ? (
-          <MobileRadioControls serverId={serverId} serverKey={serverKey} />
-        ) : (
-          <OperatorControlHead serverId={serverId} serverKey={serverKey} variant="panel" />
-        ))}
+  return (
+    <div className={`${styles.panel} ${mobile ? styles.panelMobile : ""}`}>
+      {mobile ? (
+        <>
+          {/* Devices fold (collapsed by default). */}
+          <Collapsible title={tAudio("devicesSection")} storageKey="mobile-devices" defaultOpen={false}>
+            {levelRow}
+          </Collapsible>
+          {/* Transmit / Whisper / Stereo folds (Transmit open by default). */}
+          {isOperator && <MobileRadioControls serverId={serverId} serverKey={serverKey} />}
+        </>
+      ) : (
+        <>
+          {levelRow}
+          {isOperator && (
+            <OperatorControlHead serverId={serverId} serverKey={serverKey} variant="panel" />
+          )}
+        </>
+      )}
     </div>
   );
 }

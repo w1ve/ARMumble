@@ -90,6 +90,8 @@
       "onAir": "On Air",
       "holdToTransmit": "Hold to Transmit",
       "holdToWhisper": "Hold to Whisper",
+      "devicesSection": "Audio Devices",
+      "transmitSection": "Transmit",
       "footswitchStatus": "FootSwitch {port} via {line}",
       "whisper": "Whisper",
       "whisperGroupTitle": "Whisper to Another Operator",
