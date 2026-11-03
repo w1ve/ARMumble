@@ -71,8 +71,10 @@ pub struct RodioCapture {
 }
 
 /// Right-channel source values shared with the capture thread via an atomic.
-pub const RIGHT_SOURCE_RADIO1: u8 = 0;
-pub const RIGHT_SOURCE_RADIO2: u8 = 1;
+/// Canonical definitions live in the platform-neutral `audio` module so the
+/// session layer can use them on Android too; re-exported here for the
+/// desktop capture code that references them locally.
+pub use super::{RIGHT_SOURCE_RADIO1, RIGHT_SOURCE_RADIO2};
 
 impl RodioCapture {
     pub fn new(

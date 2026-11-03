@@ -44,6 +44,15 @@ pub(crate) mod scope;
 #[cfg(target_os = "android")]
 mod android;
 
+// -- Dual-radio right-channel source (platform-neutral) --------------
+
+/// Right-channel source values shared with a dual-radio Station capture via an
+/// atomic `AtomicU8`. Defined here (not in the desktop-only `rodio_desktop`
+/// module) so the cross-platform session layer can reference them on every
+/// target, including Android where the capture backend is Oboe.
+pub const RIGHT_SOURCE_RADIO1: u8 = 0;
+pub const RIGHT_SOURCE_RADIO2: u8 = 1;
+
 // -- Backend selection (desktop only) --------------------------------
 
 /// When `true`, the rodio backend is used; when `false`, the legacy
@@ -107,6 +116,27 @@ pub trait AudioDeviceFactory {
         _stereo: bool,
     ) -> std::result::Result<Box<dyn AudioCapture>, String> {
         Self::create_capture(device_name, frame_size, volume)
+    }
+
+    /// Create a dual-radio Station capture: radio 1 on `device_name`, radio 2
+    /// on `device_name_2`, interleaved stereo with a live-switchable
+    /// `right_source` atomic. The desktop rodio backend overrides this with a
+    /// true dual-device capture; the default here falls back to normal stereo
+    /// capture of the first device, so backends without a dual-radio path
+    /// (cpal, Android/Oboe) still compile and run (single-radio stereo).
+    ///
+    /// Desktop resolves the inherent `PlatformAudioFactory::create_capture_dual`
+    /// (which wins over this trait default), so this body is only reached on
+    /// Android — hence `dead_code` on desktop builds.
+    #[allow(dead_code, reason = "used only by the Android/Oboe factory via the trait default")]
+    fn create_capture_dual(
+        device_name: Option<&str>,
+        _device_name_2: Option<&str>,
+        frame_size: usize,
+        volume: Arc<AtomicU32>,
+        _right_source: Arc<std::sync::atomic::AtomicU8>,
+    ) -> std::result::Result<Box<dyn AudioCapture>, String> {
+        Self::create_capture_channels(device_name, frame_size, volume, true)
     }
 
     /// Create a mixing playback device that reads from per-speaker

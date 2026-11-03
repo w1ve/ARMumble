@@ -147,10 +147,10 @@ impl AppState {
             if let Some(ref rs) = state.audio.right_source_control {
                 let v = match settings.right_channel_source {
                     crate::state::types::RightChannelSource::Radio2 => {
-                        crate::audio::rodio_desktop::RIGHT_SOURCE_RADIO2
+                        crate::audio::RIGHT_SOURCE_RADIO2
                     }
                     crate::state::types::RightChannelSource::Radio1 => {
-                        crate::audio::rodio_desktop::RIGHT_SOURCE_RADIO1
+                        crate::audio::RIGHT_SOURCE_RADIO1
                     }
                 };
                 rs.store(v, Ordering::Relaxed);
@@ -704,10 +704,10 @@ mod voice_pipeline {
                 let right_source = Arc::new(std::sync::atomic::AtomicU8::new(
                     match audio_settings.right_channel_source {
                         crate::state::types::RightChannelSource::Radio2 => {
-                            crate::audio::rodio_desktop::RIGHT_SOURCE_RADIO2
+                            crate::audio::RIGHT_SOURCE_RADIO2
                         }
                         crate::state::types::RightChannelSource::Radio1 => {
-                            crate::audio::rodio_desktop::RIGHT_SOURCE_RADIO1
+                            crate::audio::RIGHT_SOURCE_RADIO1
                         }
                     },
                 ));
