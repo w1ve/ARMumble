@@ -89,6 +89,7 @@
       "hotkeyRecording": "请按 修饰键 + 按键……",
       "onAir": "发射中",
       "whisper": "私语",
+      "whisperGroupTitle": "私语给另一位操作员",
       "whisperHint": "按住私语键即可在不离开当前频道的情况下向另一个频道讲话。请先选择目标频道，再设置一个与 PTT 热键不同的按键（修饰键加字母）。",
       "whisperNoTarget": "（无目标频道）",
       "whisperSetHotkey": "设置私语热键",

@@ -236,7 +236,13 @@ export default function OperatorControlHead({ serverId, serverKey, variant = "ba
   }, []);
 
   // Stereo controls are only meaningful on an actual stereo stream.
-  const stereoControlsEnabled = incomingStereo;
+  // The stereo RENDERING controls (Mix/LR, Swap, Pan) are output preferences
+  // and must always be settable, even during silence - a ham sets them up
+  // before traffic arrives. They are NOT gated on whether a stereo stream is
+  // flowing right now. The live "Stereo" badge still reflects the real stream
+  // state as an indicator, and the Radio 1/2 source toggle still depends on a
+  // peer Station actually advertising a second radio.
+  const stereoControlsEnabled = true;
 
   if (!audio || !config) return null;
 
@@ -244,9 +250,21 @@ export default function OperatorControlHead({ serverId, serverKey, variant = "ba
   // In panel mode each logical cluster is wrapped in a labeled group card;
   // in bar mode `Group` is a transparent pass-through so the original slim
   // single-row flow is unchanged.
-  const Group = ({ title, children }: { title: string; children: React.ReactNode }) =>
+  const Group = ({
+    title,
+    size,
+    children,
+  }: {
+    title: string;
+    size?: "wide" | "narrow";
+    children: React.ReactNode;
+  }) =>
     isPanel ? (
-      <section className={styles.group}>
+      <section
+        className={`${styles.group} ${
+          size === "wide" ? styles.groupWide : size === "narrow" ? styles.groupNarrow : ""
+        }`}
+      >
         <h4 className={styles.groupTitle}>{title}</h4>
         <div className={styles.groupBody}>{children}</div>
       </section>
@@ -256,7 +274,7 @@ export default function OperatorControlHead({ serverId, serverKey, variant = "ba
 
   return (
     <div className={`${styles.head} ${isPanel ? styles.headPanel : ""}`}>
-     <Group title={tAudio("activationMode")}>
+     <Group title={tAudio("activationMode")} size="wide">
       {/* Transmit mode: VOX | Continuous | PTT */}
       <div className={styles.segmented} role="radiogroup" aria-label={tAudio("activationMode")}>
         {MODE_PATCHES.map((m) => {
@@ -280,7 +298,7 @@ export default function OperatorControlHead({ serverId, serverKey, variant = "ba
       </div>
      </Group>
 
-     <Group title={tAudio("ptt.hotkey")}>
+     <Group title={tAudio("ptt.hotkey")} size="narrow">
       {/* PTT hotkey set/unset + keystrokes */}
       <div className={styles.hotkeyGroup}>
         <KeyIcon width={13} height={13} className={styles.groupIcon} />
@@ -322,7 +340,7 @@ export default function OperatorControlHead({ serverId, serverKey, variant = "ba
       </div>
      </Group>
 
-     <Group title={tAudio("ptt.whisper")}>
+     <Group title={tAudio("ptt.whisperGroupTitle")}>
       {/* Whisper hotkey set/unset + keystrokes */}
       <div className={styles.hotkeyGroup}>
         <MegaphoneIcon width={13} height={13} className={styles.groupIcon} />

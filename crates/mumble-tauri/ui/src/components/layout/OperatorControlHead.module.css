@@ -188,8 +188,8 @@
    =================================================================== */
 
 .headPanel {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 14px;
   align-items: stretch;
   width: 100%;
@@ -204,6 +204,20 @@
   border: 1px solid var(--color-glass-border);
   border-radius: var(--radius-md);
   min-width: 0;
+  /* Default: medium group, may grow, wraps when the row is full. */
+  flex: 1 1 240px;
+}
+
+/* Activation Mode holds three labeled segmented buttons - it needs the most
+   room so "Voice Activation (VOX) | Continuous | Push to Talk" never spills
+   past the card edge into the next group. */
+.groupWide {
+  flex: 2 1 380px;
+}
+
+/* PTT Hotkey is a single set/clear button plus the key chip - keep it tight. */
+.groupNarrow {
+  flex: 0 1 220px;
 }
 
 .groupTitle {
@@ -221,6 +235,14 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
+  overflow: hidden;
+}
+
+/* In a panel group the segmented control may wrap onto a second line rather
+   than spill past the card edge into the neighbouring group. */
+.headPanel .segmented {
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 /* Scale the shared controls up inside a panel group. */

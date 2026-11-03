@@ -89,6 +89,7 @@
       "hotkeyRecording": "Press a modifier + key...",
       "onAir": "On Air",
       "whisper": "Whisper",
+      "whisperGroupTitle": "Whisper to Another Operator",
       "whisperHint": "Hold the whisper key to speak into another channel without leaving yours. Pick the target channel, then set a key (a modifier plus a letter) that differs from the PTT hotkey.",
       "whisperNoTarget": "(no target channel)",
       "whisperSetHotkey": "Set Whisper Hotkey",

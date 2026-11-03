@@ -89,6 +89,7 @@
       "hotkeyRecording": "Modifikator + Taste drücken...",
       "onAir": "Auf Sendung",
       "whisper": "Flüstern",
+      "whisperGroupTitle": "Einem anderen Operator zuflüstern",
       "whisperHint": "Halte die Flüstertaste, um in einen anderen Kanal zu sprechen, ohne deinen zu verlassen. Wähle den Zielkanal und lege dann eine Taste fest (Modifikator plus Buchstabe), die sich von der PTT-Taste unterscheidet.",
       "whisperNoTarget": "(kein Zielkanal)",
       "whisperSetHotkey": "Flüstertaste festlegen",
