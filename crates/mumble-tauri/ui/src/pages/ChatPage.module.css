@@ -97,27 +97,36 @@
   overflow: hidden;
 }
 
-/* Channels at the top. Bounded so the audio controls always stay visible;
-   the channel list scrolls within this region. */
+/* Channels at the top. Given a firm flex share of the stack height (not just
+   max-height) so the inner channel list actually has a bounded box to scroll
+   inside - otherwise the sidebar grows to its content height and pushes the
+   audio controls off-screen. */
 .mobileChannels {
-  flex: 0 1 auto;
-  max-height: 38%;
-  min-height: 120px;
+  flex: 1 1 0;
+  min-height: 110px;
+  max-height: 40%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border-bottom: 1px solid var(--color-glass-border);
 }
 
+/* The ChannelSidebar <aside> has a fixed desktop width and is a column with
+   header + scrollable .channelList + self row. Make it fill the mobile region
+   at full width and a definite height so its internal overflow-y:auto engages
+   and the channel list scrolls while the self row stays pinned. */
 .mobileChannels > * {
   flex: 1 1 auto;
+  width: 100% !important;
   min-height: 0;
+  height: 100%;
 }
 
-/* Audio/operator controls: the focus of the mobile screen. Scrolls if the
-   content is taller than the space left after channels + chat header. */
+/* Audio/operator controls: the focus of the mobile screen. Takes the bulk of
+   the remaining space and scrolls if the content is taller than the space left
+   after channels + the chat header. */
 .mobileControls {
-  flex: 1 1 auto;
+  flex: 2 1 0;
   min-height: 0;
   overflow-y: auto;
 }
