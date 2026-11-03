@@ -102,9 +102,13 @@
    inside - otherwise the sidebar grows to its content height and pushes the
    audio controls off-screen. */
 .mobileChannels {
-  flex: 1 1 0;
-  min-height: 110px;
-  max-height: 40%;
+  /* Fixed height that never shrinks (flex:0 0), so the sidebar chrome
+     (search + tabs + section header) PLUS the first few channel rows are
+     always visible and the list scrolls within. A flex share collapsed to
+     near-zero when the controls below were tall. */
+  flex: 0 0 auto;
+  height: 300px;
+  max-height: 50vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -126,7 +130,7 @@
    the remaining space and scrolls if the content is taller than the space left
    after channels + the chat header. */
 .mobileControls {
-  flex: 2 1 0;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
 }
