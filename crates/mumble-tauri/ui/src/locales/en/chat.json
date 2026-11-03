@@ -301,7 +301,8 @@
       "reconnectNowBtn": "Reconnect now"
     },
     "openChannelsAriaLabel": "Open channels",
-    "closeChannelsAriaLabel": "Close channels"
+    "closeChannelsAriaLabel": "Close channels",
+    "resizeChatAriaLabel": "Resize message area"
   },
   "emptyState": {
     "noMessages": "No messages yet. Say hello!"

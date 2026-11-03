@@ -18,7 +18,7 @@ import {
 import ChannelSidebar from "../components/sidebar/channel/ChannelSidebar";
 import ChatView from "../components/chat/ChatView";
 import ServerTabsBar from "../components/layout/ServerTabsBar";
-import StationBar from "../components/layout/StationBar";
+import RadioControlPanel from "../components/layout/RadioControlPanel";
 import StationActionBar from "../components/layout/StationActionBar";
 // MobileBottomSheet must be imported statically: MobileProfileSheet and
 // ServerEditSheet already import it statically, and a module that is BOTH
@@ -77,6 +77,49 @@ export default function ChatPage() {
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [shortcuts, setShortcuts] = useState<ShortcutBindings>(DEFAULT_SHORTCUTS);
   const [superSearchOpen, setSuperSearchOpen] = useState(false);
+
+  // Radio-first layout: the text/chat pane sits BELOW the large audio control
+  // panel and is deliberately small (audio is everything for ham radio). Its
+  // height is user-resizable via the splitter, persisted to localStorage, and
+  // clamped so the chat can never grow tall enough to obscure the controls.
+  const CHAT_PANE_MIN = 120;
+  const CHAT_PANE_MAX = 420;
+  const CHAT_PANE_KEY = "rr.chatPaneHeight";
+  const [chatPaneHeight, setChatPaneHeight] = useState<number>(() => {
+    const saved = Number(localStorage.getItem(CHAT_PANE_KEY));
+    return Number.isFinite(saved) && saved >= CHAT_PANE_MIN && saved <= CHAT_PANE_MAX
+      ? saved
+      : 200;
+  });
+  const chatResizeRef = useRef<{ startY: number; startH: number } | null>(null);
+
+  const onSplitterDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+      chatResizeRef.current = { startY: e.clientY, startH: chatPaneHeight };
+    },
+    [chatPaneHeight],
+  );
+  const onSplitterMove = useCallback((e: React.PointerEvent) => {
+    const drag = chatResizeRef.current;
+    if (!drag) return;
+    // Dragging the splitter UP (smaller clientY) grows the chat pane.
+    const next = Math.min(
+      CHAT_PANE_MAX,
+      Math.max(CHAT_PANE_MIN, drag.startH + (drag.startY - e.clientY)),
+    );
+    setChatPaneHeight(next);
+  }, []);
+  const onSplitterUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (!chatResizeRef.current) return;
+      chatResizeRef.current = null;
+      (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
+      localStorage.setItem(CHAT_PANE_KEY, String(chatPaneHeight));
+    },
+    [chatPaneHeight],
+  );
 
   // Whether a connection attempt is actively running right now.
   const activelyConnecting =
@@ -480,7 +523,7 @@ export default function ChatPage() {
           onSearchChannelClear={() => setSearchChannelId(null)}
           onSelectMessage={(_, messageId) => setPendingScrollMessageId(messageId)}
           /* Desktop: voice toggles + action row live in the right-pane
-             StationBar / StationActionBar instead of the sidebar. */
+             RadioControlPanel / StationActionBar instead of the sidebar. */
           showSelfVoiceControls={useDrawer}
           showVoicePanel={useDrawer}
         />
@@ -496,14 +539,44 @@ export default function ChatPage() {
             <ServerTabsBar />
           </div>
         )}
-        {!useDrawer && <StationBar />}
-        <ChatView
-          onChannelInfoToggle={toggleChannelInfo}
-          onChannelSearch={openChannelSearch}
-          scrollToMessageId={pendingScrollMessageId}
-          onScrollConsumed={() => setPendingScrollMessageId(null)}
-        />
-        {!useDrawer && <StationActionBar onServerInfoToggle={toggleServerInfo} />}
+        {useDrawer ? (
+          /* Narrow / mobile: controls live in the sidebar; the right pane is
+             just the chat view, full-height, as before. */
+          <ChatView
+            onChannelInfoToggle={toggleChannelInfo}
+            onChannelSearch={openChannelSearch}
+            scrollToMessageId={pendingScrollMessageId}
+            onScrollConsumed={() => setPendingScrollMessageId(null)}
+          />
+        ) : (
+          /* Wide desktop, radio-first: the large audio/operator control panel
+             dominates; the chat is a short, user-resizable pane below it. */
+          <>
+            <div className={styles.controlArea}>
+              <RadioControlPanel />
+            </div>
+            <div
+              className={styles.splitter}
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label={t("page.resizeChatAriaLabel")}
+              onPointerDown={onSplitterDown}
+              onPointerMove={onSplitterMove}
+              onPointerUp={onSplitterUp}
+            >
+              <span className={styles.splitterGrip} />
+            </div>
+            <div className={styles.chatPane} style={{ height: chatPaneHeight }}>
+              <ChatView
+                onChannelInfoToggle={toggleChannelInfo}
+                onChannelSearch={openChannelSearch}
+                scrollToMessageId={pendingScrollMessageId}
+                onScrollConsumed={() => setPendingScrollMessageId(null)}
+              />
+            </div>
+            <StationActionBar onServerInfoToggle={toggleServerInfo} />
+          </>
+        )}
       </div>
       <SuperSearch
         open={superSearchOpen}

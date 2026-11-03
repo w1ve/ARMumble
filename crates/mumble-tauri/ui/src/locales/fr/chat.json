@@ -301,7 +301,8 @@
       "reconnectNowBtn": "Reconnecter maintenant"
     },
     "openChannelsAriaLabel": "Ouvrir les canaux",
-    "closeChannelsAriaLabel": "Fermer les canaux"
+    "closeChannelsAriaLabel": "Fermer les canaux",
+    "resizeChatAriaLabel": "Redimensionner la zone de messages"
   },
   "emptyState": {
     "noMessages": "Aucun message pour l'instant. Dites bonjour !"

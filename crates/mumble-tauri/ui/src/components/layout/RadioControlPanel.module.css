@@ -1,0 +1,123 @@
+/* --- Radio-first main control panel ------------------------------
+   The dominant region of the main screen: large, readable audio and
+   operator controls. Scrolls internally if it ever overflows, but is
+   sized by the ChatPage split to take the lion's share of the height. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 18px;
+  overflow-y: auto;
+  min-height: 0;
+  background: var(--color-glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--color-glass-border);
+}
+
+/* Input + output level clusters, side by side, wrapping on narrow widths. */
+.levelRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.levelCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.levelHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.levelLabel {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toggle {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.toggle:hover {
+  color: var(--color-text-primary);
+  background: var(--color-glass-hover);
+  border-color: var(--color-glass-border-hover);
+}
+
+.toggleActive {
+  color: var(--color-online);
+  background: var(--color-online-medium);
+  border-color: var(--color-online-medium);
+}
+
+.toggleActive:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+}
+
+.toggleMuted {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+}
+
+/* The VU meter spanning the card width, taller than the slim bar meter. */
+.meter {
+  width: 100%;
+  height: 18px;
+}
+
+.sliderRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sliderLabel {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  flex: 0 0 auto;
+  min-width: 120px;
+}
+
+.sliderRow input[type="range"] {
+  flex: 1;
+  height: 22px;
+  cursor: ew-resize;
+}
+
+.sliderVal {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+  flex: 0 0 auto;
+  min-width: 44px;
+  text-align: right;
+}

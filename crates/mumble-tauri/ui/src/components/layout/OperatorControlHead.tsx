@@ -49,9 +49,18 @@ interface Props {
   readonly serverId: string | undefined;
   /** host:port persistence key for savePttConfig. */
   readonly serverKey: string;
+  /**
+   * Layout variant.
+   *  - `"bar"` (default): the original slim, wrapping single-row flow used in
+   *    the mobile/narrow sidebar and anywhere space is tight.
+   *  - `"panel"`: the radio-first large layout — the four control clusters
+   *    (transmit, PTT hotkey, whisper, stereo) are rendered as big labeled
+   *    groups in a grid, so a ham can read and hit them at a glance.
+   */
+  readonly variant?: "bar" | "panel";
 }
 
-export default function OperatorControlHead({ serverId, serverKey }: Props) {
+export default function OperatorControlHead({ serverId, serverKey, variant = "bar" }: Props) {
   const { t } = useTranslation(["settings", "sidebar"]);
   const tAudio = (k: string) => (t as (x: string) => string)(`settings:audio.${k}`);
   const tAct = (k: string) => (t as (x: string) => string)(`settings:activation.${k}`);
@@ -231,8 +240,23 @@ export default function OperatorControlHead({ serverId, serverKey }: Props) {
 
   if (!audio || !config) return null;
 
+  const isPanel = variant === "panel";
+  // In panel mode each logical cluster is wrapped in a labeled group card;
+  // in bar mode `Group` is a transparent pass-through so the original slim
+  // single-row flow is unchanged.
+  const Group = ({ title, children }: { title: string; children: React.ReactNode }) =>
+    isPanel ? (
+      <section className={styles.group}>
+        <h4 className={styles.groupTitle}>{title}</h4>
+        <div className={styles.groupBody}>{children}</div>
+      </section>
+    ) : (
+      <>{children}</>
+    );
+
   return (
-    <div className={styles.head}>
+    <div className={`${styles.head} ${isPanel ? styles.headPanel : ""}`}>
+     <Group title={tAudio("activationMode")}>
       {/* Transmit mode: VOX | Continuous | PTT */}
       <div className={styles.segmented} role="radiogroup" aria-label={tAudio("activationMode")}>
         {MODE_PATCHES.map((m) => {
@@ -254,7 +278,9 @@ export default function OperatorControlHead({ serverId, serverKey }: Props) {
           );
         })}
       </div>
+     </Group>
 
+     <Group title={tAudio("ptt.hotkey")}>
       {/* PTT hotkey set/unset + keystrokes */}
       <div className={styles.hotkeyGroup}>
         <KeyIcon width={13} height={13} className={styles.groupIcon} />
@@ -294,7 +320,9 @@ export default function OperatorControlHead({ serverId, serverKey }: Props) {
         )}
         {pttHotkey && !recordingPtt && <span className={styles.keys}>{pttHotkey}</span>}
       </div>
+     </Group>
 
+     <Group title={tAudio("ptt.whisper")}>
       {/* Whisper hotkey set/unset + keystrokes */}
       <div className={styles.hotkeyGroup}>
         <MegaphoneIcon width={13} height={13} className={styles.groupIcon} />
@@ -364,7 +392,9 @@ export default function OperatorControlHead({ serverId, serverKey }: Props) {
       </select>
 
       {whisperError && <span className={styles.err}>{whisperError}</span>}
+     </Group>
 
+     <Group title={tAudio("stereo.modeLabel")}>
       {/* --- Stereo playback controls (operator output rendering) --- */}
       <span
         className={`${styles.stereoBadge} ${incomingStereo ? styles.stereoBadgeOn : ""}`}
@@ -459,6 +489,7 @@ export default function OperatorControlHead({ serverId, serverKey }: Props) {
           {tAudio("stereo.radio2")}
         </button>
       </div>
+     </Group>
     </div>
   );
 }

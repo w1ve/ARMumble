@@ -301,7 +301,8 @@
       "reconnectNowBtn": "Jetzt verbinden"
     },
     "openChannelsAriaLabel": "Kanäle öffnen",
-    "closeChannelsAriaLabel": "Kanäle schließen"
+    "closeChannelsAriaLabel": "Kanäle schließen",
+    "resizeChatAriaLabel": "Nachrichtenbereich anpassen"
   },
   "emptyState": {
     "noMessages": "Noch keine Nachrichten. Sag Hallo!"

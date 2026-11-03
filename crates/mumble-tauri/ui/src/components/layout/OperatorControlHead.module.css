@@ -180,3 +180,91 @@
   opacity: 0.45;
   cursor: default;
 }
+
+/* ===================================================================
+   Panel variant — the radio-first large layout.
+   The four clusters become labeled group cards in a responsive grid,
+   with noticeably larger controls than the slim bar.
+   =================================================================== */
+
+.headPanel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  align-items: stretch;
+  width: 100%;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.groupBody {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Scale the shared controls up inside a panel group. */
+.headPanel .segBtn {
+  font-size: 14px;
+  padding: 9px 14px;
+}
+
+.headPanel .segLabel {
+  max-width: none;
+}
+
+.headPanel .hkBtn,
+.headPanel .channelSelect,
+.headPanel .capture {
+  font-size: 14px;
+  padding: 9px 12px;
+}
+
+.headPanel .channelSelect {
+  max-width: 100%;
+  flex: 1 1 160px;
+}
+
+.headPanel .keys {
+  font-size: 13px;
+  padding: 4px 9px;
+}
+
+.headPanel .stereoBadge {
+  font-size: 12px;
+  padding: 5px 11px;
+}
+
+.headPanel .panWrap {
+  flex: 1 1 140px;
+}
+
+.headPanel .pan {
+  width: 100%;
+  flex: 1;
+  height: 22px;
+}
+
+.headPanel .panLabel {
+  font-size: 13px;
+}
