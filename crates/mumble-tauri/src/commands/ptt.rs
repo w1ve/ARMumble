@@ -58,13 +58,19 @@ pub(crate) fn apply_remote_ptt(state: tauri::State<'_, AppState>, down: bool) {
 #[tauri::command]
 pub(crate) fn apply_remote_ptt(_state: tauri::State<'_, AppState>, _down: bool) {}
 
-/// Operator software PTT (from the operator PTT hotkey). While held it does two
-/// things at once (CONTEXT §14d, mode B): opens this client's Mumble mic (same
-/// self-mute path as the global push-to-talk) AND broadcasts an outbound
+/// Operator software PTT (from the operator PTT hotkey on desktop, or the
+/// on-screen hold-to-transmit button on mobile). While held it does two things
+/// (CONTEXT §14d, mode B): opens this client's Mumble mic (same self-mute path
+/// as the global push-to-talk) AND, on desktop, broadcasts an outbound
 /// `remote-radio/ptt` so the station keys its rig deterministically.
 ///
+/// Opening the mic is cross-platform (`push_to_talk_start`/`_end` live in the
+/// platform-neutral voice pipeline), so this works on Android too - that is
+/// what makes the phone's hold-to-transmit button actually transmit. Only the
+/// serial rig-keying twin (`send_operator_ptt`) is desktop-only (the whole
+/// serial PTT module is gated out on Android), so it is skipped there.
+///
 /// `down = true` on key press, `false` on release.
-#[cfg(not(target_os = "android"))]
 #[tauri::command]
 pub(crate) async fn operator_ptt(
     state: tauri::State<'_, AppState>,
@@ -76,16 +82,13 @@ pub(crate) async fn operator_ptt(
     } else {
         state.push_to_talk_end().await?;
     }
-    state.send_operator_ptt(down).await
-}
-
-/// Stub: Android has no operator rig control.
-#[cfg(target_os = "android")]
-#[tauri::command]
-pub(crate) async fn operator_ptt(
-    _state: tauri::State<'_, AppState>,
-    _down: bool,
-) -> Result<(), String> {
+    // Rig keying over the remote-radio plugin channel is desktop-only: a phone
+    // has no serial rig to key, and the serial PTT module (which defines
+    // `send_operator_ptt`) is compiled out on Android.
+    #[cfg(not(target_os = "android"))]
+    {
+        state.send_operator_ptt(down).await?;
+    }
     Ok(())
 }
 
@@ -96,7 +99,10 @@ pub(crate) async fn operator_ptt(
 /// the target reverts to 0 (normal own-channel talking).
 ///
 /// `active = true` on key press, `false` on release.
-#[cfg(not(target_os = "android"))]
+///
+/// Cross-platform: every method it calls (open/close mic, register the voice
+/// target, flip the outbound target atomic) lives in the platform-neutral
+/// state layer, so the mobile hold-to-whisper button works on Android too.
 #[tauri::command]
 pub(crate) async fn whisper_target(
     state: tauri::State<'_, AppState>,
@@ -133,16 +139,6 @@ pub(crate) async fn whisper_target(
         }
         state.emit_whisper_active(false, None);
     }
-    Ok(())
-}
-
-/// Stub: Android has no whisper hotkey.
-#[cfg(target_os = "android")]
-#[tauri::command]
-pub(crate) async fn whisper_target(
-    _state: tauri::State<'_, AppState>,
-    _active: bool,
-) -> Result<(), String> {
     Ok(())
 }
 

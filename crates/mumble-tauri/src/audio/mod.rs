@@ -258,8 +258,8 @@ pub use android::OboeAudioFactory as PlatformAudioFactory;
 /// threshold the signal is smoothly compressed using `tanh` so it
 /// asymptotically approaches +/-1.0 without ever exceeding it.  This
 /// avoids the harsh distortion of hard clipping while preserving
-/// dynamics for normal-level audio.
-#[cfg(not(target_os = "android"))]
+/// dynamics for normal-level audio.  Used by both the desktop (cpal/rodio)
+/// and Android (Oboe) playback paths.
 #[inline]
 pub(crate) fn soft_clip(sample: f32) -> f32 {
     const KNEE: f32 = 0.9;

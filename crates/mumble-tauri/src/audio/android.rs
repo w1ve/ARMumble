@@ -11,11 +11,12 @@ use std::sync::{Arc, Mutex};
 use oboe::{
     AudioInputCallback, AudioOutputCallback, AudioOutputStreamSafe, AudioStream,
     AudioStreamAsync, AudioStreamBuilder, ContentType, DataCallbackResult, Input,
-    InputPreset, Mono, Output, PerformanceMode, SessionId, SharingMode, Usage,
+    InputPreset, Mono, Output, PerformanceMode, SessionId, SharingMode, Stereo, Usage,
 };
 use tracing::{error, warn};
 
 use mumble_protocol::audio::capture::AudioCapture;
+use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes, StereoControl};
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
 
@@ -201,13 +202,11 @@ impl super::AudioDeviceFactory for OboeAudioFactory {
     fn create_mixing_playback(
         _device_name: Option<&str>,
         volume: Arc<AtomicU32>,
-        buffers: mumble_protocol::audio::mixer::SpeakerBuffers,
-        _speaker_volumes: mumble_protocol::audio::mixer::SpeakerVolumes,
-        // TODO(stereo): Android (Oboe) stereo playback is deferred (§14g);
-        // the stereo control is accepted for signature parity and ignored.
-        _stereo: Arc<mumble_protocol::audio::mixer::StereoControl>,
+        buffers: SpeakerBuffers,
+        speaker_volumes: SpeakerVolumes,
+        stereo: Arc<StereoControl>,
     ) -> std::result::Result<Box<dyn super::MixingPlayback>, String> {
-        OboeMixingPlayback::new(volume, buffers)
+        OboeMixingPlayback::new(volume, buffers, speaker_volumes, stereo)
             .map(|c| Box::new(c) as _)
             .map_err(|e| format!("Mixing playback init: {e}"))
     }
@@ -216,62 +215,112 @@ impl super::AudioDeviceFactory for OboeAudioFactory {
 // -- Mixing playback -----------------------------------------------
 
 /// Callback for the mixing playback stream.
-/// Reads from all per-speaker buffers, sums them, and outputs.
+///
+/// The [`AudioMixer`] decodes every speaker's Opus into INTERLEAVED STEREO
+/// (L,R,L,R...) and appends it to that speaker's `VecDeque<f32>`. So this is a
+/// STEREO output stream: each output frame is an `(L, R)` pair, and we pop two
+/// samples (L then R) from each speaker buffer, sum per channel, apply the
+/// per-speaker volumes, then the operator's [`StereoControl`] (Mix/LR/Swap/pan)
+/// on the summed pair, soft-clip, and scale by the master output volume.
+///
+/// A previous version opened a MONO stream and popped a single sample per
+/// speaker, which read the interleaved L,R buffer as consecutive mono samples
+/// and played everything at half speed / wrong pitch. Matching the mixer's
+/// stereo layout fixes that and gives true stereo receive on the phone.
 struct MixingPlaybackCallback {
-    buffers: mumble_protocol::audio::mixer::SpeakerBuffers,
+    buffers: SpeakerBuffers,
+    speaker_volumes: SpeakerVolumes,
+    stereo: Arc<StereoControl>,
     volume: Arc<AtomicU32>,
-    last_sample: f32,
+    /// Held amplitude per channel for the underrun fade-out (L, R).
+    last: (f32, f32),
 }
 
 impl MixingPlaybackCallback {
-    fn mix_buffers(map: &mut std::collections::HashMap<u32, VecDeque<f32>>) -> Option<f32> {
-        let mut sum = 0.0f32;
-        let mut count = 0u32;
-        for buf in map.values_mut() {
-            if let Some(s) = buf.pop_front() {
-                sum += s;
-                count += 1;
+    /// Pop one interleaved stereo frame (L,R) summed across all speakers,
+    /// weighted by each speaker's volume. Returns `None` if no speaker had a
+    /// full stereo frame available (underrun).
+    fn mix_frame(
+        bufs: &mut std::collections::HashMap<u32, VecDeque<f32>>,
+        svols: &std::collections::HashMap<u32, f32>,
+    ) -> Option<(f32, f32)> {
+        let mut l = 0.0f32;
+        let mut r = 0.0f32;
+        let mut any = false;
+        for (session, buf) in bufs.iter_mut() {
+            // Need a full L,R pair; a buffer with an odd straggler is skipped
+            // this frame (it realigns on the next decode).
+            if buf.len() >= 2 {
+                let sv = svols.get(session).copied().unwrap_or(1.0);
+                let ls = buf.pop_front().unwrap_or(0.0);
+                let rs = buf.pop_front().unwrap_or(0.0);
+                l += ls * sv;
+                r += rs * sv;
+                any = true;
             }
         }
-        (count > 0).then_some(sum)
-    }
-
-    fn next_sample(last_sample: &mut f32, mixed: Option<f32>, vol: f32) -> f32 {
-        match mixed {
-            Some(m) => {
-                let out = m.tanh();
-                *last_sample = out;
-                out * vol
-            }
-            None => {
-                *last_sample *= 0.99;
-                if last_sample.abs() < 1e-6 {
-                    *last_sample = 0.0;
-                }
-                *last_sample * vol
-            }
-        }
+        any.then_some((l, r))
     }
 }
 
 impl AudioOutputCallback for MixingPlaybackCallback {
-    type FrameType = (f32, Mono);
+    type FrameType = (f32, Stereo);
 
     fn on_audio_ready(
         &mut self,
         _stream: &mut dyn AudioOutputStreamSafe,
-        frames: &mut [f32],
+        frames: &mut [(f32, f32)],
     ) -> DataCallbackResult {
+        use mumble_protocol::audio::mixer::StereoOutMode;
         let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
+        let (mode, lg, rg) = self.stereo.get();
 
-        if let Ok(mut bufs) = self.buffers.lock() {
-            for sample in frames.iter_mut() {
-                *sample = Self::next_sample(&mut self.last_sample, Self::mix_buffers(&mut bufs), vol);
+        let Ok(mut bufs) = self.buffers.lock() else {
+            for f in frames.iter_mut() {
+                *f = (0.0, 0.0);
             }
-            bufs.retain(|_, b| !b.is_empty());
-        } else {
-            frames.fill(0.0);
+            return DataCallbackResult::Continue;
+        };
+        let svols = self.speaker_volumes.lock().ok();
+        let empty = std::collections::HashMap::new();
+        let sv = svols.as_deref().unwrap_or(&empty);
+
+        for out in frames.iter_mut() {
+            let (raw_l, raw_r) = match Self::mix_frame(&mut bufs, sv) {
+                Some(pair) => {
+                    self.last = pair;
+                    pair
+                }
+                None => {
+                    // Underrun: decay the held pair toward silence (no click).
+                    self.last.0 *= 0.99;
+                    self.last.1 *= 0.99;
+                    if self.last.0.abs() < 1e-6 {
+                        self.last.0 = 0.0;
+                    }
+                    if self.last.1.abs() < 1e-6 {
+                        self.last.1 = 0.0;
+                    }
+                    self.last
+                }
+            };
+
+            // Operator stereo rendering: per-channel gain first, then the
+            // fold mode, matching mixer::apply_stereo_mode exactly (one frame).
+            let gl = raw_l * lg;
+            let gr = raw_r * rg;
+            let (l, r) = match mode {
+                StereoOutMode::Stereo => (gl, gr),
+                StereoOutMode::Mono => {
+                    let m = (gl + gr) * 0.5;
+                    (m, m)
+                }
+                StereoOutMode::SwapLr => (gr, gl),
+            };
+
+            *out = (super::soft_clip(l * vol), super::soft_clip(r * vol));
         }
+        bufs.retain(|_, b| !b.is_empty());
 
         DataCallbackResult::Continue
     }
@@ -285,11 +334,13 @@ impl AudioOutputCallback for MixingPlaybackCallback {
     }
 }
 
-/// Multi-speaker mixing playback backed by oboe (Android).
+/// Multi-speaker mixing playback backed by oboe (Android), stereo output.
 pub struct OboeMixingPlayback {
     stream: Option<AudioStreamAsync<Output, MixingPlaybackCallback>>,
     volume: Arc<AtomicU32>,
-    buffers: mumble_protocol::audio::mixer::SpeakerBuffers,
+    buffers: SpeakerBuffers,
+    speaker_volumes: SpeakerVolumes,
+    stereo: Arc<StereoControl>,
 }
 
 // SAFETY: Same justification as OboeCapture.
@@ -299,12 +350,16 @@ unsafe impl Send for OboeMixingPlayback {}
 impl OboeMixingPlayback {
     pub fn new(
         volume: Arc<AtomicU32>,
-        buffers: mumble_protocol::audio::mixer::SpeakerBuffers,
+        buffers: SpeakerBuffers,
+        speaker_volumes: SpeakerVolumes,
+        stereo: Arc<StereoControl>,
     ) -> Result<Self> {
         Ok(Self {
             stream: None,
             volume,
             buffers,
+            speaker_volumes,
+            stereo,
         })
     }
 }
@@ -313,15 +368,17 @@ impl super::MixingPlayback for OboeMixingPlayback {
     fn start(&mut self) -> Result<()> {
         let callback = MixingPlaybackCallback {
             buffers: self.buffers.clone(),
+            speaker_volumes: self.speaker_volumes.clone(),
+            stereo: self.stereo.clone(),
             volume: self.volume.clone(),
-            last_sample: 0.0,
+            last: (0.0, 0.0),
         };
 
         let mut stream = AudioStreamBuilder::default()
             .set_performance_mode(PerformanceMode::LowLatency)
             .set_sharing_mode(SharingMode::Shared)
             .set_format::<f32>()
-            .set_channel_count::<Mono>()
+            .set_channel_count::<Stereo>()
             .set_sample_rate(48_000)
             .set_usage(Usage::VoiceCommunication)
             .set_content_type(ContentType::Speech)
