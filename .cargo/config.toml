@@ -29,3 +29,19 @@ CMAKE_GENERATOR_i686_linux_android        = "Ninja"
 # for aarch64-linux-android, so only CFLAGS/CXXFLAGS are needed here.
 CFLAGS_aarch64_linux_android   = "-mno-outline-atomics"
 CXXFLAGS_aarch64_linux_android = "-mno-outline-atomics"
+
+# Windows: statically link the C runtime (/MT instead of /MD).
+#
+# By default Rust's MSVC target imports VCRUNTIME140.dll, VCRUNTIME140_1.dll and
+# the api-ms-win-crt-* Universal CRT forwarders. A PC without the Visual C++
+# Redistributable (clean installs, VMs, Windows 7/8.1) then refuses to start the
+# exe with "VCRUNTIME140.dll was not found". Linking the CRT into the exe makes
+# it a true single file: it needs only DLLs that ship with Windows itself.
+# Documented by Tauri: https://v2.tauri.app/distribute/windows-installer/
+# Native dependencies built with the cc/cmake crates (opus, openh264, ring,
+# mimalloc) follow this flag automatically and are compiled with /MT as well.
+# Does not affect the Android, Linux or macOS builds.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
