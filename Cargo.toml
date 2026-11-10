@@ -9,6 +9,7 @@ members = [
     "crates/rr-audio",
     "crates/rr-radio",
     "crates/rr-mumble",
+    "crates/rr-client",
     "crates/app-client",
 ]
 # The video / remote-desktop crates (rr-capture, rr-codec, rr-hwcodec, rr-webrtc,

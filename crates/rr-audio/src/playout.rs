@@ -57,6 +57,14 @@ impl PlayoutHandle {
 
     /// Deliver a packet with an explicit arrival time (for deterministic tests).
     pub fn push_at(&self, speaker: u32, seq: u64, data: Vec<u8>, terminator: bool, arrival: Duration) {
+        // Mumble's own client flags the *last audio frame* as the terminator, so
+        // a terminator may carry data: deliver the audio first, then the marker.
+        if terminator && !data.is_empty() {
+            let units = crate::codec::FrameDecoder::packet_frames(&data).map_or(2, |f| (f as u64 / 480).max(1));
+            self.push_at(speaker, seq, data, false, arrival);
+            self.push_at(speaker, seq + units, Vec::new(), true, arrival);
+            return;
+        }
         let _ = self.tx.send(Msg::Packet {
             speaker,
             seq,

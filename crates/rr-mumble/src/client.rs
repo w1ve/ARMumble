@@ -148,6 +148,8 @@ pub async fn run<H: EventHandler>(
     config: ClientConfig,
     handler: H,
 ) -> Result<(ClientHandle, tokio::task::JoinHandle<()>)> {
+    // Select the TLS crypto provider explicitly; an error only means one is already installed.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     // 1. Connect TCP - a single attempt.  Retry/backoff is owned by the
     //    caller (the desktop app's auto-reconnect loop drives retries with a
     //    growing Fibonacci delay).  Doing it here as well meant every caller

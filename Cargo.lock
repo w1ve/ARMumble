@@ -5050,6 +5050,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rr-client"
+version = "0.1.0"
+dependencies = [
+ "rr-audio",
+ "rr-mumble",
+ "rr-radio",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "rr-mumble"
 version = "0.3.0"
 dependencies = [

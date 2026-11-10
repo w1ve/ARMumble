@@ -1,0 +1,16 @@
+[package]
+name = "rr-client"
+version = "0.1.0"
+edition = "2021"
+description = "Headless RemoteRadio client: connects to a Mumble server, optionally confined to one channel, and wires the audio engine and rig control together. Embed it in any app."
+license = "MIT"
+
+[dependencies]
+rr-mumble = { path = "../rr-mumble" }
+rr-audio = { path = "../rr-audio" }
+rr-radio = { path = "../rr-radio" }
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+thiserror = "2"
+
+[lints]
+workspace = true
