@@ -1,0 +1,20 @@
+[package]
+name = "rr-radio"
+version = "0.1.0"
+edition = "2021"
+description = "RemoteRadio rig control: Local PTT (footswitch), Station PTT (rig keying with VOX on inbound audio), remote PTT messages, and hold-to-activate Listen In / Whisper targets."
+license = "MIT"
+
+[dependencies]
+rr-ptt = { path = "../rr-ptt" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+
+[features]
+default = []
+# Real serial port threads (opens RS-232 ports through rr-ptt).
+serial = ["rr-ptt/serial"]
+
+[lints]
+workspace = true

@@ -5059,6 +5059,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rr-radio"
+version = "0.1.0"
+dependencies = [
+ "rr-ptt",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "rtrb"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
