@@ -1,0 +1,29 @@
+[package]
+name = "rr-mumble"
+version = "0.3.0"
+edition = "2021"
+description = "RemoteRadio Mumble protocol core: TCP/TLS control, OCB2 UDP voice, channel state, listen/whisper targets. Audio only."
+license = "MIT"
+build = "build.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "macros", "time", "io-util"] }
+tokio-rustls = "0.26"
+rustls = { version = "0.23", features = ["ring"] }
+webpki-roots = "1.0.6"
+rustls-pemfile = "2"
+prost = "0.14.3"
+bytes = "1"
+tracing = "0.1"
+thiserror = "2"
+# OCB2-AES128 encryption for Mumble UDP
+aes = "0.8"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "macros", "time", "io-util", "test-util"] }
+
+[lints]
+workspace = true
+
+[build-dependencies]
+prost-build = "0.14.3"

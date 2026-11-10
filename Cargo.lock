@@ -5050,6 +5050,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "rr-mumble"
+version = "0.3.0"
+dependencies = [
+ "aes",
+ "bytes",
+ "prost 0.14.3",
+ "prost-build",
+ "rustls",
+ "rustls-pemfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-rustls",
+ "tracing",
+ "webpki-roots",
+]
+
+[[package]]
 name = "rr-ptt"
 version = "0.1.0"
 dependencies = [
