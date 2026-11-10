@@ -1,0 +1,17 @@
+[package]
+name = "rr-audio"
+version = "0.1.0"
+edition = "2021"
+description = "RemoteRadio audio engine: processing-free, high-fidelity stereo Opus capture and playout with a drift-compensating jitter buffer. No DSP of any kind (no AEC, AGC, denoise, gate or limiter)."
+license = "MIT"
+
+[dependencies]
+opus = "0.3.1"
+thiserror = "2"
+tracing = "0.1"
+
+[dev-dependencies]
+rustfft = "6"
+
+[lints]
+workspace = true
