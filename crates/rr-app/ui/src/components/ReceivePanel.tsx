@@ -14,13 +14,12 @@ export function ReceivePanel() {
   const [gains, setGains] = useState<Record<number, number>>({});
   if (!settings) return null;
   const a = settings.audio;
-  const m = status.meters;
   const nameOf = (session: number) => status.users.find((u) => u.session === session)?.name ?? `#${session}`;
   const active = status.speakers.filter((s) => s.active);
 
   return (
     <Section title={t("rx.title")}>
-      <Meter left={m.out_l} right={m.out_r} clips={m.out_clips} label={t("rx.volume")} />
+      <Meter source="output" label={t("rx.volume")} />
       <Slider
         label={t("rx.volume")}
         value={Math.round(a.master_gain * 100)}
@@ -30,7 +29,6 @@ export function ReceivePanel() {
         warn={a.master_gain > 1}
         onChange={(v) => update((x) => void (x.audio.master_gain = v / 100))}
       />
-      {m.out_clips > 0 ? <p className="warn-text">{t("rx.clip")}</p> : null}
       <label className="check">
         <input type="checkbox" checked={a.mono_output} onChange={(e) => update((x) => void (x.audio.mono_output = e.target.checked))} />
         {t("rx.mono")}

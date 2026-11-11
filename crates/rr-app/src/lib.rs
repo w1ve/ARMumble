@@ -43,6 +43,8 @@ pub fn run() {
             platform::apply_hotkeys(app.handle(), &loaded.hotkeys);
             *lock(&state.settings) = loaded;
             *lock(&state.settings_path) = path;
+            engine::restart_monitor(&state);
+            let _levels = tauri::async_runtime::spawn(engine::levels_ticker(app.handle().clone()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -158,3 +158,24 @@ where
 
 /// Hotkeys do not exist on mobile.
 pub fn apply_hotkeys(_app: &AppHandle, _hk: &HotkeySettings) {}
+
+/// No idle input monitor on mobile (it would hold the microphone open).
+#[derive(Debug)]
+pub struct Monitor;
+
+impl Monitor {
+    /// Always unavailable on mobile.
+    pub fn start(_device: Option<&str>, _gain: f32, _map: rr_audio::capture::ChannelMap) -> Result<Self, String> {
+        Err("not available on this platform".into())
+    }
+
+    /// Never called.
+    pub fn take(&self) -> (f32, f32, u64) {
+        (0.0, 0.0, 0)
+    }
+}
+
+impl Monitor {
+    /// Never called.
+    pub fn set(&self, _gain: f32, _map: rr_audio::capture::ChannelMap) {}
+}

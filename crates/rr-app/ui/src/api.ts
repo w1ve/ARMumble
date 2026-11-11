@@ -32,13 +32,14 @@ export interface Plan {
   clamped: boolean;
   wire_kbps: number;
 }
-export interface Meters {
+export interface Levels {
   in_l: number;
   in_r: number;
   out_l: number;
   out_r: number;
   in_clips: number;
   out_clips: number;
+  live: boolean;
 }
 export interface Status {
   phase: Phase;
@@ -51,7 +52,6 @@ export interface Status {
   channels: Channel[];
   speakers: Speaker[];
   plan: Plan | null;
-  meters: Meters;
   transmitting: boolean;
   ptt_down: boolean;
   sent: number;
@@ -135,4 +135,8 @@ export const api = {
 
 export function onStatus(cb: (s: Status) => void): Promise<UnlistenFn> {
   return listen<Status>("status", (e) => cb(e.payload));
+}
+
+export function onLevels(cb: (l: Levels) => void): Promise<UnlistenFn> {
+  return listen<Levels>("levels", (e) => cb(e.payload));
 }

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, type ChannelMap, type TxMode } from "../api";
 import { useApp } from "../store";
@@ -5,6 +6,23 @@ import { Meter } from "./Meter";
 import { Section } from "./Section";
 import { Slider } from "./Slider";
 import { useHold } from "./useHold";
+
+/** Shown while the input is clipping (any clip in the last two seconds). */
+function ClipWarning() {
+  const { t } = useTranslation();
+  const clips = useApp((s) => s.levels.in_clips);
+  const [lastSeen, setLastSeen] = useState({ clips, at: 0 });
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (clips > lastSeen.clips) setLastSeen({ clips, at: Date.now() });
+    else if (clips < lastSeen.clips) setLastSeen({ clips, at: 0 });
+  }, [clips, lastSeen.clips]);
+  useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 500);
+    return () => clearInterval(id);
+  }, []);
+  return Date.now() - lastSeen.at < 2000 ? <p className="warn-text">{t("tx.clip")}</p> : null;
+}
 
 function PttButton() {
   const { t } = useTranslation();
@@ -28,7 +46,6 @@ export function TransmitPanel() {
   const status = useApp((s) => s.status);
   if (!settings) return null;
   const a = settings.audio;
-  const m = status.meters;
 
   return (
     <Section title={t("tx.title")} badge={status.transmitting ? <span className="badge on">{t("tx.onAir")}</span> : null}>
@@ -65,7 +82,7 @@ export function TransmitPanel() {
         </>
       ) : null}
 
-      <Meter left={m.in_l} right={m.in_r} clips={m.in_clips} label={t("tx.gain")} />
+      <Meter source="input" label={t("tx.gain")} />
       <Slider
         label={t("tx.gain")}
         value={Math.round(a.input_gain * 100)}
@@ -76,7 +93,7 @@ export function TransmitPanel() {
         hint={a.input_gain > 1 ? t("tx.gainHigh") : undefined}
         onChange={(v) => update((x) => void (x.audio.input_gain = v / 100))}
       />
-      {status.meters.in_clips > 0 && status.transmitting ? <p className="warn-text">{t("tx.clip")}</p> : null}
+      <ClipWarning />
 
       <label className="field">
         <span className="field-label">{t("tx.map")}</span>

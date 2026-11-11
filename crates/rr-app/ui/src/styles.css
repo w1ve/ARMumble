@@ -309,39 +309,77 @@ button:disabled {
   box-shadow: 0 0 18px color-mix(in srgb, var(--bad) 60%, transparent);
 }
 
-.meter {
+/* VU meter: the coloured zones sit on the track; a dark mask hides the unlit
+   part, so each colour always appears at its true dBFS position. */
+.vu {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
 }
-.meter-bars {
+.vu-bars {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
-.meter-bar {
+.vu-track {
   position: relative;
-  height: 8px;
-  background: var(--panel-2);
-  border-radius: 4px;
+  height: 10px;
+  border-radius: 3px;
   overflow: hidden;
+  border: 1px solid var(--border);
+  /* -60..-18 dBFS green, -18..-6 yellow, -6..0 red (scale is linear in dB). */
+  background: linear-gradient(
+    90deg,
+    #1f9d55 0%,
+    #3ccf7a 60%,
+    #3ccf7a 70%,
+    #f5d142 70%,
+    #f5b942 90%,
+    #ff5a5f 90%,
+    #ff2d33 100%
+  );
 }
-.meter-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--ok) 0 70%, var(--warn) 70% 90%, var(--bad) 90%);
-  background-size: 100vw 100%;
-}
-.meter-peak {
+.vu-mask {
   position: absolute;
   top: 0;
-  width: 2px;
-  height: 100%;
-  background: var(--text);
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--panel-2);
 }
-.clip-lamp {
-  width: 12px;
+.vu-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text);
+  opacity: 0;
+}
+.vu.idle .vu-track {
+  opacity: 0.45;
+}
+.vu-scale {
+  position: relative;
   height: 12px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.vu-scale span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+.vu-scale span:first-child {
+  transform: none;
+}
+.vu-scale span:last-child {
+  transform: translateX(-100%);
+}.clip-lamp {
+  flex: none;
+  margin-top: 4px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: var(--panel-2);
   border: 1px solid var(--border);

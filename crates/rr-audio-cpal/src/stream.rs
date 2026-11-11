@@ -83,10 +83,11 @@ impl fmt::Debug for RunningOutput {
     }
 }
 
-fn build_input<T>(dev: &Device, cfg: &StreamConfig, mut pipe: InputPipe, health: &Arc<Health>) -> Result<Stream, BackendError>
+fn build_input<T, F>(dev: &Device, cfg: &StreamConfig, mut sink: F, health: &Arc<Health>) -> Result<Stream, BackendError>
 where
     T: SizedSample + Send + 'static,
     f32: FromSample<T>,
+    F: FnMut(&[f32]) + Send + 'static,
 {
     let mut buf: Vec<f32> = Vec::new();
     let h = Arc::clone(health);
@@ -95,7 +96,7 @@ where
         move |data: &[T], _| {
             buf.clear();
             buf.extend(data.iter().map(|s| f32::from_sample(*s)));
-            pipe.process(&buf);
+            sink(&buf);
         },
         move |e| h.record(&e),
         None,
@@ -148,16 +149,25 @@ fn map_frame<T: Sample + FromSample<f32>>(out: &mut [T], l: f32, r: f32) {
 
 /// Start capturing into `pipe`. Use [`crate::input_params`] first so the
 /// capture pipeline matches the rate and channel count chosen here.
-pub fn start_input(device_id: Option<&str>, pipe: InputPipe) -> Result<RunningInput, BackendError> {
+pub fn start_input(device_id: Option<&str>, mut pipe: InputPipe) -> Result<RunningInput, BackendError> {
+    start_input_with(device_id, move |s| pipe.process(s))
+}
+
+/// Start capturing and hand every buffer (interleaved `f32`, in the device's
+/// channel layout) to `sink`. Used for the level meter while not connected.
+pub fn start_input_with<F>(device_id: Option<&str>, sink: F) -> Result<RunningInput, BackendError>
+where
+    F: FnMut(&[f32]) + Send + 'static,
+{
     let dev = find_device(device_id, true)?;
     let sc = choose(&dev, true)?;
     let cfg = sc.config();
     let health = Arc::new(Health::default());
     let stream = match sc.sample_format() {
-        SampleFormat::F32 => build_input::<f32>(&dev, &cfg, pipe, &health),
-        SampleFormat::I16 => build_input::<i16>(&dev, &cfg, pipe, &health),
-        SampleFormat::I32 => build_input::<i32>(&dev, &cfg, pipe, &health),
-        SampleFormat::U16 => build_input::<u16>(&dev, &cfg, pipe, &health),
+        SampleFormat::F32 => build_input::<f32, F>(&dev, &cfg, sink, &health),
+        SampleFormat::I16 => build_input::<i16, F>(&dev, &cfg, sink, &health),
+        SampleFormat::I32 => build_input::<i32, F>(&dev, &cfg, sink, &health),
+        SampleFormat::U16 => build_input::<u16, F>(&dev, &cfg, sink, &health),
         other => Err(BackendError::Format(other)),
     }?;
     stream.play().map_err(|e| BackendError::Stream(e.to_string()))?;

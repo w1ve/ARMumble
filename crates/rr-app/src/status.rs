@@ -95,7 +95,7 @@ pub struct PlanDto {
     pub wire_kbps: f32,
 }
 
-/// Audio levels, linear 0..1+.
+/// Audio levels, linear 0..1+, sent as the `levels` event.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Meters {
     /// Input left peak.
@@ -110,6 +110,8 @@ pub struct Meters {
     pub in_clips: u64,
     /// Output samples that exceeded full scale.
     pub out_clips: u64,
+    /// An input stream is running (connected, or the idle monitor).
+    pub live: bool,
 }
 
 /// Everything the UI shows.
@@ -135,8 +137,6 @@ pub struct Status {
     pub speakers: Vec<SpeakerDto>,
     /// Encoder plan.
     pub plan: Option<PlanDto>,
-    /// Levels.
-    pub meters: Meters,
     /// Currently sending audio.
     pub transmitting: bool,
     /// PTT is held.
@@ -168,7 +168,6 @@ impl Status {
             channels: Vec::new(),
             speakers: Vec::new(),
             plan: None,
-            meters: Meters::default(),
             transmitting: false,
             ptt_down: false,
             sent: 0,

@@ -19,4 +19,4 @@ mod devices;
 mod stream;
 
 pub use devices::{input_params, list_devices, output_params, DeviceInfo, StreamParams};
-pub use stream::{start_input, start_output, BackendError, Health, RunningInput, RunningOutput};
+pub use stream::{start_input, start_input_with, start_output, BackendError, Health, RunningInput, RunningOutput};

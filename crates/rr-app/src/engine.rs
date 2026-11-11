@@ -23,6 +23,8 @@ pub struct AppState {
     pub settings_path: Mutex<std::path::PathBuf>,
     /// The running client, if connected.
     pub engine: Mutex<Option<Engine>>,
+    /// Meter-only input stream while not connected.
+    pub monitor: Mutex<Option<platform::Monitor>>,
 }
 
 /// Lock helper that survives a poisoned mutex.
@@ -207,9 +209,8 @@ struct SnapshotSource {
 }
 
 impl SnapshotSource {
-    fn status(&self, audio: (u64, String), out_peaks: (f32, f32)) -> Status {
+    fn status(&self, audio: (u64, String)) -> Status {
         let c = self.client.capture();
-        let (in_l, in_r) = c.take_peaks();
         let conn = lock(&self.conn).clone();
         Status {
             phase: conn.phase,
@@ -252,14 +253,6 @@ impl SnapshotSource {
                 clamped: p.clamped,
                 wire_kbps: p.wire_bps as f32 / 1000.0,
             }),
-            meters: Meters {
-                in_l,
-                in_r,
-                out_l: out_peaks.0,
-                out_r: out_peaks.1,
-                in_clips: c.clip_count(),
-                out_clips: self.client.playout().clip_count(),
-            },
             transmitting: c.is_transmitting(),
             ptt_down: self.client.ptt_held(),
             sent: self.client.packet_counts().0,
@@ -285,11 +278,53 @@ async fn status_ticker(app: AppHandle, src: SnapshotSource) {
             let eng = lock(&state.engine);
             eng.as_ref().map_or((0, String::new()), Engine::audio_health)
         };
-        let out = src.client.playout().take_peaks();
-        let _ = app.emit("status", src.status(health, out));
+        let _ = app.emit("status", src.status(health));
     }
 }
 
+
+/// Current levels: from the running client, else from the idle input monitor.
+fn levels(state: &AppState) -> Meters {
+    if let Some(e) = lock(&state.engine).as_ref() {
+        let c = e.client.capture();
+        let p = e.client.playout();
+        let (in_l, in_r) = c.take_peaks();
+        let (out_l, out_r) = p.take_peaks();
+        return Meters { in_l, in_r, out_l, out_r, in_clips: c.clip_count(), out_clips: p.clip_count(), live: true };
+    }
+    match lock(&state.monitor).as_ref() {
+        Some(m) => {
+            let (in_l, in_r, in_clips) = m.take();
+            Meters { in_l, in_r, in_clips, live: true, ..Meters::default() }
+        }
+        None => Meters::default(),
+    }
+}
+
+/// Level meters, 25 times a second, for the life of the app.
+pub async fn levels_ticker(app: AppHandle) {
+    let mut tick = tokio::time::interval(Duration::from_millis(40));
+    loop {
+        let _ = tick.tick().await;
+        let m = levels(&app.state::<AppState>());
+        let _ = app.emit("levels", m);
+    }
+}
+
+/// Open the meter-only input monitor (used while not connected), replacing any
+/// previous one. Failures are logged; the meter then just stays idle.
+pub fn restart_monitor(state: &AppState) {
+    let mut slot = lock(&state.monitor);
+    *slot = None;
+    if lock(&state.engine).is_some() {
+        return;
+    }
+    let a = lock(&state.settings).audio.clone();
+    match platform::Monitor::start(a.input_device.as_deref(), a.input_gain, a.map()) {
+        Ok(m) => *slot = Some(m),
+        Err(e) => tracing::info!("input level monitor unavailable: {e}"),
+    }
+}
 
 /// Run a hotkey press or release.
 pub fn hotkey(app: &AppHandle, action: HotkeyAction, down: bool) {

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { api, onStatus, type Device, type Port, type Settings, type Status } from "./api";
+import { api, onLevels, onStatus, type Device, type Levels, type Port, type Settings, type Status } from "./api";
 
 const IDLE: Status = {
   phase: "disconnected",
@@ -12,7 +12,6 @@ const IDLE: Status = {
   channels: [],
   speakers: [],
   plan: null,
-  meters: { in_l: 0, in_r: 0, out_l: 0, out_r: 0, in_clips: 0, out_clips: 0 },
   transmitting: false,
   ptt_down: false,
   sent: 0,
@@ -22,8 +21,12 @@ const IDLE: Status = {
   remote_ptt: [],
 };
 
+const NO_LEVELS: Levels = { in_l: 0, in_r: 0, out_l: 0, out_r: 0, in_clips: 0, out_clips: 0, live: false };
+
 interface AppStore {
   status: Status;
+  /** Meter levels, updated 25 times a second. */
+  levels: Levels;
   settings: Settings | null;
   devices: Device[];
   ports: Port[];
@@ -42,6 +45,7 @@ let started = false;
 
 export const useApp = create<AppStore>((set, get) => ({
   status: IDLE,
+  levels: NO_LEVELS,
   settings: null,
   devices: [],
   ports: [],
@@ -52,6 +56,7 @@ export const useApp = create<AppStore>((set, get) => ({
     if (started) return;
     started = true;
     await onStatus((status) => set({ status }));
+    await onLevels((levels) => set({ levels }));
     set({ settings: await api.loadSettings() });
     await get().refreshHardware();
   },

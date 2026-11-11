@@ -4,7 +4,7 @@ use rr_audio::playout::StereoMode;
 use rr_client::RadioClient;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::engine::{lock, AppState, Engine};
+use crate::engine::{lock, restart_monitor, AppState, Engine};
 use crate::platform::{self, DeviceDto, PortDto};
 use crate::settings::{settings_path, Settings};
 use crate::status::Status;
@@ -39,9 +39,15 @@ pub fn save_settings(app: AppHandle, state: State<'_, AppState>, settings: Setti
     let path = lock(&state.settings_path).clone();
     settings.save(&path)?;
     platform::apply_hotkeys(&app, &settings.hotkeys);
+    let device_changed = lock(&state.settings).audio.input_device != settings.audio.input_device;
     *lock(&state.settings) = settings.clone();
     if let Some(e) = lock(&state.engine).as_ref() {
         apply_live(&e.client, &settings);
+    }
+    if device_changed {
+        restart_monitor(&state);
+    } else if let Some(m) = lock(&state.monitor).as_ref() {
+        m.set(settings.audio.input_gain, settings.audio.map());
     }
     Ok(())
 }
@@ -65,10 +71,19 @@ pub async fn connect(app: AppHandle, state: State<'_, AppState>) -> Result<(), S
     if let Some(e) = old {
         e.stop().await;
     }
+    // Release the meter-only stream so the engine can own the input device.
+    *lock(&state.monitor) = None;
     let settings = lock(&state.settings).clone();
-    let engine = Engine::start(&app, &settings).await?;
-    *lock(&state.engine) = Some(engine);
-    Ok(())
+    match Engine::start(&app, &settings).await {
+        Ok(engine) => {
+            *lock(&state.engine) = Some(engine);
+            Ok(())
+        }
+        Err(e) => {
+            restart_monitor(&state);
+            Err(e)
+        }
+    }
 }
 
 /// Disconnect and release the sound card and the rig.
@@ -78,6 +93,7 @@ pub async fn disconnect(app: AppHandle, state: State<'_, AppState>) -> Result<()
     if let Some(e) = old {
         e.stop().await;
     }
+    restart_monitor(&state);
     app.emit("status", Status::idle()).map_err(|e| e.to_string())
 }
 
