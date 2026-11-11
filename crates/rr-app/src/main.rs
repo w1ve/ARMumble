@@ -6,6 +6,8 @@
 use rr_audio_cpal as _;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_global_shortcut as _;
+#[cfg(target_os = "android")]
+use rr_audio_oboe as _;
 use rr_audio as _;
 use tauri as _;
 use rr_client as _;

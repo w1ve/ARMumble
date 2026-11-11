@@ -1,0 +1,18 @@
+[package]
+name = "rr-audio-oboe"
+version = "0.1.0"
+edition = "2021"
+description = "Android sound backend for the RemoteRadio audio engine (Oboe). Unprocessed input, media-usage output, automatic re-open when a device is unplugged. No processing."
+license = "MIT"
+
+# Everything lives behind the Android target so the crate is an empty shell
+# (and pulls nothing in) on every other platform.
+[target.'cfg(target_os = "android")'.dependencies]
+oboe = "0.6.1"
+rr-client = { path = "../rr-client" }
+rr-audio = { path = "../rr-audio" }
+tracing = "0.1"
+thiserror = "2"
+
+[lints]
+workspace = true

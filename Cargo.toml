@@ -1,23 +1,18 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/fancy-utils",
-    "crates/fancy-denoiser-deepfilter",
-    "crates/mumble-protocol",
-    "crates/mumble-tauri",
     "crates/rr-ptt",
     "crates/rr-audio",
     "crates/rr-radio",
     "crates/rr-mumble",
     "crates/rr-client",
     "crates/rr-audio-cpal",
+    "crates/rr-audio-oboe",
     "crates/rr-app",
-    "crates/app-client",
 ]
-# The video / remote-desktop crates (rr-capture, rr-codec, rr-hwcodec, rr-webrtc,
-# rr-input, rr-session, rr-proto), the Station app and the AGPL signal-bridge were
-# removed from this audio-only client. They remain in git history and in the
-# `pre-audio-only` tag.
+# The old chat/media/video client (mumble-tauri, mumble-protocol, app-client,
+# fancy-*, rr-capture, rr-codec, rr-webrtc, ...) was removed. It remains in git
+# history and in the `pre-audio-only` tag.
 
 # -- Workspace-wide lints --------------------------------------------
 # These apply to every crate in the workspace automatically.

@@ -1,7 +1,6 @@
-//! Mobile platform glue. The Android sound backend is not wired in yet; the
+//! Mobile platform glue: Oboe on Android, a stub elsewhere; the
 //! rest of the app builds so the UI can be developed against it.
 
-use rr_client::AudioEndpoints;
 use rr_radio::{LocalPtt, LocalPttSettings, StationPtt, StationPttSettings};
 use serde::Serialize;
 use tauri::AppHandle;
@@ -51,29 +50,99 @@ pub fn serial_ports() -> Vec<PortDto> {
     Vec::new()
 }
 
-/// Fixed 48 kHz stereo until the mobile backend exists.
-#[allow(clippy::unnecessary_wraps, reason = "same signature as the desktop version")]
-pub fn params(_input: Option<&str>, _output: Option<&str>) -> Result<(Params, Params), String> {
-    let p = Params { rate: 48_000, channels: 2 };
-    Ok((p, p))
-}
+#[cfg(target_os = "android")]
+mod audio {
+    use std::sync::mpsc::{channel, Sender};
+    use std::sync::Arc;
+    use std::thread::{self, JoinHandle};
 
-/// Placeholder owner of the mobile streams.
-#[derive(Debug)]
-pub struct AudioHandle;
+    use rr_audio_oboe::Health;
+    use rr_client::AudioEndpoints;
 
-impl AudioHandle {
-    /// No streams, no errors.
-    pub fn health(&self) -> (u64, String) {
-        (0, String::new())
+    use super::Params;
+
+    /// Oboe always runs at 48 kHz stereo.
+    #[allow(clippy::unnecessary_wraps, reason = "same signature as the desktop version")]
+    pub fn params(_input: Option<&str>, _output: Option<&str>) -> Result<(Params, Params), String> {
+        let p = Params { rate: rr_audio_oboe::RATE, channels: rr_audio_oboe::CHANNELS };
+        Ok((p, p))
+    }
+
+    /// Owns the Oboe streams on a dedicated thread.
+    #[derive(Debug)]
+    pub struct AudioHandle {
+        stop: Option<Sender<()>>,
+        join: Option<JoinHandle<()>>,
+        health: Arc<Health>,
+    }
+
+    impl AudioHandle {
+        /// Total stream errors and the latest message.
+        pub fn health(&self) -> (u64, String) {
+            (self.health.error_count(), self.health.last_error())
+        }
+    }
+
+    impl Drop for AudioHandle {
+        fn drop(&mut self) {
+            if let Some(tx) = self.stop.take() {
+                let _ = tx.send(());
+            }
+            if let Some(j) = self.join.take() {
+                let _ = j.join();
+            }
+        }
+    }
+
+    /// Open both streams; the device pickers do not apply on Android.
+    pub fn start_audio(_i: Option<String>, _o: Option<String>, ep: AudioEndpoints) -> Result<AudioHandle, String> {
+        let health = Arc::new(Health::default());
+        let (ready_tx, ready_rx) = channel::<Result<(), String>>();
+        let (stop_tx, stop_rx) = channel::<()>();
+        let h = Arc::clone(&health);
+        let join = thread::Builder::new()
+            .name("rr-audio".into())
+            .spawn(move || {
+                let AudioEndpoints { input, output } = ep;
+                rr_audio_oboe::run(input, output, &h, &ready_tx, &stop_rx);
+            })
+            .map_err(|e| e.to_string())?;
+        ready_rx.recv().map_err(|e| e.to_string())??;
+        Ok(AudioHandle { stop: Some(stop_tx), join: Some(join), health })
     }
 }
 
-/// Not available yet.
-pub fn start_audio(_i: Option<String>, _o: Option<String>, _ep: AudioEndpoints) -> Result<AudioHandle, String> {
-    Err("the audio backend for this platform is not available yet".into())
+#[cfg(not(target_os = "android"))]
+mod audio {
+    use rr_client::AudioEndpoints;
+
+    use super::Params;
+
+    /// Fixed 48 kHz stereo.
+    #[allow(clippy::unnecessary_wraps, reason = "same signature as the desktop version")]
+    pub fn params(_input: Option<&str>, _output: Option<&str>) -> Result<(Params, Params), String> {
+        let p = Params { rate: 48_000, channels: 2 };
+        Ok((p, p))
+    }
+
+    /// Placeholder owner of the streams.
+    #[derive(Debug)]
+    pub struct AudioHandle;
+
+    impl AudioHandle {
+        /// No streams, no errors.
+        pub fn health(&self) -> (u64, String) {
+            (0, String::new())
+        }
+    }
+
+    /// Not available on this platform.
+    pub fn start_audio(_i: Option<String>, _o: Option<String>, _ep: AudioEndpoints) -> Result<AudioHandle, String> {
+        Err("the audio backend for this platform is not available yet".into())
+    }
 }
 
+pub use audio::{params, start_audio, AudioHandle};
 /// Not available on mobile.
 pub fn open_station(_s: &StationPttSettings) -> Result<StationPtt, String> {
     Err("serial PTT is not available on this platform".into())

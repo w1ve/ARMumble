@@ -1,5 +1,0 @@
-node_modules/
-dist/
-
-# TypeScript compiler trace output (tsc --generateTrace)
-tsc_trace/

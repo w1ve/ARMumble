@@ -39,3 +39,6 @@ custom-protocol = ["tauri/custom-protocol"]
 
 [lints]
 workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+rr-audio-oboe = { path = "../rr-audio-oboe" }
