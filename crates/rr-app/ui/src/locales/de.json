@@ -1,0 +1,45 @@
+{
+  "app": { "title": "Remote.Radio Mumble" },
+  "status": { "disconnected": "Getrennt", "connecting": "Verbinde…", "connected": "Verbunden" },
+  "connect": {
+    "server": "Server", "custom": "Eigener Server", "host": "Host", "port": "Port", "username": "Rufzeichen / Name",
+    "password": "Passwort", "scope": "Nur dieser Kanal (optional)", "scopeHint": "Leer lassen für den ganzen Server",
+    "connect": "Verbinden", "disconnect": "Trennen", "fancy": "Stereo", "legacy": "Standard",
+    "scopeMissing": "Dieser Kanal existiert auf dem Server nicht."
+  },
+  "channels": {
+    "title": "Kanäle", "empty": "Nicht verbunden", "join": "Beitreten", "whisper": "Halten, um in diesen Kanal zu flüstern",
+    "listen": "Halten, um diesen Kanal mitzuhören", "you": "du", "talking": "spricht", "remotePtt": "PTT"
+  },
+  "tx": {
+    "title": "Senden", "mode": "Modus", "ptt": "Push-to-Talk", "vox": "VOX", "continuous": "Immer an",
+    "pttButton": "Zum Sprechen halten", "onAir": "ON AIR", "gain": "Eingangspegel", "gainHigh": "Über 100 % kann übersteuern",
+    "map": "Eingangskanäle", "stereo": "Stereo", "left": "Nur links", "right": "Nur rechts", "mix": "Mono mischen",
+    "voxThreshold": "VOX-Schwelle", "voxHang": "VOX-Nachlauf", "clip": "Übersteuerung: Eingangspegel senken",
+    "noProcessing": "Keine Verarbeitung: keine Rauschunterdrückung, AGC, Echounterdrückung oder Begrenzung."
+  },
+  "rx": {
+    "title": "Empfang", "volume": "Ausgangslautstärke", "mono": "Mono-Ausgabe", "speakers": "Sprecher", "none": "Niemand spricht",
+    "clip": "Ausgang übersteuert: Lautstärke senken"
+  },
+  "link": {
+    "title": "Verbindung", "bitrate": "Bitrate", "stereo": "Stereo", "maxFrame": "Längster Frame", "plan": "Verwendet",
+    "clamped": "Durch die Bandbreitengrenze des Servers begrenzt", "udp": "Audio über UDP", "tcp": "Audio über TCP (höhere Verzögerung)",
+    "dropped": "Verworfene Pakete", "audioErrors": "Soundkartenfehler", "buffer": "Puffer", "jitter": "Jitter",
+    "lost": "Verdeckt", "late": "Verspätet", "wire": "Auf der Leitung"
+  },
+  "settings": {
+    "title": "Einstellungen", "devices": "Audiogeräte", "input": "Eingang", "output": "Ausgang", "default": "Systemstandard",
+    "refresh": "Aktualisieren", "reconnect": "Geräte- und Serveränderungen gelten ab der nächsten Verbindung.",
+    "ptt": "PTT-Hardware", "local": "Lokales PTT (Fußschalter)", "station": "Stations-PTT (Funkgerät tasten)",
+    "enabled": "Aktiv", "port": "Serieller Port", "none": "Keiner", "senseLine": "Eingangsleitung des Fußschalters", "keyLine": "Ausgangsleitung zum Tasten",
+    "activeLow": "Aktiv niedrig", "stationVox": "Funkgerät bei eingehendem Audio tasten (VOX)", "stationVoxHang": "VOX-Nachlauf",
+    "stationHang": "Freigabeverzögerung", "maxTx": "Längste Sendung (s)",
+    "hotkeys": "Tastenkürzel", "pttKey": "Push-to-Talk", "whisperKey": "Flüstern", "listenKey": "Mithören",
+    "whisperTarget": "Flüstern an", "listenTarget": "Mithören bei", "muteHome": "Meinen Kanal beim Mithören stummschalten",
+    "record": "Tasten drücken…", "clear": "Löschen", "hotkeyHint": "Mit Modifikator (Strg, Alt, Umschalt) oder Funktionstaste.",
+    "language": "Sprache", "theme": "Design", "dark": "Dunkel", "light": "Hell", "close": "Schließen", "open": "Einstellungen",
+    "forceTcp": "Audio nur über TCP senden"
+  },
+  "errors": { "title": "Problem" }
+}

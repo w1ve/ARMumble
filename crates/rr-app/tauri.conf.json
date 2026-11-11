@@ -1,0 +1,37 @@
+{
+  "productName": "Remote.Radio Mumble",
+  "version": "0.4.0",
+  "identifier": "com.remoteradio.mumble",
+  "build": {
+    "frontendDist": "ui/dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": { "script": "npm run dev", "cwd": "ui" },
+    "beforeBuildCommand": { "script": "npm run build", "cwd": "ui" }
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Remote.Radio Mumble",
+        "width": 520,
+        "height": 900,
+        "minWidth": 360,
+        "minHeight": 560,
+        "resizable": true,
+        "decorations": true
+      }
+    ],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": false,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

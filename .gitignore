@@ -60,3 +60,6 @@ google-services.json
 .env.local
 # dhat heap profiler output (cargo run --features dhat-heap)
 dhat-heap*.json
+
+crates/rr-app/ui/node_modules/
+crates/rr-app/ui/dist/

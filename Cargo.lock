@@ -5040,6 +5040,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "rr-app"
+version = "0.4.0"
+dependencies = [
+ "rr-audio",
+ "rr-audio-cpal",
+ "rr-client",
+ "rr-radio",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-global-shortcut",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "rr-audio"
 version = "0.1.0"
 dependencies = [

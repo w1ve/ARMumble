@@ -233,6 +233,12 @@ impl RadioClient {
         self.apply(actions).await
     }
 
+    /// Whether PTT is currently held.
+    #[must_use]
+    pub fn ptt_held(&self) -> bool {
+        self.shared.ptt_down.load(Ordering::Relaxed)
+    }
+
     /// Press or release PTT. Opens the local transmit gate (in PTT mode) and
     /// tells the channel's station to key its rig, repeating while held so a
     /// lost release cannot leave the rig on the air.
