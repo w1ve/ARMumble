@@ -63,3 +63,4 @@ dhat-heap*.json
 
 crates/rr-app/ui/node_modules/
 crates/rr-app/ui/dist/
+crates/rr-app/gen/
