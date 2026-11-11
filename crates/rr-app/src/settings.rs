@@ -42,6 +42,18 @@ pub struct AudioSettings {
     pub input_device: Option<String>,
     /// Output device id; `None` is the system default.
     pub output_device: Option<String>,
+    /// Second input device (radio 2); `None` means not used.
+    pub input_device_b: Option<String>,
+    /// Second output device (radio 2); `None` means not used.
+    pub output_device_b: Option<String>,
+    /// Which input is transmitted: `a` or `b`.
+    pub input_select: String,
+    /// Which output plays: `a`, `b` or `mix` (both).
+    pub output_select: String,
+    /// Serial port a contest logger sends OTRSP commands to; empty is disabled.
+    pub otrsp_port: String,
+    /// Let OTRSP commands switch input and output.
+    pub otrsp_enabled: bool,
     /// Requested Opus bit rate in kbit/s.
     pub bitrate_kbps: u32,
     /// Send two channels.
@@ -71,6 +83,12 @@ impl Default for AudioSettings {
         Self {
             input_device: None,
             output_device: None,
+            input_device_b: None,
+            output_device_b: None,
+            input_select: "a".into(),
+            output_select: "a".into(),
+            otrsp_port: String::new(),
+            otrsp_enabled: false,
             bitrate_kbps: 128,
             stereo: true,
             max_frame_ms: 40,

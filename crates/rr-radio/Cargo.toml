@@ -10,11 +10,13 @@ rr-ptt = { path = "../rr-ptt" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
+# Byte I/O for the OTRSP listener (control lines go through rr-ptt).
+serialport = { version = "4", optional = true }
 
 [features]
 default = []
 # Real serial port threads (opens RS-232 ports through rr-ptt).
-serial = ["rr-ptt/serial"]
+serial = ["rr-ptt/serial", "serialport"]
 
 [lints]
 workspace = true

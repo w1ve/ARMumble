@@ -1,18 +1,21 @@
 //! Desktop platform glue: sound cards, serial ports and system-wide hotkeys.
 
 use std::sync::mpsc::{channel, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
-use rr_audio_cpal::{input_params, output_params, start_input, start_output, Health};
-use rr_client::AudioEndpoints;
+use rr_audio_cpal::{input_params, output_params, start_input_with, start_output, Health};
+use rr_client::{AudioEndpoints, InputPipe};
 use rr_radio::{LocalPtt, LocalPttSettings, StationPtt, StationPttSettings};
 use serde::Serialize;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use crate::engine::{hotkey, HotkeyAction};
+use crate::routing::{effective_input, InputSel, Routing};
 use crate::settings::HotkeySettings;
+
+pub use crate::devices::Devices;
 
 /// Rate and channel count a device will run at.
 #[derive(Debug, Clone, Copy)]
@@ -64,13 +67,11 @@ pub fn serial_ports() -> Vec<PortDto> {
         .collect()
 }
 
-/// The formats the chosen devices will use.
-pub fn params(input: Option<&str>, output: Option<&str>) -> Result<(Params, Params), String> {
-    let i = input_params(input).map_err(|e| e.to_string())?;
-    let o = output_params(output).map_err(|e| e.to_string())?;
-    Ok((Params { rate: i.rate, channels: i.channels }, Params { rate: o.rate, channels: o.channels }))
+/// The format a device will run at.
+pub fn device_params(id: Option<&str>, input: bool) -> Result<Params, String> {
+    let p = if input { input_params(id) } else { output_params(id) }.map_err(|e| e.to_string())?;
+    Ok(Params { rate: p.rate, channels: p.channels })
 }
-
 /// Owns the sound-card streams on a dedicated thread (streams must stay on the
 /// thread that created them).
 #[derive(Debug)]
@@ -100,27 +101,46 @@ impl Drop for AudioHandle {
     }
 }
 
-/// Open both streams; fails if either device cannot be opened.
-pub fn start_audio(input: Option<String>, output: Option<String>, ep: AudioEndpoints) -> Result<AudioHandle, String> {
+/// Feed one input device into the shared capture pipe, but only while it is
+/// the selected input. The pipe switches format when the device changes.
+fn input_sink(
+    pipe: &Arc<Mutex<InputPipe>>,
+    routing: &Arc<Routing>,
+    me: InputSel,
+    has_b: bool,
+    p: Params,
+) -> impl FnMut(&[f32]) + Send + 'static {
+    let pipe = Arc::clone(pipe);
+    let routing = Arc::clone(routing);
+    move |samples: &[f32]| {
+        if effective_input(routing.input(), has_b) != me {
+            return;
+        }
+        let Ok(mut pipe) = pipe.lock() else { return };
+        if pipe.device_format() != (p.rate, usize::from(p.channels)) {
+            pipe.set_device_format(p.rate, usize::from(p.channels));
+        }
+        pipe.process(samples);
+    }
+}
+
+/// Open every configured device on a dedicated audio thread. Fails, naming the
+/// device, if any of them cannot be opened.
+pub fn start_audio(d: Devices, ep: AudioEndpoints, routing: Arc<Routing>) -> Result<AudioHandle, String> {
     let (ready_tx, ready_rx) = channel::<Result<Vec<Arc<Health>>, String>>();
     let (stop_tx, stop_rx) = channel::<()>();
     let join = thread::Builder::new()
         .name("rr-audio".into())
         .spawn(move || {
-            let AudioEndpoints { input: pipe, output: play } = ep;
-            let inp = start_input(input.as_deref(), pipe);
-            let out = start_output(output.as_deref(), play);
-            match (inp, out) {
-                (Ok(i), Ok(o)) => {
-                    let _ = ready_tx.send(Ok(vec![Arc::clone(&i.health), Arc::clone(&o.health)]));
+            let opened = open_all(&d, ep, &routing);
+            match opened {
+                Ok((streams, health)) => {
+                    let _ = ready_tx.send(Ok(health));
                     let _ = stop_rx.recv();
-                    drop((i, o));
+                    drop(streams);
                 }
-                (Err(e), _) => {
-                    let _ = ready_tx.send(Err(format!("input device: {e}")));
-                }
-                (_, Err(e)) => {
-                    let _ = ready_tx.send(Err(format!("output device: {e}")));
+                Err(e) => {
+                    let _ = ready_tx.send(Err(e));
                 }
             }
         })
@@ -129,6 +149,48 @@ pub fn start_audio(input: Option<String>, output: Option<String>, ep: AudioEndpo
     Ok(AudioHandle { stop: Some(stop_tx), join: Some(join), health })
 }
 
+/// Streams that must stay alive (and on this thread) while audio runs.
+type Streams = (Vec<rr_audio_cpal::RunningInput>, Vec<rr_audio_cpal::RunningOutput>);
+
+fn open_all(d: &Devices, ep: AudioEndpoints, routing: &Arc<Routing>) -> Result<(Streams, Vec<Arc<Health>>), String> {
+    let AudioEndpoints { input, output, output_b } = ep;
+    let pipe = Arc::new(Mutex::new(input));
+    let has_b = d.input_b.is_some();
+    let mut inputs = Vec::new();
+    let mut health = Vec::new();
+    let mut sources = vec![(InputSel::A, d.input_a.clone(), "input A")];
+    if let Some(b) = &d.input_b {
+        sources.push((InputSel::B, Some(b.clone()), "input B"));
+    }
+    for (me, id, what) in sources {
+        let p = device_params(id.as_deref(), true).map_err(|e| format!("{what} device: {e}"))?;
+        let sink = input_sink(&pipe, routing, me, has_b, p);
+        let s = start_input_with(id.as_deref(), sink).map_err(|e| format!("{what} device: {e}"))?;
+        health.push(Arc::clone(&s.health));
+        inputs.push(s);
+    }
+    let mut outputs = Vec::new();
+    let a = start_output(d.output_a.as_deref(), output).map_err(|e| format!("output A device: {e}"))?;
+    health.push(Arc::clone(&a.health));
+    outputs.push(a);
+    if let (Some(id), Some(play)) = (&d.output_b, output_b) {
+        let b = start_output(Some(id), play).map_err(|e| format!("output B device: {e}"))?;
+        health.push(Arc::clone(&b.health));
+        outputs.push(b);
+    }
+    Ok(((inputs, outputs), health))
+}
+
+/// The OTRSP serial listener.
+pub type Otrsp = rr_radio::serial::OtrspListener;
+
+/// Start listening for OTRSP commands on `port`.
+pub fn open_otrsp<F>(port: &str, on_command: F) -> Result<Otrsp, String>
+where
+    F: FnMut(rr_radio::OtrspCommand) + Send + 'static,
+{
+    rr_radio::serial::OtrspListener::open(port, on_command)
+}
 /// Open the rig key line.
 pub fn open_station(s: &StationPttSettings) -> Result<StationPtt, String> {
     rr_radio::serial::open_station(s)
@@ -268,7 +330,7 @@ impl Monitor {
                         let _ = sink_levels.clips.fetch_add(clips, Ordering::Relaxed);
                     }
                 };
-                match rr_audio_cpal::start_input_with(device.as_deref(), sink) {
+                match start_input_with(device.as_deref(), sink) {
                     Ok(stream) => {
                         let _ = ready_tx.send(Ok(()));
                         let _ = stop_rx.recv();

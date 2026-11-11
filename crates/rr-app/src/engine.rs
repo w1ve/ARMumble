@@ -10,7 +10,8 @@ use rr_radio::LocalPtt;
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::platform::{self, AudioHandle};
+use crate::platform::{self, AudioHandle, Devices};
+use crate::routing::{audible, effective_input, InputSel, OutputSel, Routing};
 use crate::settings::Settings;
 use crate::status::{ChannelDto, ConnInfo, Meters, Phase, PlanDto, SpeakerDto, Status, UserDto};
 
@@ -25,6 +26,12 @@ pub struct AppState {
     pub engine: Mutex<Option<Engine>>,
     /// Meter-only input stream while not connected.
     pub monitor: Mutex<Option<platform::Monitor>>,
+    /// Live two-radio routing, read by the audio callbacks.
+    pub routing: Arc<Routing>,
+    /// The OTRSP serial listener, when a port is configured.
+    pub otrsp: Mutex<Option<platform::Otrsp>>,
+    /// Why the OTRSP port could not be opened, if it failed.
+    pub otrsp_error: Mutex<Option<String>>,
 }
 
 /// Lock helper that survives a poisoned mutex.
@@ -68,7 +75,7 @@ impl Drop for Engine {
     }
 }
 
-fn client_settings(s: &Settings, in_p: &platform::Params, out_p: &platform::Params) -> ClientSettings {
+fn client_settings(s: &Settings, in_p: &platform::Params, out_p: &platform::Params, out_b: Option<&platform::Params>) -> ClientSettings {
     let a = &s.audio;
     let capture = rr_audio::capture::CaptureConfig {
         device_rate: in_p.rate,
@@ -88,6 +95,7 @@ fn client_settings(s: &Settings, in_p: &platform::Params, out_p: &platform::Para
         scope: if s.server.scope.trim().is_empty() { Scope::Everything } else { Scope::Channel(s.server.scope.clone()) },
         capture,
         output_rate: out_p.rate,
+        output_rate_b: out_b.map(|p| p.rate),
         bitrate_bps: a.bitrate_kbps * 1000,
         max_frame_ms: a.max_frame_ms,
         force_tcp: a.force_tcp,
@@ -144,17 +152,29 @@ async fn watch_events(client: RadioClient, conn: Arc<Mutex<ConnInfo>>, remote: A
 
 impl Engine {
     /// Build and start everything from `settings`.
-    pub async fn start(app: &AppHandle, settings: &Settings) -> Result<Self, String> {
+    pub async fn start(app: &AppHandle, settings: &Settings, routing: &Arc<Routing>) -> Result<Self, String> {
         let a = &settings.audio;
-        let (in_p, out_p) = platform::params(a.input_device.as_deref(), a.output_device.as_deref())?;
-        let (client, endpoints) = RadioClient::new(client_settings(settings, &in_p, &out_p)).map_err(|e| e.to_string())?;
-        client.playout().set_master_gain(a.master_gain);
-        client.playout().set_stereo_mode(if a.mono_output {
+        let devices = Devices::from_settings(a);
+        let in_id = match effective_input(routing.input(), devices.input_b.is_some()) {
+            InputSel::A => devices.input_a.as_deref(),
+            InputSel::B => devices.input_b.as_deref(),
+        };
+        let in_p = platform::device_params(in_id, true).map_err(|e| format!("input device: {e}"))?;
+        let out_p = platform::device_params(devices.output_a.as_deref(), false).map_err(|e| format!("output A device: {e}"))?;
+        let out_b = match &devices.output_b {
+            Some(id) => Some(platform::device_params(Some(id), false).map_err(|e| format!("output B device: {e}"))?),
+            None => None,
+        };
+        let cs = client_settings(settings, &in_p, &out_p, out_b.as_ref());
+        let (client, endpoints) = RadioClient::new(cs).map_err(|e| e.to_string())?;
+        client.set_master_gain(a.master_gain);
+        client.set_stereo_mode(if a.mono_output {
             rr_audio::playout::StereoMode::Mono
         } else {
             rr_audio::playout::StereoMode::Stereo
         });
-        let audio = platform::start_audio(a.input_device.clone(), a.output_device.clone(), endpoints)?;
+        apply_outputs(&client, routing.output());
+        let audio = platform::start_audio(devices, endpoints, Arc::clone(routing))?;
         let _connection = client.start();
 
         let conn = Arc::new(Mutex::new(ConnInfo { phase: Phase::Connecting, ..ConnInfo::default() }));
@@ -283,14 +303,29 @@ async fn status_ticker(app: AppHandle, src: SnapshotSource) {
 }
 
 
+/// Mute the output that is not selected (both play in Mix).
+fn apply_outputs(client: &RadioClient, sel: OutputSel) {
+    let b = client.playout_b();
+    let (play_a, play_b) = audible(sel, b.is_some());
+    client.playout().set_muted(!play_a);
+    if let Some(b) = b {
+        b.set_muted(!play_b);
+    }
+}
+
 /// Current levels: from the running client, else from the idle input monitor.
 fn levels(state: &AppState) -> Meters {
     if let Some(e) = lock(&state.engine).as_ref() {
         let c = e.client.capture();
-        let p = e.client.playout();
         let (in_l, in_r) = c.take_peaks();
-        let (out_l, out_r) = p.take_peaks();
-        return Meters { in_l, in_r, out_l, out_r, in_clips: c.clip_count(), out_clips: p.clip_count(), live: true };
+        let (mut out_l, mut out_r, mut out_clips) = (0.0_f32, 0.0_f32, 0_u64);
+        for p in std::iter::once(e.client.playout()).chain(e.client.playout_b()) {
+            let (l, r) = p.take_peaks();
+            out_l = out_l.max(l);
+            out_r = out_r.max(r);
+            out_clips += p.clip_count();
+        }
+        return Meters { in_l, in_r, out_l, out_r, in_clips: c.clip_count(), out_clips, live: true };
     }
     match lock(&state.monitor).as_ref() {
         Some(m) => {
@@ -320,10 +355,81 @@ pub fn restart_monitor(state: &AppState) {
         return;
     }
     let a = lock(&state.settings).audio.clone();
-    match platform::Monitor::start(a.input_device.as_deref(), a.input_gain, a.map()) {
+    let d = Devices::from_settings(&a);
+    let device = match effective_input(state.routing.input(), d.input_b.is_some()) {
+        InputSel::A => d.input_a,
+        InputSel::B => d.input_b,
+    };
+    match platform::Monitor::start(device.as_deref(), a.input_gain, a.map()) {
         Ok(m) => *slot = Some(m),
         Err(e) => tracing::info!("input level monitor unavailable: {e}"),
     }
+}
+
+/// The routing as shown in the UI.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RouteDto {
+    /// Selected input.
+    pub input: InputSel,
+    /// Selected output.
+    pub output: OutputSel,
+    /// OTRSP is listening on its port.
+    pub otrsp_open: bool,
+    /// Why OTRSP could not be opened, if it failed.
+    pub otrsp_error: Option<String>,
+}
+
+/// Snapshot of the routing for the UI.
+pub fn route_dto(state: &AppState) -> RouteDto {
+    RouteDto {
+        input: state.routing.input(),
+        output: state.routing.output(),
+        otrsp_open: lock(&state.otrsp).is_some(),
+        otrsp_error: lock(&state.otrsp_error).clone(),
+    }
+}
+
+/// Apply a routing change to the running audio and tell the UI.
+pub fn route_changed(app: &AppHandle, input_changed: bool) {
+    let state = app.state::<AppState>();
+    if let Some(e) = lock(&state.engine).as_ref() {
+        apply_outputs(&e.client, state.routing.output());
+    }
+    if input_changed {
+        restart_monitor(&state);
+    }
+    let _ = app.emit("route", route_dto(&state));
+}
+
+/// Handle an OTRSP command from the logger.
+fn on_otrsp(app: &AppHandle, cmd: &rr_radio::OtrspCommand) {
+    let state = app.state::<AppState>();
+    if !lock(&state.settings).audio.otrsp_enabled {
+        return;
+    }
+    let (input, output) = state.routing.apply_otrsp(cmd);
+    if input || output {
+        route_changed(app, input);
+    }
+}
+
+/// Open (or close) the OTRSP listener to match the settings.
+pub fn restart_otrsp(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let port = lock(&state.settings).audio.otrsp_port.trim().to_owned();
+    *lock(&state.otrsp) = None;
+    *lock(&state.otrsp_error) = None;
+    if !port.is_empty() {
+        let handle = app.clone();
+        match platform::open_otrsp(&port, move |cmd| on_otrsp(&handle, &cmd)) {
+            Ok(l) => *lock(&state.otrsp) = Some(l),
+            Err(e) => {
+                tracing::warn!("{e}");
+                *lock(&state.otrsp_error) = Some(e);
+            }
+        }
+    }
+    let _ = app.emit("route", route_dto(&state));
 }
 
 /// Run a hotkey press or release.

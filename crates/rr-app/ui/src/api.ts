@@ -62,6 +62,16 @@ export interface Status {
 }
 
 export type TxMode = "ptt" | "vox" | "continuous";
+export type InputSel = "a" | "b";
+export type OutputSel = "a" | "b" | "mix";
+
+/** Live two-radio routing (follows OTRSP when that is switched on). */
+export interface Route {
+  input: InputSel;
+  output: OutputSel;
+  otrsp_open: boolean;
+  otrsp_error: string | null;
+}
 export type ChannelMap = "stereo" | "left" | "right" | "mix";
 
 export interface Settings {
@@ -69,6 +79,12 @@ export interface Settings {
   audio: {
     input_device: string | null;
     output_device: string | null;
+    input_device_b: string | null;
+    output_device_b: string | null;
+    input_select: InputSel;
+    output_select: OutputSel;
+    otrsp_port: string;
+    otrsp_enabled: boolean;
     bitrate_kbps: number;
     stereo: boolean;
     max_frame_ms: number;
@@ -131,6 +147,7 @@ export const api = {
   listenIn: (target: number, down: boolean) => invoke<void>("listen_in", { target, down }),
   whisper: (target: number, down: boolean) => invoke<void>("whisper", { target, down }),
   setUserGain: (session: number, gain: number) => invoke<void>("set_user_gain", { session, gain }),
+  getRoute: () => invoke<Route>("get_route"),
 };
 
 export function onStatus(cb: (s: Status) => void): Promise<UnlistenFn> {
@@ -139,4 +156,8 @@ export function onStatus(cb: (s: Status) => void): Promise<UnlistenFn> {
 
 export function onLevels(cb: (l: Levels) => void): Promise<UnlistenFn> {
   return listen<Levels>("levels", (e) => cb(e.payload));
+}
+
+export function onRoute(cb: (r: Route) => void): Promise<UnlistenFn> {
+  return listen<Route>("route", (e) => cb(e.payload));
 }

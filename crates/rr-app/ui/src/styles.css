@@ -113,16 +113,68 @@ h3 {
   flex-direction: column;
   gap: 10px;
 }
+/* The channel list takes all space the (collapsible) sections below leave. */
 .channels {
   padding: 8px;
-  min-height: 140px;
-  flex: 1 1 40%;
+  min-height: 160px;
+  flex: 1 1 auto;
   overflow-y: auto;
 }
 .controls {
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* Two-radio routing bar. */
+.routing {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.route-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.route-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.segmented button {
+  border: 0;
+  border-radius: 0;
+  padding: 5px 12px;
+  min-width: 40px;
+  background: var(--panel-2);
+  font-weight: 600;
+}
+.segmented button + button {
+  border-inline-start: 1px solid var(--border);
+}
+.segmented button.on {
+  background: var(--accent);
+  color: #fff;
+}
+.check.otrsp {
+  margin-inline-start: auto;
+}
+.check.disabled {
+  color: var(--muted);
+  opacity: 0.6;
 }
 
 .section summary {

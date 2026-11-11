@@ -17,6 +17,10 @@ pub struct AudioEndpoints {
     pub input: InputPipe,
     /// Pull mixed audio from here in the output callback.
     pub output: Playout,
+    /// A second, independent playout for a second output device, present
+    /// when [`crate::ClientSettings::output_rate_b`] is set. It receives the
+    /// same audio and drift-locks to its own device clock.
+    pub output_b: Option<Playout>,
 }
 
 /// Input side: runs the capture engine and forwards packets to the network.
@@ -33,6 +37,17 @@ pub struct InputPipe {
 impl InputPipe {
     pub(crate) fn new(engine: CaptureEngine, shared: Arc<Shared>) -> Self {
         Self { engine, shared, packets: Vec::new() }
+    }
+
+    /// The device format the pipe currently expects: (rate, channels).
+    #[must_use]
+    pub fn device_format(&self) -> (u32, usize) {
+        self.engine.device_format()
+    }
+
+    /// Switch to a capture device with another rate or channel count.
+    pub fn set_device_format(&mut self, rate: u32, channels: usize) {
+        self.engine.set_device_format(rate, channels);
     }
 
     /// Process interleaved device samples.

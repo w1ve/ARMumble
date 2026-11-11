@@ -48,7 +48,7 @@ export function TransmitPanel() {
   const a = settings.audio;
 
   return (
-    <Section title={t("tx.title")} badge={status.transmitting ? <span className="badge on">{t("tx.onAir")}</span> : null}>
+    <Section title={t("tx.title")} open={false} badge={status.transmitting ? <span className="badge on">{t("tx.onAir")}</span> : null}>
       <label className="field">
         <span className="field-label">{t("tx.mode")}</span>
         <select value={a.tx_mode} onChange={(e) => update((x) => void (x.audio.tx_mode = e.target.value as TxMode))}>

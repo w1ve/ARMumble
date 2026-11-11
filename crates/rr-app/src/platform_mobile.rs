@@ -63,9 +63,8 @@ mod audio {
 
     /// Oboe always runs at 48 kHz stereo.
     #[allow(clippy::unnecessary_wraps, reason = "same signature as the desktop version")]
-    pub fn params(_input: Option<&str>, _output: Option<&str>) -> Result<(Params, Params), String> {
-        let p = Params { rate: rr_audio_oboe::RATE, channels: rr_audio_oboe::CHANNELS };
-        Ok((p, p))
+    pub fn device_params(_id: Option<&str>, _input: bool) -> Result<Params, String> {
+        Ok(Params { rate: rr_audio_oboe::RATE, channels: rr_audio_oboe::CHANNELS })
     }
 
     /// Owns the Oboe streams on a dedicated thread.
@@ -94,8 +93,13 @@ mod audio {
         }
     }
 
-    /// Open both streams; the device pickers do not apply on Android.
-    pub fn start_audio(_i: Option<String>, _o: Option<String>, ep: AudioEndpoints) -> Result<AudioHandle, String> {
+    /// Open the phone's input and output; device pickers and the second
+    /// devices do not apply on Android.
+    pub fn start_audio(
+        _d: crate::devices::Devices,
+        ep: AudioEndpoints,
+        _routing: Arc<crate::routing::Routing>,
+    ) -> Result<AudioHandle, String> {
         let health = Arc::new(Health::default());
         let (ready_tx, ready_rx) = channel::<Result<(), String>>();
         let (stop_tx, stop_rx) = channel::<()>();
@@ -103,7 +107,7 @@ mod audio {
         let join = thread::Builder::new()
             .name("rr-audio".into())
             .spawn(move || {
-                let AudioEndpoints { input, output } = ep;
+                let AudioEndpoints { input, output, .. } = ep;
                 rr_audio_oboe::run(input, output, &h, &ready_tx, &stop_rx);
             })
             .map_err(|e| e.to_string())?;
@@ -120,9 +124,8 @@ mod audio {
 
     /// Fixed 48 kHz stereo.
     #[allow(clippy::unnecessary_wraps, reason = "same signature as the desktop version")]
-    pub fn params(_input: Option<&str>, _output: Option<&str>) -> Result<(Params, Params), String> {
-        let p = Params { rate: 48_000, channels: 2 };
-        Ok((p, p))
+    pub fn device_params(_id: Option<&str>, _input: bool) -> Result<Params, String> {
+        Ok(Params { rate: 48_000, channels: 2 })
     }
 
     /// Placeholder owner of the streams.
@@ -137,12 +140,30 @@ mod audio {
     }
 
     /// Not available on this platform.
-    pub fn start_audio(_i: Option<String>, _o: Option<String>, _ep: AudioEndpoints) -> Result<AudioHandle, String> {
+    pub fn start_audio(
+        _d: crate::devices::Devices,
+        _ep: AudioEndpoints,
+        _routing: std::sync::Arc<crate::routing::Routing>,
+    ) -> Result<AudioHandle, String> {
         Err("the audio backend for this platform is not available yet".into())
     }
 }
 
-pub use audio::{params, start_audio, AudioHandle};
+pub use audio::{device_params, start_audio, AudioHandle};
+pub use crate::devices::Devices;
+
+/// OTRSP needs a serial port, which mobile does not have.
+#[derive(Debug)]
+pub struct Otrsp;
+
+/// Not available on mobile.
+pub fn open_otrsp<F>(_port: &str, _on_command: F) -> Result<Otrsp, String>
+where
+    F: FnMut(rr_radio::OtrspCommand) + Send + 'static,
+{
+    Err("OTRSP is not available on this platform".into())
+}
+
 /// Not available on mobile.
 pub fn open_station(_s: &StationPttSettings) -> Result<StationPtt, String> {
     Err("serial PTT is not available on this platform".into())

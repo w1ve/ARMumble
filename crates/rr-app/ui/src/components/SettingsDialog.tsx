@@ -8,19 +8,21 @@ function DeviceSelect({
   label,
   value,
   options,
+  emptyLabel,
   onChange,
 }: {
   label: string;
   value: string | null;
   options: { id: string; name: string }[];
+  /** Text of the empty choice: "System default" for A, "(None)" for B. */
+  emptyLabel: string;
   onChange: (v: string | null) => void;
 }) {
-  const { t } = useTranslation();
   return (
     <label className="field">
       <span className="field-label">{label}</span>
       <select value={value ?? ""} onChange={(e) => onChange(e.target.value || null)}>
-        <option value="">{t("settings.default")}</option>
+        <option value="">{emptyLabel}</option>
         {options.map((o) => (
           <option key={o.id} value={o.id}>
             {o.name}
@@ -39,6 +41,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const ports = useApp((s) => s.ports);
   const refresh = useApp((s) => s.refreshHardware);
   const channels = useApp((s) => s.status.channels);
+  const route = useApp((s) => s.route);
   if (!settings) return null;
   const { local, station } = settings.ptt;
   const hk = settings.hotkeys;
@@ -77,21 +80,62 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
         <h3>{t("settings.devices")}</h3>
         <DeviceSelect
-          label={t("settings.input")}
+          label={t("settings.inputA")}
           value={settings.audio.input_device}
           options={devices.filter((d) => d.input)}
+          emptyLabel={t("settings.default")}
           onChange={(v) => update((x) => void (x.audio.input_device = v))}
         />
         <DeviceSelect
-          label={t("settings.output")}
+          label={t("settings.inputB")}
+          value={settings.audio.input_device_b}
+          options={devices.filter((d) => d.input)}
+          emptyLabel={t("settings.noDevice")}
+          onChange={(v) =>
+            update((x) => {
+              x.audio.input_device_b = v;
+              if (!v) x.audio.input_select = "a";
+            })
+          }
+        />
+        <DeviceSelect
+          label={t("settings.outputA")}
           value={settings.audio.output_device}
           options={devices.filter((d) => d.output)}
+          emptyLabel={t("settings.default")}
           onChange={(v) => update((x) => void (x.audio.output_device = v))}
+        />
+        <DeviceSelect
+          label={t("settings.outputB")}
+          value={settings.audio.output_device_b}
+          options={devices.filter((d) => d.output)}
+          emptyLabel={t("settings.noDevice")}
+          onChange={(v) =>
+            update((x) => {
+              x.audio.output_device_b = v;
+              if (!v) x.audio.output_select = "a";
+            })
+          }
         />
         <button type="button" className="ghost" onClick={() => void refresh()}>
           {t("settings.refresh")}
         </button>
         <p className="hint">{t("settings.reconnect")}</p>
+
+        <h3>{t("settings.otrsp")}</h3>
+        <label className="field">
+          <span className="field-label">{t("settings.otrspPort")}</span>
+          <select value={settings.audio.otrsp_port} onChange={(e) => update((x) => void (x.audio.otrsp_port = e.target.value))}>
+            <option value="">{t("settings.otrspDisabled")}</option>
+            {ports.map((p) => (
+              <option key={p.name} value={p.name}>
+                {p.name} {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {settings.audio.otrsp_port && route.otrsp_error ? <p className="warn-text">{route.otrsp_error}</p> : null}
+        <p className="hint">{t("settings.otrspHelp")}</p>
 
         <h3>{t("settings.ptt")}</h3>
         <fieldset>

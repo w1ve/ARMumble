@@ -4,6 +4,7 @@ import { ChannelTree } from "./components/ChannelTree";
 import { ConnectCard } from "./components/ConnectCard";
 import { LinkPanel } from "./components/LinkPanel";
 import { ReceivePanel } from "./components/ReceivePanel";
+import { RoutingBar } from "./components/RoutingBar";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { TransmitPanel } from "./components/TransmitPanel";
 import { detectLanguage } from "./i18n";
@@ -59,6 +60,7 @@ export function App() {
       <main>
         {status.phase === "disconnected" ? <ConnectCard /> : null}
         <ChannelTree />
+        <RoutingBar />
         <div className="controls">
           <TransmitPanel />
           <ReceivePanel />

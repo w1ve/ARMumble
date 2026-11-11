@@ -35,6 +35,7 @@ enum Msg {
 struct Shared {
     master: AtomicF32,
     mono: AtomicBool,
+    muted: AtomicBool,
     peak_l: AtomicF32,
     peak_r: AtomicF32,
     clips: AtomicU64,
@@ -84,6 +85,13 @@ impl PlayoutHandle {
         self.shared.master.store(gain.clamp(0.0, 4.0));
     }
 
+    /// Silence this output while it keeps running. Jitter buffers and drift
+    /// tracking stay live, so un-muting is instant and click-free. Used to
+    /// route audio between two output devices.
+    pub fn set_muted(&self, muted: bool) {
+        self.shared.muted.store(muted, Ordering::Relaxed);
+    }
+
     /// Choose stereo or mono presentation.
     pub fn set_stereo_mode(&self, mode: StereoMode) {
         self.shared.mono.store(mode == StereoMode::Mono, Ordering::Relaxed);
@@ -127,6 +135,7 @@ pub fn playout(out_rate: u32) -> (Playout, PlayoutHandle) {
     let shared = Arc::new(Shared {
         master: AtomicF32::new(1.0),
         mono: AtomicBool::new(false),
+        muted: AtomicBool::new(false),
         peak_l: AtomicF32::new(0.0),
         peak_r: AtomicF32::new(0.0),
         clips: AtomicU64::new(0),
@@ -201,6 +210,10 @@ impl Playout {
 
     /// Master gain, optional mono fold-down, hard limit at full scale, meters.
     fn finish_mix(&self, out: &mut [f32]) {
+        if self.shared.muted.load(Ordering::Relaxed) {
+            out.fill(0.0);
+            return;
+        }
         let master = self.shared.master.load();
         let mono = self.shared.mono.load(Ordering::Relaxed);
         let (mut pl, mut pr) = (0.0_f32, 0.0_f32);

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { api, onLevels, onStatus, type Device, type Levels, type Port, type Settings, type Status } from "./api";
+import { api, onLevels, onRoute, onStatus, type Device, type Levels, type Port, type Route, type Settings, type Status } from "./api";
 
 const IDLE: Status = {
   phase: "disconnected",
@@ -23,8 +23,12 @@ const IDLE: Status = {
 
 const NO_LEVELS: Levels = { in_l: 0, in_r: 0, out_l: 0, out_r: 0, in_clips: 0, out_clips: 0, live: false };
 
+const NO_ROUTE: Route = { input: "a", output: "a", otrsp_open: false, otrsp_error: null };
+
 interface AppStore {
   status: Status;
+  /** Two-radio routing, live from the backend. */
+  route: Route;
   /** Meter levels, updated 25 times a second. */
   levels: Levels;
   settings: Settings | null;
@@ -45,6 +49,7 @@ let started = false;
 
 export const useApp = create<AppStore>((set, get) => ({
   status: IDLE,
+  route: NO_ROUTE,
   levels: NO_LEVELS,
   settings: null,
   devices: [],
@@ -57,6 +62,8 @@ export const useApp = create<AppStore>((set, get) => ({
     started = true;
     await onStatus((status) => set({ status }));
     await onLevels((levels) => set({ levels }));
+    await onRoute((route) => set({ route }));
+    set({ route: await api.getRoute() });
     set({ settings: await api.loadSettings() });
     await get().refreshHardware();
   },

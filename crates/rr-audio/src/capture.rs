@@ -262,6 +262,25 @@ impl CaptureEngine {
         Ok((engine, ctl))
     }
 
+    /// The device format the engine currently expects: (rate, channels).
+    #[must_use]
+    pub fn device_format(&self) -> (u32, usize) {
+        (self.cfg.device_rate, self.cfg.device_channels)
+    }
+
+    /// Switch to a capture device with a different format (used when the
+    /// input is switched between two sound cards). Audio already converted is
+    /// kept; only the converter and channel mapping change.
+    pub fn set_device_format(&mut self, rate: u32, channels: usize) {
+        if (rate, channels) == self.device_format() {
+            return;
+        }
+        self.cfg.device_rate = rate;
+        self.cfg.device_channels = channels.max(1);
+        self.resampler = (rate != SAMPLE_RATE).then(|| Resampler::new(2, rate, SAMPLE_RATE));
+        self.stage.clear();
+    }
+
     /// Map channels, apply gain and meter one device buffer into `self.stage`
     /// (always interleaved stereo at the device rate).
     fn stage_input(&mut self, input: &[f32]) {
@@ -501,6 +520,23 @@ mod tests {
         cfg.encoder.bitrate_bps = 48_000;
         let out = run(cfg, |_| {}, 10);
         assert_eq!(out.len(), 5);
+    }
+
+    #[test]
+    fn switching_device_format_keeps_frame_rate() {
+        let cfg = CaptureConfig { tx_mode: TxMode::Continuous, ..CaptureConfig::default() };
+        let (mut e, _c) = CaptureEngine::new(cfg).expect("engine");
+        let mut out = Vec::new();
+        for _ in 0..50 {
+            e.process(&vec![0.1_f32; 480 * 2], &mut out);
+        }
+        e.set_device_format(44_100, 1);
+        assert_eq!(e.device_format(), (44_100, 1));
+        for _ in 0..50 {
+            e.process(&vec![0.1_f32; 441], &mut out);
+        }
+        // 0.5 s either side of the switch: about 50 frames of 20 ms in total.
+        assert!((46..=50).contains(&out.len()), "{}", out.len());
     }
 
     #[test]

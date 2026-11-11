@@ -8,6 +8,7 @@
 #![allow(clippy::needless_pass_by_value, reason = "Tauri command arguments are extracted by value")]
 
 mod commands;
+mod devices;
 mod engine;
 #[cfg(desktop)]
 #[path = "platform_desktop.rs"]
@@ -15,6 +16,7 @@ mod platform;
 #[cfg(mobile)]
 #[path = "platform_mobile.rs"]
 mod platform;
+mod routing;
 mod settings;
 mod status;
 
@@ -41,9 +43,11 @@ pub fn run() {
             let state = app.state::<AppState>();
             let loaded = Settings::load(&path);
             platform::apply_hotkeys(app.handle(), &loaded.hotkeys);
+            let _ = state.routing.load(&loaded.audio);
             *lock(&state.settings) = loaded;
             *lock(&state.settings_path) = path;
             engine::restart_monitor(&state);
+            engine::restart_otrsp(app.handle());
             let _levels = tauri::async_runtime::spawn(engine::levels_ticker(app.handle().clone()));
             Ok(())
         })
@@ -60,6 +64,7 @@ pub fn run() {
             commands::whisper,
             commands::set_user_gain,
             commands::settings_location,
+            commands::get_route,
         ])
         .run(tauri::generate_context!());
     if let Err(e) = result {

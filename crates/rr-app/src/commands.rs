@@ -4,7 +4,8 @@ use rr_audio::playout::StereoMode;
 use rr_client::RadioClient;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::engine::{lock, restart_monitor, AppState, Engine};
+use crate::engine::{lock, restart_monitor, restart_otrsp, route_changed, route_dto, AppState, Engine, RouteDto};
+use crate::routing::{InputSel, OutputSel};
 use crate::platform::{self, DeviceDto, PortDto};
 use crate::settings::{settings_path, Settings};
 use crate::status::Status;
@@ -22,9 +23,8 @@ fn apply_live(client: &RadioClient, s: &Settings) {
     cap.set_tx_mode(a.mode());
     cap.set_vox(a.vox_threshold_db, a.vox_hang_ms);
     client.set_quality(a.bitrate_kbps * 1000, a.stereo, a.max_frame_ms);
-    let play = client.playout();
-    play.set_master_gain(a.master_gain);
-    play.set_stereo_mode(if a.mono_output { StereoMode::Mono } else { StereoMode::Stereo });
+    client.set_master_gain(a.master_gain);
+    client.set_stereo_mode(if a.mono_output { StereoMode::Mono } else { StereoMode::Stereo });
 }
 
 /// The saved settings.
@@ -39,15 +39,29 @@ pub fn save_settings(app: AppHandle, state: State<'_, AppState>, settings: Setti
     let path = lock(&state.settings_path).clone();
     settings.save(&path)?;
     platform::apply_hotkeys(&app, &settings.hotkeys);
-    let device_changed = lock(&state.settings).audio.input_device != settings.audio.input_device;
-    *lock(&state.settings) = settings.clone();
+    let old = std::mem::replace(&mut *lock(&state.settings), settings.clone()).audio;
+    let new = &settings.audio;
     if let Some(e) = lock(&state.engine).as_ref() {
         apply_live(&e.client, &settings);
     }
-    if device_changed {
+    if old.otrsp_port != new.otrsp_port {
+        restart_otrsp(&app);
+    }
+    // Manual routing applies whenever OTRSP is not in control.
+    let mut input_changed = false;
+    let mut routed = false;
+    if !new.otrsp_enabled {
+        input_changed = state.routing.set_input(InputSel::parse(&new.input_select));
+        let output_changed = state.routing.set_output(OutputSel::parse(&new.output_select));
+        routed = input_changed || output_changed;
+    }
+    let inputs_changed = old.input_device != new.input_device || old.input_device_b != new.input_device_b;
+    if routed || old.otrsp_enabled != new.otrsp_enabled {
+        route_changed(&app, input_changed || inputs_changed);
+    } else if inputs_changed {
         restart_monitor(&state);
     } else if let Some(m) = lock(&state.monitor).as_ref() {
-        m.set(settings.audio.input_gain, settings.audio.map());
+        m.set(new.input_gain, new.map());
     }
     Ok(())
 }
@@ -74,7 +88,7 @@ pub async fn connect(app: AppHandle, state: State<'_, AppState>) -> Result<(), S
     // Release the meter-only stream so the engine can own the input device.
     *lock(&state.monitor) = None;
     let settings = lock(&state.settings).clone();
-    match Engine::start(&app, &settings).await {
+    match Engine::start(&app, &settings, &state.routing).await {
         Ok(engine) => {
             *lock(&state.engine) = Some(engine);
             Ok(())
@@ -129,8 +143,14 @@ pub async fn whisper(state: State<'_, AppState>, target: u32, down: bool) -> Res
 /// Volume of one talker.
 #[tauri::command]
 pub fn set_user_gain(state: State<'_, AppState>, session: u32, gain: f32) -> Result<(), String> {
-    client_of(&state)?.playout().set_user_gain(session, gain);
+    client_of(&state)?.set_user_gain(session, gain);
     Ok(())
+}
+
+/// Current two-radio routing.
+#[tauri::command]
+pub fn get_route(state: State<'_, AppState>) -> RouteDto {
+    route_dto(&state)
 }
 
 /// Where the settings file lives (for the "about" box).

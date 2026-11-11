@@ -61,6 +61,7 @@ pub(crate) struct Shared {
     pub(crate) handle: Mutex<Option<ClientHandle>>,
     pub(crate) events: broadcast::Sender<Event>,
     pub(crate) playout: PlayoutHandle,
+    pub(crate) playout_b: Option<PlayoutHandle>,
     pub(crate) capture: Arc<CaptureControl>,
     pub(crate) target: AtomicU32,
     pub(crate) mute_home: AtomicBool,
@@ -87,6 +88,7 @@ impl Shared {
     pub(crate) fn new(
         settings: ClientSettings,
         playout: PlayoutHandle,
+        playout_b: Option<PlayoutHandle>,
         capture: Arc<CaptureControl>,
     ) -> Arc<Self> {
         let (events, _) = broadcast::channel(256);
@@ -99,6 +101,7 @@ impl Shared {
             handle: Mutex::new(None),
             events,
             playout,
+            playout_b,
             capture,
             target: AtomicU32::new(0),
             mute_home: AtomicBool::new(false),
@@ -113,6 +116,11 @@ impl Shared {
             rt: OnceLock::new(),
             shutdown: AtomicBool::new(false),
         })
+    }
+
+    /// Every playout (one per output device).
+    pub(crate) fn playouts(&self) -> impl Iterator<Item = &PlayoutHandle> {
+        std::iter::once(&self.playout).chain(self.playout_b.as_ref())
     }
 
     pub(crate) fn emit(&self, e: Event) {

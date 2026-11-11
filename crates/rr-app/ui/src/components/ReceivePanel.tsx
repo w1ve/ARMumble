@@ -18,7 +18,7 @@ export function ReceivePanel() {
   const active = status.speakers.filter((s) => s.active);
 
   return (
-    <Section title={t("rx.title")}>
+    <Section title={t("rx.title")} open={false}>
       <Meter source="output" label={t("rx.volume")} />
       <Slider
         label={t("rx.volume")}

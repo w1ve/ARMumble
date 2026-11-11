@@ -32,6 +32,8 @@ pub struct ClientSettings {
     pub capture: CaptureConfig,
     /// Playback device sample rate.
     pub output_rate: u32,
+    /// Rate of a second output device, if one is used.
+    pub output_rate_b: Option<u32>,
     /// Requested Opus bit rate in bits per second.
     pub bitrate_bps: u32,
     /// Longest frame the user accepts, in milliseconds (latency cap).
@@ -53,6 +55,7 @@ impl Default for ClientSettings {
             scope: Scope::Everything,
             capture: CaptureConfig::default(),
             output_rate: 48_000,
+            output_rate_b: None,
             bitrate_bps: 128_000,
             max_frame_ms: 40,
             force_tcp: false,

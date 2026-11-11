@@ -75,7 +75,9 @@ impl Handler {
             }
         }
         sh.activity.packet(a.is_terminator && a.opus_data.is_empty());
-        sh.playout.push_packet(a.sender_session, a.frame_number, a.opus_data.clone(), a.is_terminator);
+        for p in sh.playouts() {
+            p.push_packet(a.sender_session, a.frame_number, a.opus_data.clone(), a.is_terminator);
+        }
     }
 
     fn apply_state(&self, msg: &ControlMessage) -> bool {

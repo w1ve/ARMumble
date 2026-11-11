@@ -62,10 +62,17 @@ impl RadioClient {
     pub fn new(settings: ClientSettings) -> Result<(Self, AudioEndpoints), ClientError> {
         let (engine, control) = CaptureEngine::new(settings.capture)?;
         let (output, play) = playout(settings.output_rate);
-        let shared = Shared::new(settings, play, control);
+        let (output_b, play_b) = match settings.output_rate_b {
+            Some(rate) => {
+                let (o, h) = playout(rate);
+                (Some(o), Some(h))
+            }
+            None => (None, None),
+        };
+        let shared = Shared::new(settings, play, play_b, control);
         shared.replan();
         let client = Self { shared: Arc::clone(&shared), holds: Arc::default() };
-        let endpoints = AudioEndpoints { input: InputPipe::new(engine, shared), output };
+        let endpoints = AudioEndpoints { input: InputPipe::new(engine, shared), output, output_b };
         Ok((client, endpoints))
     }
 
@@ -127,6 +134,33 @@ impl RadioClient {
     #[must_use]
     pub fn playout(&self) -> PlayoutHandle {
         self.shared.playout.clone()
+    }
+
+    /// Controls of the second output's playout, if there is one.
+    #[must_use]
+    pub fn playout_b(&self) -> Option<PlayoutHandle> {
+        self.shared.playout_b.clone()
+    }
+
+    /// Set the master volume on every output.
+    pub fn set_master_gain(&self, gain: f32) {
+        for p in self.shared.playouts() {
+            p.set_master_gain(gain);
+        }
+    }
+
+    /// Set the stereo presentation on every output.
+    pub fn set_stereo_mode(&self, mode: rr_audio::playout::StereoMode) {
+        for p in self.shared.playouts() {
+            p.set_stereo_mode(mode);
+        }
+    }
+
+    /// Set one talker's volume on every output.
+    pub fn set_user_gain(&self, session: u32, gain: f32) {
+        for p in self.shared.playouts() {
+            p.set_user_gain(session, gain);
+        }
     }
 
     /// Per-talker playout statistics.
