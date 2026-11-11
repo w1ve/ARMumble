@@ -1,0 +1,18 @@
+[package]
+name = "rr-audio-cpal"
+version = "0.1.0"
+edition = "2021"
+description = "Desktop sound-card backend for the RemoteRadio audio engine: device enumeration and input/output streams via cpal. No processing, only sample-format and channel-layout conversion."
+license = "MIT"
+
+[dependencies]
+rr-client = { path = "../rr-client" }
+rr-audio = { path = "../rr-audio" }
+tracing = "0.1"
+thiserror = "2"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+cpal = "0.17.3"
+
+[lints]
+workspace = true

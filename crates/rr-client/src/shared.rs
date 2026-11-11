@@ -192,7 +192,7 @@ impl Shared {
                 self_deaf: u.self_deaf,
             })
             .collect();
-        v.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        v.sort_by_key(|u| u.name.to_lowercase());
         v
     }
 

@@ -10,6 +10,7 @@ members = [
     "crates/rr-radio",
     "crates/rr-mumble",
     "crates/rr-client",
+    "crates/rr-audio-cpal",
     "crates/app-client",
 ]
 # The video / remote-desktop crates (rr-capture, rr-codec, rr-hwcodec, rr-webrtc,

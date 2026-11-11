@@ -5050,6 +5050,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rr-audio-cpal"
+version = "0.1.0"
+dependencies = [
+ "cpal",
+ "rr-audio",
+ "rr-client",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
 name = "rr-client"
 version = "0.1.0"
 dependencies = [

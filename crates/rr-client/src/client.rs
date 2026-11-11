@@ -43,7 +43,7 @@ pub enum ClientError {
     Mumble(#[from] rr_mumble::error::Error),
 }
 
-/// A headless RemoteRadio client. Cheap to clone; all clones share one connection.
+/// A headless `RemoteRadio` client. Cheap to clone; all clones share one connection.
 #[derive(Debug, Clone)]
 pub struct RadioClient {
     shared: Arc<Shared>,
