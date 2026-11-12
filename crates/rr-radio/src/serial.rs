@@ -4,7 +4,7 @@ use rr_ptt::{ControlLine, SenseLine as HwSense, SerialPttConfig, SerialPttSink, 
 
 use crate::message::PttMessage;
 use crate::runner::{LocalPtt, StationPtt};
-use crate::settings::{KeyLine, LocalPttSettings, SenseLine, StationPttSettings};
+use crate::settings::{KeyLine, LocalPttSettings, SecondKeyLine, SenseLine, StationPttSettings};
 
 pub use rr_ptt::available_ports;
 
@@ -23,6 +23,39 @@ pub fn open_station(settings: &StationPttSettings) -> Result<StationPtt, String>
     let cfg = SerialPttConfig { port: settings.port.clone(), active_low: settings.active_low };
     let sink = SerialPttSink::open(&cfg, line).map_err(|e| format!("open Station PTT: {e}"))?;
     StationPtt::spawn(sink, settings).map_err(|e| format!("start Station PTT: {e}"))
+}
+
+fn control(line: KeyLine) -> ControlLine {
+    match line {
+        KeyLine::Dtr => ControlLine::Dtr,
+        KeyLine::Rts => ControlLine::Rts,
+    }
+}
+
+/// Open the key lines of a two-radio station. Radio 2 may share radio 1's
+/// port (on the other control line) or use its own port. Both keyers use
+/// radio 1's timing settings.
+///
+/// # Errors
+/// Returns a message if a port cannot be opened, both radios are on the same
+/// line of one port, or a worker cannot start.
+pub fn open_stations(radio1: &StationPttSettings, radio2: &SecondKeyLine) -> Result<(StationPtt, StationPtt), String> {
+    if radio1.port.is_empty() || radio2.port.is_empty() {
+        return Err("no serial port selected for Station PTT".into());
+    }
+    let cfg1 = SerialPttConfig { port: radio1.port.clone(), active_low: radio1.active_low };
+    let (sink1, sink2) = if radio1.port == radio2.port {
+        SerialPttSink::open_pair(&cfg1, control(radio1.key_line), control(radio2.key_line), radio2.active_low)
+            .map_err(|e| format!("open Station PTT: {e}"))?
+    } else {
+        let cfg2 = SerialPttConfig { port: radio2.port.clone(), active_low: radio2.active_low };
+        let a = SerialPttSink::open(&cfg1, control(radio1.key_line)).map_err(|e| format!("open Station PTT radio 1: {e}"))?;
+        let b = SerialPttSink::open(&cfg2, control(radio2.key_line)).map_err(|e| format!("open Station PTT radio 2: {e}"))?;
+        (a, b)
+    };
+    let k1 = StationPtt::spawn(sink1, radio1).map_err(|e| format!("start Station PTT: {e}"))?;
+    let k2 = StationPtt::spawn(sink2, radio1).map_err(|e| format!("start Station PTT: {e}"))?;
+    Ok((k1, k2))
 }
 
 /// Open the footswitch input and start polling it.

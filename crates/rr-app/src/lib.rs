@@ -43,7 +43,6 @@ pub fn run() {
             let state = app.state::<AppState>();
             let loaded = Settings::load(&path);
             platform::apply_hotkeys(app.handle(), &loaded.hotkeys);
-            let _ = state.routing.load(&loaded.audio);
             *lock(&state.settings) = loaded;
             *lock(&state.settings_path) = path;
             engine::restart_monitor(&state);

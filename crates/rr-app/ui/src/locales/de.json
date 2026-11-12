@@ -115,25 +115,40 @@
     "close": "Schließen",
     "open": "Einstellungen",
     "forceTcp": "Audio nur über TCP senden",
-    "inputA": "Eingang A (Funkgerät 1)",
-    "inputB": "Eingang B (Funkgerät 2)",
-    "outputA": "Ausgang A (Funkgerät 1)",
-    "outputB": "Ausgang B (Funkgerät 2)",
+    "inputA": "Eingang A (Empfangsaudio Funkgerät 1)",
+    "inputB": "Eingang B (Empfangsaudio Funkgerät 2)",
+    "outputA": "Ausgang A (Mikrofon Funkgerät 1)",
+    "outputB": "Ausgang B (Mikrofon Funkgerät 2)",
     "noDevice": "(Keines)",
     "otrsp": "OTRSP (Umschaltung zwischen zwei Funkgeräten)",
-    "otrspPort": "Serieller OTRSP-Port",
+    "otrspPort": "Serieller OTRSP-Port (Logger auf diesem Computer)",
     "otrspDisabled": "(deaktiviert)",
-    "otrspHelp": "Ihr Contest-Logger sendet OTRSP-Befehle an diesen Port: TX1/TX2 wählt den Sendeeingang, RX1/RX2 den Ausgang, Stereo-Empfang wählt Mix. Verbinden Sie den Logger über ein virtuelles serielles Portpaar (z. B. com0com)."
+    "otrspHelp": "Nur auf dem Computer einstellen, auf dem der Logger läuft; die Gegenstelle folgt über den Server (nur Stereo-Server). TX1/TX2 wählt das sendende Funkgerät, RX1/RX2 das gehörte, Stereo-Empfang wählt beide. Verbinden Sie Logger und Programm über ein virtuelles serielles Portpaar (z. B. com0com).",
+    "so2r": "Zwei Funkgeräte (SO2R)",
+    "so2rEnable": "Betrieb mit zwei Funkgeräten",
+    "so2rRole": "Dieser Computer ist",
+    "roleOperator": "Operator-Platz",
+    "roleStation": "Station (mit den Funkgeräten)",
+    "roleOperatorHint": "Sie hören Funkgerät 1 links und Funkgerät 2 rechts; wählen Sie 1, 2 oder beide. Ihre Stimme geht an das in der Station gewählte Funkgerät.",
+    "roleStationHint": "Funkgerät 1 links und Funkgerät 2 rechts senden. Stimme und PTT des Operators gehen nur an das sendende Funkgerät.",
+    "singleDevice": "Beide Funkgeräte an einer Stereo-Soundkarte (Funkgerät 1 links, 2 rechts)",
+    "station2": "Stations-PTT, Funkgerät 2",
+    "station2Hint": "Funkgerät 2 kann den Port von Funkgerät 1 auf der anderen Leitung nutzen (z. B. RTS für 1, DTR für 2). Die Zeiteinstellungen gelten für beide."
   },
   "errors": {
     "title": "Problem"
   },
   "routing": {
-    "title": "Audio-Routing der Funkgeräte",
-    "input": "Senden",
-    "output": "Hören",
-    "mix": "Mix",
+    "title": "Zwei Funkgeräte",
     "otrsp": "OTRSP",
-    "otrspHint": "Wählen Sie in den Einstellungen einen OTRSP-Port, um dies zu aktivieren"
+    "otrspHint": "Kein Logger sendet OTRSP: Port in den Einstellungen wählen oder den Logger der Gegenstelle steuern lassen",
+    "listen": "Hören",
+    "transmit": "Senden auf",
+    "both": "Beide",
+    "radio": "Funkgerät {{n}}",
+    "txOn": "Senden",
+    "listening": "Operator hört",
+    "fromLocal": "Logger hier",
+    "fromRemote": "Logger an der Gegenstelle"
   }
 }

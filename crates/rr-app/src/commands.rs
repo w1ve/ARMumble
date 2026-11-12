@@ -1,11 +1,10 @@
 //! Commands callable from the UI.
 
-use rr_audio::playout::StereoMode;
 use rr_client::RadioClient;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::engine::{lock, restart_monitor, restart_otrsp, route_changed, route_dto, AppState, Engine, RouteDto};
-use crate::routing::{InputSel, OutputSel};
+use crate::engine::{apply_route, lock, restart_monitor, restart_otrsp, route_dto, AppState, Engine};
+use crate::routing::RouteDto;
 use crate::platform::{self, DeviceDto, PortDto};
 use crate::settings::{settings_path, Settings};
 use crate::status::Status;
@@ -24,7 +23,6 @@ fn apply_live(client: &RadioClient, s: &Settings) {
     cap.set_vox(a.vox_threshold_db, a.vox_hang_ms);
     client.set_quality(a.bitrate_kbps * 1000, a.stereo, a.max_frame_ms);
     client.set_master_gain(a.master_gain);
-    client.set_stereo_mode(if a.mono_output { StereoMode::Mono } else { StereoMode::Stereo });
 }
 
 /// The saved settings.
@@ -47,18 +45,9 @@ pub fn save_settings(app: AppHandle, state: State<'_, AppState>, settings: Setti
     if old.otrsp_port != new.otrsp_port {
         restart_otrsp(&app);
     }
-    // Manual routing applies whenever OTRSP is not in control.
-    let mut input_changed = false;
-    let mut routed = false;
-    if !new.otrsp_enabled {
-        input_changed = state.routing.set_input(InputSel::parse(&new.input_select));
-        let output_changed = state.routing.set_output(OutputSel::parse(&new.output_select));
-        routed = input_changed || output_changed;
-    }
-    let inputs_changed = old.input_device != new.input_device || old.input_device_b != new.input_device_b;
-    if routed || old.otrsp_enabled != new.otrsp_enabled {
-        route_changed(&app, input_changed || inputs_changed);
-    } else if inputs_changed {
+    // Manual buttons, the OTRSP checkbox, role and mono are all applied here.
+    let _ = apply_route(&app);
+    if old.input_device != new.input_device || old.so2r_role != new.so2r_role {
         restart_monitor(&state);
     } else if let Some(m) = lock(&state.monitor).as_ref() {
         m.set(new.input_gain, new.map());
@@ -88,7 +77,7 @@ pub async fn connect(app: AppHandle, state: State<'_, AppState>) -> Result<(), S
     // Release the meter-only stream so the engine can own the input device.
     *lock(&state.monitor) = None;
     let settings = lock(&state.settings).clone();
-    match Engine::start(&app, &settings, &state.routing).await {
+    match Engine::start(&app, &settings, &state.so2r).await {
         Ok(engine) => {
             *lock(&state.engine) = Some(engine);
             Ok(())

@@ -115,25 +115,40 @@
     "close": "Close",
     "open": "Settings",
     "forceTcp": "Send audio over TCP only",
-    "inputA": "Input A (radio 1)",
-    "inputB": "Input B (radio 2)",
-    "outputA": "Output A (radio 1)",
-    "outputB": "Output B (radio 2)",
+    "inputA": "Input A (radio 1 receive audio)",
+    "inputB": "Input B (radio 2 receive audio)",
+    "outputA": "Output A (radio 1 mic)",
+    "outputB": "Output B (radio 2 mic)",
     "noDevice": "(None)",
     "otrsp": "OTRSP (two-radio switching)",
-    "otrspPort": "OTRSP serial port",
+    "otrspPort": "OTRSP serial port (logger on this computer)",
     "otrspDisabled": "(disabled)",
-    "otrspHelp": "Your contest logger sends OTRSP commands to this port: TX1/TX2 select the transmit input, RX1/RX2 the output, stereo receive selects Mix. Connect the logger with a virtual serial port pair (for example com0com)."
+    "otrspHelp": "Set this only on the computer where the logger runs; the other position follows over the server (stereo servers only). TX1/TX2 select the transmitting radio, RX1/RX2 the radio heard, stereo receive selects both. Use a virtual serial port pair (for example com0com) between the logger and this program.",
+    "so2r": "Two radios (SO2R)",
+    "so2rEnable": "Two-radio operation",
+    "so2rRole": "This computer is the",
+    "roleOperator": "Operator position",
+    "roleStation": "Station (has the radios)",
+    "roleOperatorHint": "You hear radio 1 on the left and radio 2 on the right; choose radio 1, radio 2 or both. Your voice is sent to the radio selected at the station.",
+    "roleStationHint": "Send radio 1 as left and radio 2 as right. The operator's voice and PTT go to the transmitting radio only.",
+    "singleDevice": "Both radios on one stereo sound card (radio 1 left, radio 2 right)",
+    "station2": "Station PTT, radio 2",
+    "station2Hint": "Radio 2 can share radio 1's port on the other line (for example RTS for radio 1, DTR for radio 2). Timing settings are shared with radio 1."
   },
   "errors": {
     "title": "Problem"
   },
   "routing": {
-    "title": "Radio audio routing",
-    "input": "Transmit",
-    "output": "Listen",
-    "mix": "Mix",
+    "title": "Two radios",
     "otrsp": "OTRSP",
-    "otrspHint": "Choose an OTRSP serial port in Settings to enable this"
+    "otrspHint": "No logger is sending OTRSP: choose a port in Settings, or let the other position's logger drive it",
+    "listen": "Listen",
+    "transmit": "Transmit on",
+    "both": "Both",
+    "radio": "radio {{n}}",
+    "txOn": "Transmit",
+    "listening": "Operator hears",
+    "fromLocal": "logger here",
+    "fromRemote": "logger at the other end"
   }
 }

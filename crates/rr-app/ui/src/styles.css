@@ -172,6 +172,15 @@ h3 {
 .check.otrsp {
   margin-inline-start: auto;
 }
+.route-state {
+  font-size: 12px;
+  color: var(--muted);
+}
+.route-state.tx-1,
+.route-state.tx-2 {
+  color: var(--text);
+  font-weight: 600;
+}
 .check.disabled {
   color: var(--muted);
   opacity: 0.6;

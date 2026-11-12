@@ -1,6 +1,6 @@
 //! The public client facade.
 
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -15,7 +15,7 @@ use rr_mumble::command::{
 use rr_mumble::state::ServerState;
 use rr_mumble::transport::tcp::TcpConfig;
 use rr_mumble::transport::udp::UdpConfig;
-use rr_radio::message::{PttMessage, PAYLOAD_TYPE_PTT, PLUGIN_NAME, REFRESH_MS};
+use rr_radio::message::{PttMessage, So2rMessage, PAYLOAD_TYPE_PTT, PAYLOAD_TYPE_SO2R, PLUGIN_NAME, REFRESH_MS};
 use rr_radio::{HoldAction, ListenIn, StationPtt, WhisperHold};
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
@@ -297,36 +297,96 @@ impl RadioClient {
     /// has VOX enabled) inbound audio key it. The returned task ends when the
     /// client is dropped.
     pub fn attach_station(&self, station: StationPtt) -> JoinHandle<()> {
+        self.attach_stations(station, None, Arc::new(AtomicU8::new(1)))
+    }
+
+    /// Drive one or two rigs. `select` holds the transmitting radio (1 or 2);
+    /// only that rig is keyed. On a switch the previous rig is released first,
+    /// then the new one is given the current request, so two transmitters are
+    /// never keyed together. Without `radio2` everything keys `radio1`.
+    pub fn attach_stations(&self, radio1: StationPtt, radio2: Option<StationPtt>, select: Arc<AtomicU8>) -> JoinHandle<()> {
         let shared = Arc::clone(&self.shared);
         let mut rx = self.subscribe();
         tokio::spawn(async move {
+            let rigs = Rigs { radio1, radio2 };
             let mut tick = tokio::time::interval(Duration::from_millis(10));
-            let mut active = false;
+            let (mut active, mut remote) = (false, false);
+            let mut current = rigs.pick(select.load(Ordering::Relaxed));
             loop {
                 tokio::select! {
                     ev = rx.recv() => match ev {
-                        Ok(Event::RemotePtt { down, .. }) => station.set_remote(down),
+                        Ok(Event::RemotePtt { down, .. }) => {
+                            remote = down;
+                            rigs.get(current).set_remote(down);
+                        }
                         Ok(Event::Disconnected { .. }) => {
-                            station.set_remote(false);
-                            station.set_audio_active(false);
+                            remote = false;
                             active = false;
+                            rigs.release_all();
                         }
                         Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => {}
                         Err(broadcast::error::RecvError::Closed) => break,
                     },
                     _ = tick.tick() => {
+                        let want = rigs.pick(select.load(Ordering::Relaxed));
+                        if want != current {
+                            rigs.get(current).set_remote(false);
+                            rigs.get(current).set_audio_active(false);
+                            current = want;
+                            rigs.get(current).set_remote(remote);
+                            rigs.get(current).set_audio_active(active);
+                        }
                         let now_active = shared.activity.is_active();
                         if now_active != active {
                             active = now_active;
-                            station.set_audio_active(active);
+                            rigs.get(current).set_audio_active(active);
                         }
                     }
                 }
             }
         })
     }
+
+    /// Announce this position's two-radio state to the channel (the position
+    /// whose logger drives `OTRSP` calls this on every change and periodically).
+    pub fn send_so2r(&self, state: rr_radio::So2rState) {
+        let sh = &self.shared;
+        let seq = sh.so2r_out_seq.fetch_add(1, Ordering::Relaxed) + 1;
+        let payload = So2rMessage::new(seq, state).encode();
+        send_plugin(sh, PAYLOAD_TYPE_SO2R, payload);
+    }
 }
 
+/// One or two rigs keyed by a station.
+struct Rigs {
+    radio1: StationPtt,
+    radio2: Option<StationPtt>,
+}
+
+impl Rigs {
+    /// Which rig a selection means: 2 only if radio 2 exists.
+    fn pick(&self, sel: u8) -> u8 {
+        if sel == 2 && self.radio2.is_some() {
+            2
+        } else {
+            1
+        }
+    }
+
+    fn get(&self, which: u8) -> &StationPtt {
+        match (which, &self.radio2) {
+            (2, Some(r2)) => r2,
+            _ => &self.radio1,
+        }
+    }
+
+    fn release_all(&self) {
+        for r in std::iter::once(&self.radio1).chain(self.radio2.as_ref()) {
+            r.set_remote(false);
+            r.set_audio_active(false);
+        }
+    }
+}
 /// Re-send a held PTT until it is released or superseded.
 async fn ptt_refresh(shared: Arc<Shared>, seq: u64, msg: PttMessage) {
     loop {
@@ -340,6 +400,11 @@ async fn ptt_refresh(shared: Arc<Shared>, seq: u64, msg: PttMessage) {
 }
 
 fn send_ptt(sh: &Arc<Shared>, msg: PttMessage) {
+    send_plugin(sh, PAYLOAD_TYPE_PTT, msg.encode());
+}
+
+/// Send a `remote-radio` control message to everyone in our channel.
+fn send_plugin(sh: &Arc<Shared>, payload_type: &str, payload: Vec<u8>) {
     let channel = {
         let st = sh.state();
         sh.own_channel(&st)
@@ -347,12 +412,13 @@ fn send_ptt(sh: &Arc<Shared>, msg: PttMessage) {
     let (Some(h), Some(rt)) = (sh.handle(), sh.rt.get()) else {
         return;
     };
+    let payload_type = payload_type.to_owned();
     let _task = rt.spawn(async move {
         let _ = h
             .send(SendPluginMessage {
                 plugin_name: PLUGIN_NAME.to_owned(),
-                payload_type: PAYLOAD_TYPE_PTT.to_owned(),
-                payload: msg.encode(),
+                payload_type,
+                payload,
                 target_sessions: Vec::new(),
                 channel_id: channel,
             })

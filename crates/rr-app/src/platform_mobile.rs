@@ -95,11 +95,7 @@ mod audio {
 
     /// Open the phone's input and output; device pickers and the second
     /// devices do not apply on Android.
-    pub fn start_audio(
-        _d: crate::devices::Devices,
-        ep: AudioEndpoints,
-        _routing: Arc<crate::routing::Routing>,
-    ) -> Result<AudioHandle, String> {
+    pub fn start_audio(_d: crate::devices::Devices, ep: AudioEndpoints) -> Result<AudioHandle, String> {
         let health = Arc::new(Health::default());
         let (ready_tx, ready_rx) = channel::<Result<(), String>>();
         let (stop_tx, stop_rx) = channel::<()>();
@@ -140,11 +136,7 @@ mod audio {
     }
 
     /// Not available on this platform.
-    pub fn start_audio(
-        _d: crate::devices::Devices,
-        _ep: AudioEndpoints,
-        _routing: std::sync::Arc<crate::routing::Routing>,
-    ) -> Result<AudioHandle, String> {
+    pub fn start_audio(_d: crate::devices::Devices, _ep: AudioEndpoints) -> Result<AudioHandle, String> {
         Err("the audio backend for this platform is not available yet".into())
     }
 }
@@ -166,6 +158,11 @@ where
 
 /// Not available on mobile.
 pub fn open_station(_s: &StationPttSettings) -> Result<StationPtt, String> {
+    Err("serial PTT is not available on this platform".into())
+}
+
+/// Not available on mobile.
+pub fn open_stations(_s: &StationPttSettings, _s2: &rr_radio::SecondKeyLine) -> Result<(StationPtt, StationPtt), String> {
     Err("serial PTT is not available on this platform".into())
 }
 

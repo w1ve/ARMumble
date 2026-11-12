@@ -33,6 +33,14 @@ pub enum Event {
         /// True while held.
         down: bool,
     },
+    /// Another position announced its two-radio (`SO2R`) state, normally because
+    /// its logger drives OTRSP.
+    So2r {
+        /// Sender's session id.
+        session: u32,
+        /// The announced state.
+        state: rr_radio::So2rState,
+    },
     /// The encoder settings were (re)planned against the server's bandwidth limit.
     Bandwidth(BandwidthPlan),
     /// The audio path switched between UDP and the TCP tunnel.

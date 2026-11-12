@@ -42,17 +42,23 @@ pub struct AudioSettings {
     pub input_device: Option<String>,
     /// Output device id; `None` is the system default.
     pub output_device: Option<String>,
-    /// Second input device (radio 2); `None` means not used.
+    /// Station with one card per radio: radio 2's receive audio. `None` = not used.
     pub input_device_b: Option<String>,
-    /// Second output device (radio 2); `None` means not used.
+    /// Station with one card per radio: radio 2's mic input. `None` = not used.
     pub output_device_b: Option<String>,
-    /// Which input is transmitted: `a` or `b`.
-    pub input_select: String,
-    /// Which output plays: `a`, `b` or `mix` (both).
-    pub output_select: String,
+    /// Two-radio (SO2R) operation.
+    pub so2r_enabled: bool,
+    /// This computer in two-radio operation: `operator` or `station`.
+    pub so2r_role: String,
+    /// Station: both radios on one stereo card (radio 1 left, radio 2 right).
+    pub so2r_single_device: bool,
+    /// Manual transmit radio, 1 or 2.
+    pub so2r_tx: u8,
+    /// Manual listening: `1`, `2` or `both`.
+    pub so2r_rx: String,
     /// Serial port a contest logger sends OTRSP commands to; empty is disabled.
     pub otrsp_port: String,
-    /// Let OTRSP commands switch input and output.
+    /// Let OTRSP (local, or from the other position) switch the radios.
     pub otrsp_enabled: bool,
     /// Requested Opus bit rate in kbit/s.
     pub bitrate_kbps: u32,
@@ -85,8 +91,11 @@ impl Default for AudioSettings {
             output_device: None,
             input_device_b: None,
             output_device_b: None,
-            input_select: "a".into(),
-            output_select: "a".into(),
+            so2r_enabled: false,
+            so2r_role: "operator".into(),
+            so2r_single_device: false,
+            so2r_tx: 1,
+            so2r_rx: "both".into(),
             otrsp_port: String::new(),
             otrsp_enabled: false,
             bitrate_kbps: 128,

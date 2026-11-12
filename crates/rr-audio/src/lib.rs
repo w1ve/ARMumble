@@ -14,6 +14,7 @@
 pub mod asrc;
 pub mod bandwidth;
 pub mod capture;
+pub mod combine;
 pub mod codec;
 pub mod error;
 pub mod jitter;

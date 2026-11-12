@@ -115,25 +115,40 @@
     "close": "Fermer",
     "open": "Réglages",
     "forceTcp": "Envoyer l'audio en TCP uniquement",
-    "inputA": "Entrée A (radio 1)",
-    "inputB": "Entrée B (radio 2)",
-    "outputA": "Sortie A (radio 1)",
-    "outputB": "Sortie B (radio 2)",
+    "inputA": "Entrée A (réception radio 1)",
+    "inputB": "Entrée B (réception radio 2)",
+    "outputA": "Sortie A (micro radio 1)",
+    "outputB": "Sortie B (micro radio 2)",
     "noDevice": "(Aucun)",
     "otrsp": "OTRSP (commutation deux radios)",
-    "otrspPort": "Port série OTRSP",
+    "otrspPort": "Port série OTRSP (logiciel sur cet ordinateur)",
     "otrspDisabled": "(désactivé)",
-    "otrspHelp": "Votre logiciel de contest envoie les commandes OTRSP sur ce port : TX1/TX2 choisit l'entrée émise, RX1/RX2 la sortie, la réception stéréo choisit Mix. Reliez le logiciel par une paire de ports série virtuels (par exemple com0com)."
+    "otrspHelp": "À régler uniquement sur l'ordinateur où tourne le logiciel de contest ; l'autre poste suit via le serveur (serveurs stéréo uniquement). TX1/TX2 choisit la radio qui émet, RX1/RX2 la radio entendue, la réception stéréo choisit les deux. Reliez le logiciel par une paire de ports série virtuels (par exemple com0com).",
+    "so2r": "Deux radios (SO2R)",
+    "so2rEnable": "Exploitation avec deux radios",
+    "so2rRole": "Cet ordinateur est",
+    "roleOperator": "Le poste opérateur",
+    "roleStation": "La station (avec les radios)",
+    "roleOperatorHint": "Vous entendez la radio 1 à gauche et la radio 2 à droite ; choisissez 1, 2 ou les deux. Votre voix va à la radio choisie à la station.",
+    "roleStationHint": "Envoyer la radio 1 à gauche et la radio 2 à droite. La voix et le PTT de l'opérateur vont uniquement à la radio qui émet.",
+    "singleDevice": "Les deux radios sur une carte son stéréo (radio 1 à gauche, radio 2 à droite)",
+    "station2": "PTT station, radio 2",
+    "station2Hint": "La radio 2 peut partager le port de la radio 1 sur l'autre ligne (par exemple RTS pour la 1, DTR pour la 2). Les réglages de temps sont communs."
   },
   "errors": {
     "title": "Problème"
   },
   "routing": {
-    "title": "Routage audio des radios",
-    "input": "Émission",
-    "output": "Écoute",
-    "mix": "Mix",
+    "title": "Deux radios",
     "otrsp": "OTRSP",
-    "otrspHint": "Choisissez un port série OTRSP dans les réglages pour l'activer"
+    "otrspHint": "Aucun logiciel n'envoie d'OTRSP : choisissez un port dans les réglages, ou laissez le logiciel de l'autre poste piloter",
+    "listen": "Écoute",
+    "transmit": "Émettre sur",
+    "both": "Les deux",
+    "radio": "radio {{n}}",
+    "txOn": "Émission",
+    "listening": "L'opérateur entend",
+    "fromLocal": "logiciel ici",
+    "fromRemote": "logiciel à l'autre poste"
   }
 }

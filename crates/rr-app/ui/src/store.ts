@@ -23,7 +23,16 @@ const IDLE: Status = {
 
 const NO_LEVELS: Levels = { in_l: 0, in_r: 0, out_l: 0, out_r: 0, in_clips: 0, out_clips: 0, live: false };
 
-const NO_ROUTE: Route = { input: "a", output: "a", otrsp_open: false, otrsp_error: null };
+const NO_ROUTE: Route = {
+  enabled: false,
+  role: "operator",
+  tx: 1,
+  rx: "both",
+  source: "manual",
+  otrsp_available: false,
+  otrsp_local: false,
+  otrsp_error: null,
+};
 
 interface AppStore {
   status: Status;

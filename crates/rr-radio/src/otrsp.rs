@@ -43,6 +43,34 @@ pub enum OtrspCommand {
     QueryName,
 }
 
+/// The two-radio situation: which radio transmits and what the operator hears.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct So2rState {
+    /// Radio that gets the operator's voice and PTT.
+    pub tx: Radio,
+    /// What the operator listens to.
+    pub rx: Listen,
+}
+
+impl Default for So2rState {
+    fn default() -> Self {
+        Self { tx: Radio::One, rx: Listen::Single(Radio::One) }
+    }
+}
+
+impl So2rState {
+    /// Apply an OTRSP command; returns true if the state changed.
+    pub fn apply(&mut self, cmd: &OtrspCommand) -> bool {
+        let before = *self;
+        match cmd {
+            OtrspCommand::Tx(r) => self.tx = *r,
+            OtrspCommand::Rx(l) => self.rx = *l,
+            OtrspCommand::QueryName => {}
+        }
+        *self != before
+    }
+}
+
 /// Name returned to `?NAME`.
 pub const DEVICE_NAME: &str = "RemoteRadio Mumble";
 
@@ -132,6 +160,16 @@ mod tests {
         assert!(p.feed(b"TX").is_empty());
         assert_eq!(p.feed(b"2\rRX1S\r"), vec![OtrspCommand::Tx(Radio::Two), OtrspCommand::Rx(Listen::Both)]);
         assert_eq!(p.feed(b"AUX101\r\nRX2\n"), vec![OtrspCommand::Rx(Listen::Single(Radio::Two))]);
+    }
+
+    #[test]
+    fn state_follows_commands() {
+        let mut s = So2rState::default();
+        assert!(s.apply(&OtrspCommand::Tx(Radio::Two)));
+        assert!(!s.apply(&OtrspCommand::Tx(Radio::Two)));
+        assert!(s.apply(&OtrspCommand::Rx(Listen::Both)));
+        assert!(!s.apply(&OtrspCommand::QueryName));
+        assert_eq!(s, So2rState { tx: Radio::Two, rx: Listen::Both });
     }
 
     #[test]

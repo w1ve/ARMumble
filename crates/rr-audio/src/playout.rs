@@ -3,7 +3,7 @@
 
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -17,12 +17,65 @@ const IDLE_REMOVE_S: f64 = 10.0;
 const STATS_PERIOD_S: f64 = 0.25;
 
 /// How the stereo output is presented.
+///
+/// In two-radio operation the station sends radio 1 on the left channel and
+/// radio 2 on the right, which the modes below select from or steer into.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StereoMode {
     /// True stereo.
     Stereo,
     /// Left and right averaged to both sides (for a single speaker).
     Mono,
+    /// The left channel (radio 1) in both ears.
+    LeftOnly,
+    /// The right channel (radio 2) in both ears.
+    RightOnly,
+    /// Everything, mixed to mono, on the left channel only; right is silent
+    /// (a station whose radio 1 mic input is the left side of one card).
+    ToLeft,
+    /// Everything, mixed to mono, on the right channel only; left is silent.
+    ToRight,
+}
+
+impl StereoMode {
+    fn code(self) -> u8 {
+        match self {
+            Self::Stereo => 0,
+            Self::Mono => 1,
+            Self::LeftOnly => 2,
+            Self::RightOnly => 3,
+            Self::ToLeft => 4,
+            Self::ToRight => 5,
+        }
+    }
+
+    fn from_code(c: u8) -> Self {
+        match c {
+            1 => Self::Mono,
+            2 => Self::LeftOnly,
+            3 => Self::RightOnly,
+            4 => Self::ToLeft,
+            5 => Self::ToRight,
+            _ => Self::Stereo,
+        }
+    }
+
+    /// Present one stereo frame.
+    #[inline]
+    #[must_use]
+    pub fn apply(self, l: f32, r: f32) -> (f32, f32) {
+        match self {
+            Self::Stereo => (l, r),
+            Self::Mono => {
+                let m = 0.5 * (l + r);
+                (m, m)
+            }
+            Self::LeftOnly => (l, l),
+            Self::RightOnly => (r, r),
+            Self::ToLeft => (0.5 * (l + r), 0.0),
+            Self::ToRight => (0.0, 0.5 * (l + r)),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -34,7 +87,7 @@ enum Msg {
 #[derive(Debug)]
 struct Shared {
     master: AtomicF32,
-    mono: AtomicBool,
+    mode: AtomicU8,
     muted: AtomicBool,
     peak_l: AtomicF32,
     peak_r: AtomicF32,
@@ -92,9 +145,9 @@ impl PlayoutHandle {
         self.shared.muted.store(muted, Ordering::Relaxed);
     }
 
-    /// Choose stereo or mono presentation.
+    /// Choose how the stereo output is presented.
     pub fn set_stereo_mode(&self, mode: StereoMode) {
-        self.shared.mono.store(mode == StereoMode::Mono, Ordering::Relaxed);
+        self.shared.mode.store(mode.code(), Ordering::Relaxed);
     }
 
     /// Output peak levels (linear, left and right) since the last call.
@@ -134,7 +187,7 @@ pub fn playout(out_rate: u32) -> (Playout, PlayoutHandle) {
     let (tx, rx) = channel();
     let shared = Arc::new(Shared {
         master: AtomicF32::new(1.0),
-        mono: AtomicBool::new(false),
+        mode: AtomicU8::new(0),
         muted: AtomicBool::new(false),
         peak_l: AtomicF32::new(0.0),
         peak_r: AtomicF32::new(0.0),
@@ -215,16 +268,11 @@ impl Playout {
             return;
         }
         let master = self.shared.master.load();
-        let mono = self.shared.mono.load(Ordering::Relaxed);
+        let mode = StereoMode::from_code(self.shared.mode.load(Ordering::Relaxed));
         let (mut pl, mut pr) = (0.0_f32, 0.0_f32);
         let mut clips = 0_u64;
         for f in out.as_chunks_mut::<2>().0.iter_mut() {
-            let (mut l, mut r) = (f[0] * master, f[1] * master);
-            if mono {
-                let m = 0.5 * (l + r);
-                l = m;
-                r = m;
-            }
+            let (l, r) = mode.apply(f[0] * master, f[1] * master);
             clips += u64::from(l.abs() > 1.0) + u64::from(r.abs() > 1.0);
             f[0] = l.clamp(-1.0, 1.0);
             f[1] = r.clamp(-1.0, 1.0);

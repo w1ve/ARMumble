@@ -6,7 +6,7 @@ use std::sync::Arc;
 use rr_mumble::command::JoinChannel;
 use rr_mumble::event::EventHandler;
 use rr_mumble::message::{ControlMessage, UdpMessage};
-use rr_radio::message::{PttMessage, PAYLOAD_TYPE_PTT, PLUGIN_NAME};
+use rr_radio::message::{PttMessage, So2rMessage, PAYLOAD_TYPE_PTT, PAYLOAD_TYPE_SO2R, PLUGIN_NAME};
 
 use crate::event::Event;
 use crate::shared::{ScopeRoot, Shared};
@@ -19,12 +19,32 @@ pub(crate) struct Handler {
 
 impl Handler {
     fn on_plugin(&self, p: &rr_mumble::proto::mumble_tcp::PluginMessage) {
-        if p.plugin_name.as_deref() != Some(PLUGIN_NAME) || p.payload_type.as_deref() != Some(PAYLOAD_TYPE_PTT) {
+        if p.plugin_name.as_deref() != Some(PLUGIN_NAME) {
             return;
         }
         let (Some(session), Some(bytes)) = (p.sender_session, p.payload.as_deref()) else {
             return;
         };
+        match p.payload_type.as_deref() {
+            Some(PAYLOAD_TYPE_PTT) => self.on_ptt(session, bytes),
+            Some(PAYLOAD_TYPE_SO2R) => self.on_so2r(session, bytes),
+            _ => {}
+        }
+    }
+
+    fn on_so2r(&self, session: u32, bytes: &[u8]) {
+        let Some(msg) = So2rMessage::decode(bytes) else {
+            return;
+        };
+        let Some(state) = msg.state() else {
+            return;
+        };
+        if self.shared.so2r_seq_accept(session, msg.seq) {
+            self.shared.emit(Event::So2r { session, state });
+        }
+    }
+
+    fn on_ptt(&self, session: u32, bytes: &[u8]) {
         let Some(msg) = PttMessage::decode(bytes) else {
             return;
         };

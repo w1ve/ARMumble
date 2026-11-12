@@ -71,6 +71,8 @@ pub(crate) struct Shared {
     pub(crate) stereo: AtomicBool,
     pub(crate) max_frame: AtomicU32,
     pub(crate) ptt_filters: Mutex<HashMap<u32, SeqFilter>>,
+    pub(crate) so2r_seq: Mutex<HashMap<u32, u64>>,
+    pub(crate) so2r_out_seq: AtomicU64,
     pub(crate) ptt_seq: AtomicU64,
     pub(crate) ptt_down: AtomicBool,
     pub(crate) sent: AtomicU64,
@@ -108,6 +110,8 @@ impl Shared {
             activity: Activity::new(),
             server_limit: AtomicU32::new(0),
             ptt_filters: Mutex::new(HashMap::new()),
+            so2r_seq: Mutex::new(HashMap::new()),
+            so2r_out_seq: AtomicU64::new(0),
             ptt_seq: AtomicU64::new(0),
             ptt_down: AtomicBool::new(false),
             sent: AtomicU64::new(0),
@@ -146,6 +150,21 @@ impl Shared {
 
     pub(crate) fn ptt_filters(&self) -> MutexGuard<'_, HashMap<u32, SeqFilter>> {
         lock(&self.ptt_filters)
+    }
+
+    /// Accept an SO2R message from `session` unless it is older than the last
+    /// one seen (a sender that restarted far behind is accepted again).
+    pub(crate) fn so2r_seq_accept(&self, session: u32, seq: u64) -> bool {
+        let mut m = lock(&self.so2r_seq);
+        let last = m.get(&session).copied();
+        let ok = match last {
+            Some(l) => seq >= l || l - seq >= 1_000,
+            None => true,
+        };
+        if ok {
+            let _ = m.insert(session, seq);
+        }
+        ok
     }
 
     pub(crate) fn current_plan(&self) -> Option<BandwidthPlan> {

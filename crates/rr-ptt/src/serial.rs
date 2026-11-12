@@ -66,9 +66,34 @@ fn open(port: &str) -> Result<Box<dyn SerialPort>> {
         .map_err(|e| PttError::Open(format!("{port}: {e}")))
 }
 
+/// A serial port shared by up to two key lines (SO2R: radio 1 on RTS and
+/// radio 2 on DTR of the same interface is common).
+type SharedPort = std::sync::Arc<std::sync::Mutex<Box<dyn SerialPort>>>;
+
+fn write_line(port: &SharedPort, line: ControlLine, level: bool) -> std::result::Result<(), String> {
+    let mut p = port.lock().map_err(|_| "serial port lock poisoned".to_owned())?;
+    let r = match line {
+        ControlLine::Dtr => p.write_data_terminal_ready(level),
+        ControlLine::Rts => p.write_request_to_send(level),
+    };
+    r.map_err(|e| e.to_string())
+}
+
+/// Open a port for keying with both lines deasserted before anything else.
+fn open_keying_port(config: &SerialPttConfig) -> Result<SharedPort> {
+    let mut port = open(&config.port)?;
+    // Safe state first, before anything can observe the line. Both lines, so
+    // whichever the hardware watches is low regardless of the chosen line.
+    port.write_data_terminal_ready(false)
+        .map_err(|e| PttError::Io(format!("initial DTR deassert: {e}")))?;
+    port.write_request_to_send(false)
+        .map_err(|e| PttError::Io(format!("initial RTS deassert: {e}")))?;
+    Ok(std::sync::Arc::new(std::sync::Mutex::new(port)))
+}
+
 /// Station-side PTT output: drives a control line to key the transmitter.
 pub struct SerialPttSink {
-    port: Box<dyn SerialPort>,
+    port: SharedPort,
     line: ControlLine,
     active_low: bool,
 }
@@ -93,27 +118,42 @@ impl SerialPttSink {
     /// Returns [`PttError::Open`] if the port cannot be opened and
     /// [`PttError::Io`] if the initial safe (unkeyed) state cannot be set.
     pub fn open(config: &SerialPttConfig, line: ControlLine) -> Result<Self> {
-        let mut port = open(&config.port)?;
-        // Safe state first, before anything can observe the line. Both lines, so
-        // whichever the hardware watches is low regardless of `line`.
-        port.write_data_terminal_ready(false)
-            .map_err(|e| PttError::Io(format!("initial DTR deassert: {e}")))?;
-        port.write_request_to_send(false)
-            .map_err(|e| PttError::Io(format!("initial RTS deassert: {e}")))?;
+        let port = open_keying_port(config)?;
         let mut sink = Self { port, line, active_low: config.active_low };
         // Establish the unkeyed level on the chosen line explicitly too.
         sink.drive(false)?;
         Ok(sink)
     }
 
+    /// Open one port for two radios: `first` keys radio 1 and `second` keys
+    /// radio 2 on the other control line. Each sink keys and releases only its
+    /// own line; both lines start deasserted.
+    ///
+    /// # Errors
+    /// Fails if the port cannot be opened, the lines are the same, or the
+    /// initial unkeyed state cannot be set.
+    pub fn open_pair(
+        config: &SerialPttConfig,
+        first: ControlLine,
+        second: ControlLine,
+        second_active_low: bool,
+    ) -> Result<(Self, Self)> {
+        if first == second {
+            return Err(PttError::Open(format!("{}: both radios on the same {first:?} line", config.port)));
+        }
+        let port = open_keying_port(config)?;
+        let mut a = Self { port: std::sync::Arc::clone(&port), line: first, active_low: config.active_low };
+        let mut b = Self { port, line: second, active_low: second_active_low };
+        a.drive(false)?;
+        b.drive(false)?;
+        Ok((a, b))
+    }
+
     /// Drive the chosen line to represent `keyed`, honouring `active_low`.
     fn drive(&mut self, keyed: bool) -> Result<()> {
         let level = keyed != self.active_low; // active_low inverts
-        let r = match self.line {
-            ControlLine::Dtr => self.port.write_data_terminal_ready(level),
-            ControlLine::Rts => self.port.write_request_to_send(level),
-        };
-        r.map_err(|e| PttError::Io(format!("drive {:?}={level}: {e}", self.line)))
+        write_line(&self.port, self.line, level)
+            .map_err(|e| PttError::Io(format!("drive {:?}={level}: {e}", self.line)))
     }
 }
 
@@ -128,13 +168,9 @@ impl Drop for SerialPttSink {
         // Guarantee the rig is unkeyed when we let go of the port, rather than
         // trusting the adapter to deassert on close.
         let unkeyed = self.active_low; // the "unkeyed" logic level
-        let _ = match self.line {
-            ControlLine::Dtr => self.port.write_data_terminal_ready(unkeyed),
-            ControlLine::Rts => self.port.write_request_to_send(unkeyed),
-        };
+        let _ = write_line(&self.port, self.line, unkeyed);
     }
 }
-
 /// Operator-side PTT input: senses a footswitch on a readable control line.
 pub struct SerialPttSource {
     port: Box<dyn SerialPort>,

@@ -107,14 +107,37 @@ impl StationPttSettings {
     }
 }
 
+/// The key line of the second radio in a two-radio (SO2R) station. Timing
+/// (VOX, hang, deadman, maximum transmit) is shared with radio 1.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SecondKeyLine {
+    /// Key radio 2 as well.
+    pub enabled: bool,
+    /// Serial port; the same port as radio 1 is fine if the line differs.
+    pub port: String,
+    /// Output line that keys radio 2.
+    pub key_line: KeyLine,
+    /// True when radio 2 keys on a low level.
+    pub active_low: bool,
+}
+
+impl Default for SecondKeyLine {
+    fn default() -> Self {
+        Self { enabled: false, port: String::new(), key_line: KeyLine::Dtr, active_low: false }
+    }
+}
+
 /// All PTT settings together.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PttSettings {
     /// Footswitch input.
     pub local: LocalPttSettings,
-    /// Rig output.
+    /// Rig output (radio 1).
     pub station: StationPttSettings,
+    /// Second rig output (radio 2) for two-radio operation.
+    pub station2: SecondKeyLine,
 }
 
 #[cfg(test)]

@@ -21,7 +21,7 @@ pub mod settings;
 
 pub use hold::{HoldAction, ListenIn, WhisperHold};
 pub use keyer::StationKeyer;
-pub use message::{PttMessage, SeqFilter};
-pub use otrsp::{Listen, OtrspCommand, OtrspParser, Radio};
+pub use message::{PttMessage, SeqFilter, So2rMessage};
+pub use otrsp::{Listen, OtrspCommand, OtrspParser, Radio, So2rState};
 pub use runner::{LocalPtt, StationPtt};
-pub use settings::{KeyLine, LocalPttSettings, PttSettings, SenseLine, StationPttSettings};
+pub use settings::{KeyLine, LocalPttSettings, PttSettings, SecondKeyLine, SenseLine, StationPttSettings};

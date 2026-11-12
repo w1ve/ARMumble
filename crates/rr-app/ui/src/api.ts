@@ -62,14 +62,21 @@ export interface Status {
 }
 
 export type TxMode = "ptt" | "vox" | "continuous";
-export type InputSel = "a" | "b";
-export type OutputSel = "a" | "b" | "mix";
+export type So2rRole = "operator" | "station";
+export type Listen = "1" | "2" | "both";
 
-/** Live two-radio routing (follows OTRSP when that is switched on). */
+/**
+ * Live two-radio (SO2R) state. It comes from the logger on this computer
+ * ("local"), the logger at the other position ("remote"), or the buttons.
+ */
 export interface Route {
-  input: InputSel;
-  output: OutputSel;
-  otrsp_open: boolean;
+  enabled: boolean;
+  role: So2rRole;
+  tx: 1 | 2;
+  rx: Listen;
+  source: "manual" | "local" | "remote";
+  otrsp_available: boolean;
+  otrsp_local: boolean;
   otrsp_error: string | null;
 }
 export type ChannelMap = "stereo" | "left" | "right" | "mix";
@@ -81,8 +88,11 @@ export interface Settings {
     output_device: string | null;
     input_device_b: string | null;
     output_device_b: string | null;
-    input_select: InputSel;
-    output_select: OutputSel;
+    so2r_enabled: boolean;
+    so2r_role: So2rRole;
+    so2r_single_device: boolean;
+    so2r_tx: 1 | 2;
+    so2r_rx: Listen;
     otrsp_port: string;
     otrsp_enabled: boolean;
     bitrate_kbps: number;
@@ -118,6 +128,7 @@ export interface Settings {
       deadman_ms: number;
       max_tx_secs: number;
     };
+    station2: { enabled: boolean; port: string; key_line: "dtr" | "rts"; active_low: boolean };
   };
   language: string;
   theme: "dark" | "light";

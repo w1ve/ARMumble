@@ -17,15 +17,17 @@ pub struct Devices {
 }
 
 impl Devices {
-    /// The devices named in the settings.
+    /// The devices named in the settings. Second devices only apply to a
+    /// two-radio station that has one sound card per radio.
     #[must_use]
     pub fn from_settings(a: &AudioSettings) -> Self {
         let set = |v: &Option<String>| v.clone().filter(|s| !s.is_empty());
+        let two_cards = a.so2r_enabled && a.so2r_role.eq_ignore_ascii_case("station") && !a.so2r_single_device;
         Self {
             input_a: set(&a.input_device),
-            input_b: set(&a.input_device_b),
+            input_b: if two_cards { set(&a.input_device_b) } else { None },
             output_a: set(&a.output_device),
-            output_b: set(&a.output_device_b),
+            output_b: if two_cards { set(&a.output_device_b) } else { None },
         }
     }
 }
