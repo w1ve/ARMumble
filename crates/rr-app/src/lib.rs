@@ -10,6 +10,7 @@
 mod commands;
 mod devices;
 mod engine;
+mod keyer_udp;
 #[cfg(desktop)]
 #[path = "platform_desktop.rs"]
 mod platform;
@@ -48,6 +49,7 @@ pub fn run() {
             engine::restart_monitor(&state);
             engine::restart_otrsp(app.handle());
             let _levels = tauri::async_runtime::spawn(engine::levels_ticker(app.handle().clone()));
+            let _keyer = tauri::async_runtime::spawn(engine::keyer_ticker(app.handle().clone()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

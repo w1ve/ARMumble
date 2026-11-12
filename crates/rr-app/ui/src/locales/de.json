@@ -133,7 +133,10 @@
     "roleStationHint": "Funkgerät 1 links und Funkgerät 2 rechts senden. Stimme und PTT des Operators gehen nur an das sendende Funkgerät.",
     "singleDevice": "Beide Funkgeräte an einer Stereo-Soundkarte (Funkgerät 1 links, 2 rechts)",
     "station2": "Stations-PTT, Funkgerät 2",
-    "station2Hint": "Funkgerät 2 kann den Port von Funkgerät 1 auf der anderen Leitung nutzen (z. B. RTS für 1, DTR für 2). Die Zeiteinstellungen gelten für beide."
+    "station2Hint": "Funkgerät 2 kann den Port von Funkgerät 1 auf der anderen Leitung nutzen (z. B. RTS für 1, DTR für 2). Die Zeiteinstellungen gelten für beide.",
+    "keyerUdp": "OTRSP an den CW-Keyer auf diesem Computer senden (UDP)",
+    "keyerUdpPort": "UDP-Port des Keyers",
+    "keyerUdpHint": "Sendet TX1/TX2 (und den RX-Zustand) bei jeder Änderung und alle 2 Sekunden an 127.0.0.1, damit der Keyer das sendende Funkgerät tastet. Funktioniert unabhängig davon, wo der Logger läuft, auch ohne Verbindung."
   },
   "errors": {
     "title": "Problem"

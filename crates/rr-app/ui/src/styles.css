@@ -172,6 +172,9 @@ h3 {
 .check.otrsp {
   margin-inline-start: auto;
 }
+.narrow-field input {
+  width: 120px;
+}
 .route-state {
   font-size: 12px;
   color: var(--muted);

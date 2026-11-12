@@ -133,7 +133,10 @@
     "roleStationHint": "Envoyer la radio 1 à gauche et la radio 2 à droite. La voix et le PTT de l'opérateur vont uniquement à la radio qui émet.",
     "singleDevice": "Les deux radios sur une carte son stéréo (radio 1 à gauche, radio 2 à droite)",
     "station2": "PTT station, radio 2",
-    "station2Hint": "La radio 2 peut partager le port de la radio 1 sur l'autre ligne (par exemple RTS pour la 1, DTR pour la 2). Les réglages de temps sont communs."
+    "station2Hint": "La radio 2 peut partager le port de la radio 1 sur l'autre ligne (par exemple RTS pour la 1, DTR pour la 2). Les réglages de temps sont communs.",
+    "keyerUdp": "Envoyer l'OTRSP au manipulateur CW de cet ordinateur (UDP)",
+    "keyerUdpPort": "Port UDP du manipulateur",
+    "keyerUdpHint": "Envoie TX1/TX2 (et l'état RX) à 127.0.0.1 à chaque changement et toutes les 2 secondes, pour que le manipulateur commande la radio qui émet. Fonctionne quel que soit l'emplacement du logiciel de contest, même sans connexion."
   },
   "errors": {
     "title": "Problème"

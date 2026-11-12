@@ -121,6 +121,33 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             </label>
             {settings.audio.otrsp_port && route.otrsp_error ? <p className="warn-text">{route.otrsp_error}</p> : null}
             <p className="hint">{t("settings.otrspHelp")}</p>
+            {station ? (
+              <>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={settings.audio.keyer_udp_enabled}
+                    onChange={(e) => update((x) => void (x.audio.keyer_udp_enabled = e.target.checked))}
+                  />
+                  {t("settings.keyerUdp")}
+                </label>
+                <label className="field narrow-field">
+                  <span className="field-label">{t("settings.keyerUdpPort")}</span>
+                  <input
+                    type="number"
+                    min={1024}
+                    max={65535}
+                    value={settings.audio.keyer_udp_port}
+                    disabled={!settings.audio.keyer_udp_enabled}
+                    onChange={(e) => {
+                      const p = Number(e.target.value);
+                      if (Number.isInteger(p) && p >= 1 && p <= 65535) update((x) => void (x.audio.keyer_udp_port = p));
+                    }}
+                  />
+                </label>
+                <p className="hint">{t("settings.keyerUdpHint")}</p>
+              </>
+            ) : null}
           </>
         ) : null}
 

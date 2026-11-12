@@ -60,6 +60,11 @@ pub struct AudioSettings {
     pub otrsp_port: String,
     /// Let OTRSP (local, or from the other position) switch the radios.
     pub otrsp_enabled: bool,
+    /// Station: send the transmitting radio to a CW keyer on this computer
+    /// as OTRSP text over UDP (127.0.0.1).
+    pub keyer_udp_enabled: bool,
+    /// UDP port of that keyer.
+    pub keyer_udp_port: u16,
     /// Requested Opus bit rate in kbit/s.
     pub bitrate_kbps: u32,
     /// Send two channels.
@@ -96,6 +101,8 @@ impl Default for AudioSettings {
             so2r_single_device: false,
             so2r_tx: 1,
             so2r_rx: "both".into(),
+            keyer_udp_enabled: false,
+            keyer_udp_port: crate::keyer_udp::DEFAULT_PORT,
             otrsp_port: String::new(),
             otrsp_enabled: false,
             bitrate_kbps: 128,

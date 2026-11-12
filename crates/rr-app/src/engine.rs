@@ -34,6 +34,27 @@ pub struct AppState {
     pub otrsp_error: Mutex<Option<String>>,
     /// The last two-radio state sent to the UI (to send only changes).
     pub last_route: Mutex<String>,
+    /// OTRSP-over-UDP sender for a CW keyer on this computer.
+    pub keyer: crate::keyer_udp::KeyerUdp,
+}
+
+/// Tell the local CW keyer which radio transmits (station role only, when
+/// switched on). Sends on change and repeats; cheap to call often.
+pub fn update_keyer(state: &AppState) {
+    let a = lock(&state.settings).audio.clone();
+    let on = a.so2r_enabled && a.keyer_udp_enabled && Role::parse(&a.so2r_role) == Role::Station;
+    let current = on.then(|| state.so2r.effective(&a, lock(&state.otrsp).is_some()).0);
+    state.keyer.update(current, a.keyer_udp_port);
+}
+
+/// Keeps the keyer informed for the life of the app, connected or not (the
+/// logger may be on this computer while Mumble is offline).
+pub async fn keyer_ticker(app: AppHandle) {
+    let mut tick = tokio::time::interval(Duration::from_millis(100));
+    loop {
+        let _ = tick.tick().await;
+        update_keyer(&app.state::<AppState>());
+    }
 }
 
 /// Lock helper that survives a poisoned mutex.
@@ -323,7 +344,9 @@ async fn watch_so2r(app: AppHandle, client: RadioClient) {
     loop {
         match rx.recv().await {
             Ok(Event::So2r { session, state }) if Some(session) != client.own_session() => {
-                app.state::<AppState>().so2r.remote_update(state);
+                let st = app.state::<AppState>();
+                st.so2r.remote_update(state);
+                update_keyer(&st);
                 let _ = apply_route(&app);
             }
             Ok(Event::Disconnected { .. }) => app.state::<AppState>().so2r.clear_remote(),
@@ -418,6 +441,8 @@ fn on_otrsp(app: &AppHandle, cmd: &rr_radio::OtrspCommand) {
     if !state.so2r.otrsp(cmd) {
         return;
     }
+    // The keyer first: a TX switch right before CW must reach it at once.
+    update_keyer(&state);
     let dto = apply_route(app);
     if dto.enabled && dto.source == Source::Local {
         let client = lock(&state.engine).as_ref().map(|e| e.client.clone());

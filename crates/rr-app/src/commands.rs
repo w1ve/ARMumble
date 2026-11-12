@@ -3,7 +3,7 @@
 use rr_client::RadioClient;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::engine::{apply_route, lock, restart_monitor, restart_otrsp, route_dto, AppState, Engine};
+use crate::engine::{apply_route, lock, restart_monitor, restart_otrsp, route_dto, update_keyer, AppState, Engine};
 use crate::routing::RouteDto;
 use crate::platform::{self, DeviceDto, PortDto};
 use crate::settings::{settings_path, Settings};
@@ -46,6 +46,7 @@ pub fn save_settings(app: AppHandle, state: State<'_, AppState>, settings: Setti
         restart_otrsp(&app);
     }
     // Manual buttons, the OTRSP checkbox, role and mono are all applied here.
+    update_keyer(&state);
     let _ = apply_route(&app);
     if old.input_device != new.input_device || old.so2r_role != new.so2r_role {
         restart_monitor(&state);

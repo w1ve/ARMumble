@@ -94,6 +94,8 @@ export interface Settings {
     so2r_tx: 1 | 2;
     so2r_rx: Listen;
     otrsp_port: string;
+    keyer_udp_enabled: boolean;
+    keyer_udp_port: number;
     otrsp_enabled: boolean;
     bitrate_kbps: number;
     stereo: boolean;

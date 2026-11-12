@@ -133,7 +133,10 @@
     "roleStationHint": "Send radio 1 as left and radio 2 as right. The operator's voice and PTT go to the transmitting radio only.",
     "singleDevice": "Both radios on one stereo sound card (radio 1 left, radio 2 right)",
     "station2": "Station PTT, radio 2",
-    "station2Hint": "Radio 2 can share radio 1's port on the other line (for example RTS for radio 1, DTR for radio 2). Timing settings are shared with radio 1."
+    "station2Hint": "Radio 2 can share radio 1's port on the other line (for example RTS for radio 1, DTR for radio 2). Timing settings are shared with radio 1.",
+    "keyerUdp": "Send OTRSP to the CW keyer on this computer (UDP)",
+    "keyerUdpPort": "Keyer UDP port",
+    "keyerUdpHint": "Sends TX1/TX2 (and the RX state) to 127.0.0.1 on every change and every 2 seconds, so the keyer keys the transmitting radio. Works wherever the logger runs, and also when not connected."
   },
   "errors": {
     "title": "Problem"
