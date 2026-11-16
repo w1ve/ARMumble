@@ -1,0 +1,16 @@
+[
+  { "name": "New York City (stereo)", "host": "newyork.remote.radio", "port": 54736, "password": "Demo!" },
+  { "name": "New York City (standard)", "host": "newyork.remote.radio", "port": 64738, "password": "Demo!" },
+  { "name": "Toronto (stereo)", "host": "toronto.remote.radio", "port": 54736, "password": "Demo!" },
+  { "name": "Toronto (standard)", "host": "toronto.remote.radio", "port": 64738, "password": "Demo!" },
+  { "name": "London (stereo)", "host": "london.remote.radio", "port": 54736, "password": "Demo!" },
+  { "name": "London (standard)", "host": "london.remote.radio", "port": 64738, "password": "Demo!" },
+  { "name": "Los Angeles (stereo)", "host": "la.remote.radio", "port": 54736, "password": "Demo!" },
+  { "name": "Los Angeles (standard)", "host": "la.remote.radio", "port": 64738, "password": "Demo!" },
+  { "name": "South Africa (stereo)", "host": "africa.remote.radio", "port": 54736, "password": "Demo!" },
+  { "name": "South Africa (standard)", "host": "africa.remote.radio", "port": 64738, "password": "Demo!" },
+  { "name": "Winnipeg (stereo)", "host": "winnipeg.remote.radio", "port": 54736, "password": "Demo!" },
+  { "name": "Winnipeg (standard)", "host": "winnipeg.remote.radio", "port": 64738, "password": "Demo!" },
+  { "name": "Frankfurt (stereo)", "host": "frankfurt.remote.radio", "port": 54736, "password": "Demo!" },
+  { "name": "Frankfurt (standard)", "host": "frankfurt.remote.radio", "port": 64738, "password": "Demo!" }
+]

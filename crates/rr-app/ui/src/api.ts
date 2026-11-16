@@ -61,6 +61,14 @@ export interface Status {
   remote_ptt: number[];
 }
 
+/** One entry of the user's server list (`servers.json`). */
+export interface ServerEntry {
+  name: string;
+  host: string;
+  port: number;
+  password: string;
+}
+
 export type TxMode = "ptt" | "vox" | "continuous";
 export type So2rRole = "operator" | "station";
 export type Listen = "1" | "2" | "both";
@@ -82,7 +90,7 @@ export interface Route {
 export type ChannelMap = "stereo" | "left" | "right" | "mix";
 
 export interface Settings {
-  server: { host: string; port: number; username: string; password: string; scope: string };
+  server: { name: string; host: string; port: number; username: string; password: string; scope: string };
   audio: {
     input_device: string | null;
     output_device: string | null;
@@ -161,6 +169,8 @@ export const api = {
   whisper: (target: number, down: boolean) => invoke<void>("whisper", { target, down }),
   setUserGain: (session: number, gain: number) => invoke<void>("set_user_gain", { session, gain }),
   getRoute: () => invoke<Route>("get_route"),
+  listServers: () => invoke<ServerEntry[]>("list_servers"),
+  saveServers: (servers: ServerEntry[]) => invoke<ServerEntry[]>("save_servers", { servers }),
 };
 
 export function onStatus(cb: (s: Status) => void): Promise<UnlistenFn> {

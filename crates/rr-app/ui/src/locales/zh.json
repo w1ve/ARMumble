@@ -9,17 +9,11 @@
   },
   "connect": {
     "server": "服务器",
-    "custom": "自定义服务器",
-    "host": "主机",
-    "port": "端口",
     "username": "呼号 / 名称",
-    "password": "密码",
     "scope": "仅限此频道(可选)",
     "scopeHint": "留空则使用整个服务器",
     "connect": "连接",
     "disconnect": "断开",
-    "fancy": "立体声",
-    "legacy": "标准",
     "scopeMissing": "该服务器上没有这个频道。"
   },
   "channels": {
@@ -153,5 +147,27 @@
     "listening": "操作员收听",
     "fromLocal": "本机日志软件",
     "fromRemote": "对端日志软件"
+  },
+  "servers": {
+    "title": "服务器",
+    "edit": "编辑服务器…",
+    "none": "没有服务器:请添加",
+    "empty": "列表为空。请添加服务器后再连接。",
+    "name": "服务器名称",
+    "host": "IP 地址或域名",
+    "port": "端口",
+    "password": "密码",
+    "show": "显示",
+    "hide": "隐藏",
+    "add": "添加服务器",
+    "remove": "删除",
+    "up": "上移",
+    "down": "下移",
+    "save": "保存",
+    "cancel": "取消",
+    "errName": "请输入服务器名称。",
+    "errDuplicate": "已有其他服务器使用此名称。",
+    "errHost": "请输入不含空格的 IP 地址或域名。",
+    "errPort": "端口必须在 1 到 65535 之间。"
   }
 }

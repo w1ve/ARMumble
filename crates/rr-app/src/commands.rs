@@ -6,6 +6,7 @@ use tauri::{AppHandle, Emitter, State};
 use crate::engine::{apply_route, lock, restart_monitor, restart_otrsp, route_dto, update_keyer, AppState, Engine};
 use crate::routing::RouteDto;
 use crate::platform::{self, DeviceDto, PortDto};
+use crate::servers::ServerEntry;
 use crate::settings::{settings_path, Settings};
 use crate::status::Status;
 
@@ -147,6 +148,26 @@ pub fn get_route(state: State<'_, AppState>) -> RouteDto {
 #[tauri::command]
 pub fn settings_location(state: State<'_, AppState>) -> String {
     lock(&state.settings_path).display().to_string()
+}
+
+fn servers_file(state: &State<'_, AppState>) -> std::path::PathBuf {
+    let settings = lock(&state.settings_path).clone();
+    let dir = settings.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+    crate::servers::servers_path(&dir)
+}
+
+/// The user's server list (seeded with the shipped list on first run).
+#[tauri::command]
+pub fn list_servers(state: State<'_, AppState>) -> Result<Vec<ServerEntry>, String> {
+    crate::servers::load(&servers_file(&state))
+}
+
+/// Replace the server list. Returns the tidied list that was saved.
+#[tauri::command]
+pub fn save_servers(state: State<'_, AppState>, servers: Vec<ServerEntry>) -> Result<Vec<ServerEntry>, String> {
+    let list = crate::servers::validate(&servers)?;
+    crate::servers::save(&servers_file(&state), &list)?;
+    Ok(list)
 }
 
 /// Compute the settings path inside `dir` (used at startup).

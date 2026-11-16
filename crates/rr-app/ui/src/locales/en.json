@@ -9,17 +9,11 @@
   },
   "connect": {
     "server": "Server",
-    "custom": "Custom server",
-    "host": "Host",
-    "port": "Port",
     "username": "Callsign / name",
-    "password": "Password",
     "scope": "Only this channel (optional)",
     "scopeHint": "Leave empty for the whole server",
     "connect": "Connect",
     "disconnect": "Disconnect",
-    "fancy": "stereo",
-    "legacy": "standard",
     "scopeMissing": "That channel does not exist on this server."
   },
   "channels": {
@@ -153,5 +147,27 @@
     "listening": "Operator hears",
     "fromLocal": "logger here",
     "fromRemote": "logger at the other end"
+  },
+  "servers": {
+    "title": "Servers",
+    "edit": "Edit servers…",
+    "none": "No servers: add one",
+    "empty": "The list is empty. Add a server to connect.",
+    "name": "Server name",
+    "host": "IP address or DNS name",
+    "port": "Port",
+    "password": "Password",
+    "show": "Show",
+    "hide": "Hide",
+    "add": "Add server",
+    "remove": "Remove",
+    "up": "Move up",
+    "down": "Move down",
+    "save": "Save",
+    "cancel": "Cancel",
+    "errName": "Enter a server name.",
+    "errDuplicate": "Another server already has this name.",
+    "errHost": "Enter an IP address or DNS name, without spaces.",
+    "errPort": "Port must be 1 to 65535."
   }
 }

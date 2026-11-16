@@ -10,7 +10,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ServerSettings {
-    /// Host name.
+    /// Name of the chosen entry in the server list (`servers.json`).
+    pub name: String,
+    /// Host name, copied from the chosen server.
     pub host: String,
     /// Port.
     pub port: u16,
@@ -24,11 +26,13 @@ pub struct ServerSettings {
 
 impl Default for ServerSettings {
     fn default() -> Self {
+        // No server is named here: the choice comes from the server list.
         Self {
-            host: "newyork.remote.radio".into(),
-            port: 54736,
+            name: String::new(),
+            host: String::new(),
+            port: 64738,
             username: String::new(),
-            password: "Demo!".into(),
+            password: String::new(),
             scope: String::new(),
         }
     }
@@ -228,7 +232,7 @@ mod tests {
         let s: Settings = serde_json::from_str(r#"{"audio":{"bitrate_kbps":96}}"#).expect("parse");
         assert_eq!(s.audio.bitrate_kbps, 96);
         assert!((s.audio.input_gain - 1.0).abs() < f32::EPSILON);
-        assert_eq!(s.server.port, 54736);
+        assert!(s.server.host.is_empty(), "no server is built in");
     }
 
     #[test]

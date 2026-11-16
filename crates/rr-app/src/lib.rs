@@ -18,6 +18,7 @@ mod platform;
 #[path = "platform_mobile.rs"]
 mod platform;
 mod routing;
+mod servers;
 mod settings;
 mod status;
 
@@ -66,6 +67,8 @@ pub fn run() {
             commands::set_user_gain,
             commands::settings_location,
             commands::get_route,
+            commands::list_servers,
+            commands::save_servers,
         ])
         .run(tauri::generate_context!());
     if let Err(e) = result {

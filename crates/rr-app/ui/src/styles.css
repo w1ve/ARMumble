@@ -530,3 +530,40 @@ fieldset {
     height: 96px;
   }
 }
+
+/* Server editor. */
+.server-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.server-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.server-row.bad {
+  border-color: var(--warn);
+}
+.server-row-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+.server-row-actions button {
+  padding: 6px 8px;
+}
+button.danger:hover {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+.dialog-buttons {
+  justify-content: flex-end;
+  margin-top: 8px;
+}

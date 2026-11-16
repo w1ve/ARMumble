@@ -9,17 +9,11 @@
   },
   "connect": {
     "server": "Server",
-    "custom": "Eigener Server",
-    "host": "Host",
-    "port": "Port",
     "username": "Rufzeichen / Name",
-    "password": "Passwort",
     "scope": "Nur dieser Kanal (optional)",
     "scopeHint": "Leer lassen für den ganzen Server",
     "connect": "Verbinden",
     "disconnect": "Trennen",
-    "fancy": "Stereo",
-    "legacy": "Standard",
     "scopeMissing": "Dieser Kanal existiert auf dem Server nicht."
   },
   "channels": {
@@ -153,5 +147,27 @@
     "listening": "Operator hört",
     "fromLocal": "Logger hier",
     "fromRemote": "Logger an der Gegenstelle"
+  },
+  "servers": {
+    "title": "Server",
+    "edit": "Server bearbeiten…",
+    "none": "Keine Server: bitte hinzufügen",
+    "empty": "Die Liste ist leer. Fügen Sie einen Server hinzu, um sich zu verbinden.",
+    "name": "Servername",
+    "host": "IP-Adresse oder DNS-Name",
+    "port": "Port",
+    "password": "Passwort",
+    "show": "Zeigen",
+    "hide": "Verbergen",
+    "add": "Server hinzufügen",
+    "remove": "Entfernen",
+    "up": "Nach oben",
+    "down": "Nach unten",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "errName": "Geben Sie einen Servernamen ein.",
+    "errDuplicate": "Ein anderer Server hat bereits diesen Namen.",
+    "errHost": "Geben Sie eine IP-Adresse oder einen DNS-Namen ohne Leerzeichen ein.",
+    "errPort": "Der Port muss zwischen 1 und 65535 liegen."
   }
 }

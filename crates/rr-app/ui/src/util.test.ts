@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTree, eventToAccelerator, meterPosition } from "./util";
+import { buildTree, eventToAccelerator, meterPosition, serverListError, syncServer } from "./util";
 
 const key = (code: string, mods: Partial<Record<"ctrlKey" | "shiftKey" | "altKey" | "metaKey", boolean>> = {}) => ({
   code,
@@ -49,5 +49,46 @@ describe("meterPosition", () => {
     expect(meterPosition(1)).toBe(1);
     expect(meterPosition(0.001)).toBeCloseTo(0.0, 5);
     expect(meterPosition(0.1)).toBeCloseTo(2 / 3, 3);
+  });
+});
+
+describe("syncServer", () => {
+  const list = [
+    { name: "NYC", host: "newyork.remote.radio", port: 54736, password: "a" },
+    { name: "Mine", host: "10.0.0.5", port: 64738, password: "b" },
+  ];
+  const cur = (o: Partial<{ name: string; host: string; port: number }>) => ({
+    name: "",
+    host: "",
+    port: 64738,
+    username: "W1VE",
+    password: "",
+    scope: "Ch",
+    ...o,
+  });
+
+  it("follows edits to the chosen server and keeps login details", () => {
+    const edited = [{ ...list[0], host: "nyc2.example", password: "new" }, list[1]];
+    const s = syncServer(cur({ name: "NYC", host: "newyork.remote.radio", port: 54736 }), edited);
+    expect(s).toMatchObject({ name: "NYC", host: "nyc2.example", password: "new", username: "W1VE", scope: "Ch" });
+  });
+  it("adopts old settings by address and falls back to the first server", () => {
+    expect(syncServer(cur({ host: "10.0.0.5", port: 64738 }), list).name).toBe("Mine");
+    expect(syncServer(cur({ name: "Gone" }), list).name).toBe("NYC");
+  });
+  it("chooses nothing when the list is empty", () => {
+    expect(syncServer(cur({ name: "NYC", host: "x" }), [])).toMatchObject({ name: "", host: "" });
+  });
+});
+
+describe("serverListError", () => {
+  const ok = { name: "A", host: "h.example", port: 1, password: "" };
+  it("accepts a good list and flags the first bad row", () => {
+    expect(serverListError([ok])).toBeNull();
+    expect(serverListError([ok, { ...ok, name: " " }])).toEqual({ row: 1, key: "servers.errName" });
+    expect(serverListError([ok, { ...ok, name: "a" }])).toEqual({ row: 1, key: "servers.errDuplicate" });
+    expect(serverListError([{ ...ok, host: "a b" }])?.key).toBe("servers.errHost");
+    expect(serverListError([{ ...ok, port: 0 }])?.key).toBe("servers.errPort");
+    expect(serverListError([{ ...ok, port: NaN }])?.key).toBe("servers.errPort");
   });
 });
