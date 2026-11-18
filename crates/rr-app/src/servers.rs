@@ -1,4 +1,5 @@
-//! The user's server list, kept in `servers.json` in the app config folder.
+//! The user's server list, kept in `server-list.json` in the app config folder.
+//! (Not `servers.json`: the older Remote.Radio app uses that name, in another format, in the same folder.)
 //!
 //! On first run (no file yet) the list is seeded from `servers.default.json`,
 //! which ships with the app. After that the file belongs to the user: an empty
@@ -34,7 +35,7 @@ impl Default for ServerEntry {
 /// Where the list lives inside the app config folder.
 #[must_use]
 pub fn servers_path(config_dir: &Path) -> PathBuf {
-    config_dir.join("servers.json")
+    config_dir.join("server-list.json")
 }
 
 /// The list shipped with the app.

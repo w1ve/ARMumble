@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ServerSettings {
-    /// Name of the chosen entry in the server list (`servers.json`).
+    /// Name of the chosen entry in the server list (`server-list.json`).
     pub name: String,
     /// Host name, copied from the chosen server.
     pub host: String,

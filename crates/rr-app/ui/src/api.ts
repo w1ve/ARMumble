@@ -98,7 +98,7 @@ export interface Rigs {
   radio2: Rig;
 }
 
-/** One entry of the user's server list (`servers.json`). */
+/** One entry of the user's server list (`server-list.json`). */
 export interface ServerEntry {
   name: string;
   host: string;
