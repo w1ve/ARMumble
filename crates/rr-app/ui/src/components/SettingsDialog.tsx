@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { So2rRole } from "../api";
+import { ServerEditor } from "./ServerEditor";
 import { LANGUAGES } from "../i18n";
 import { useApp } from "../store";
 import { HotkeyInput } from "./HotkeyInput";
@@ -43,6 +45,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const refresh = useApp((s) => s.refreshHardware);
   const channels = useApp((s) => s.status.channels);
   const route = useApp((s) => s.route);
+  const servers = useApp((s) => s.servers);
+  const [editingServers, setEditingServers] = useState(false);
   const so2r = settings?.audio.so2r_enabled ?? false;
   const station = so2r && settings?.audio.so2r_role === "station";
   /** A two-radio station with one sound card per radio. */
@@ -82,6 +86,15 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             {t("settings.close")}
           </button>
         </header>
+
+        <h3>{t("servers.title")}</h3>
+        <div className="row">
+          <span className="grow muted">{t("servers.count", { count: servers.length })}</span>
+          <button type="button" onClick={() => setEditingServers(true)}>
+            {t("servers.edit")}
+          </button>
+        </div>
+        <p className="hint">{t("servers.settingsHint")}</p>
 
         <h3>{t("settings.so2r")}</h3>
         <label className="check">
@@ -349,6 +362,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </select>
         </label>
       </div>
+      {editingServers ? <ServerEditor onClose={() => setEditingServers(false)} /> : null}
     </div>
   );
 }

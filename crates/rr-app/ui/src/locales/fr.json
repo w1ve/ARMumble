@@ -168,6 +168,9 @@
     "errName": "Saisissez un nom de serveur.",
     "errDuplicate": "Un autre serveur porte déjà ce nom.",
     "errHost": "Saisissez une adresse IP ou un nom DNS, sans espaces.",
-    "errPort": "Le port doit être compris entre 1 et 65535."
+    "errPort": "Le port doit être compris entre 1 et 65535.",
+    "count_one": "{{count}} serveur",
+    "count_other": "{{count}} serveurs",
+    "settingsHint": "Les modifications du serveur auquel vous êtes connecté s'appliquent à la prochaine connexion."
   }
 }

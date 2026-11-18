@@ -168,6 +168,9 @@
     "errName": "Enter a server name.",
     "errDuplicate": "Another server already has this name.",
     "errHost": "Enter an IP address or DNS name, without spaces.",
-    "errPort": "Port must be 1 to 65535."
+    "errPort": "Port must be 1 to 65535.",
+    "count_one": "{{count}} server",
+    "count_other": "{{count}} servers",
+    "settingsHint": "Changes to the server you are connected to apply the next time you connect."
   }
 }

@@ -168,6 +168,9 @@
     "errName": "Geben Sie einen Servernamen ein.",
     "errDuplicate": "Ein anderer Server hat bereits diesen Namen.",
     "errHost": "Geben Sie eine IP-Adresse oder einen DNS-Namen ohne Leerzeichen ein.",
-    "errPort": "Der Port muss zwischen 1 und 65535 liegen."
+    "errPort": "Der Port muss zwischen 1 und 65535 liegen.",
+    "count_one": "{{count}} Server",
+    "count_other": "{{count}} Server",
+    "settingsHint": "Änderungen am verbundenen Server gelten ab der nächsten Verbindung."
   }
 }

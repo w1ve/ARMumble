@@ -168,6 +168,9 @@
     "errName": "请输入服务器名称。",
     "errDuplicate": "已有其他服务器使用此名称。",
     "errHost": "请输入不含空格的 IP 地址或域名。",
-    "errPort": "端口必须在 1 到 65535 之间。"
+    "errPort": "端口必须在 1 到 65535 之间。",
+    "count_one": "{{count}} 个服务器",
+    "count_other": "{{count}} 个服务器",
+    "settingsHint": "对当前已连接服务器的修改将在下次连接时生效。"
   }
 }
