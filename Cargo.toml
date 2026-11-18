@@ -79,3 +79,7 @@ codegen-units = 256       # parallel codegen
 debug = true              # full debug info so dhat/perf symbolicate stacks
 strip = false             # keep symbols
 split-debuginfo = "packed"
+
+# cpal with WASAPI raw streams (no Windows/driver audio effects); see vendor/cpal/src/host/wasapi/device.rs.
+[patch.crates-io]
+cpal = { path = "vendor/cpal" }
