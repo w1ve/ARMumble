@@ -172,5 +172,33 @@
     "count_one": "{{count}} serveur",
     "count_other": "{{count}} serveurs",
     "settingsHint": "Les modifications du serveur auquel vous êtes connecté s'appliquent à la prochaine connexion."
+  },
+  "cat": {
+    "method": "Passer en émission par",
+    "methodSerial": "Ligne du port série (DTR/RTS)",
+    "methodCat": "Commande CAT",
+    "model": "Type de poste",
+    "configure": "Configurer…",
+    "connected": "CAT connecté",
+    "notConnected": "CAT non connecté",
+    "radioTx": "poste en émission",
+    "radioRx": "poste en réception"
+  },
+  "k4": {
+    "title": "Elecraft K4 CAT, poste {{radio}}",
+    "serial": "Port série",
+    "network": "Réseau (TCP)",
+    "serialHint": "38400 bauds, 8 bits de données, sans parité, 1 bit d'arrêt.",
+    "host": "Adresse IP ou nom DNS",
+    "port": "Port",
+    "password": "Mot de passe du poste",
+    "networkHint": "Avec un mot de passe, la connexion se fait en K4 Remote (port 9205). Laissez le mot de passe vide pour envoyer du texte CAT simple au port indiqué.",
+    "needPort": "Choisissez un port série.",
+    "needHost": "Saisissez l'adresse du poste.",
+    "badPort": "Le port doit être compris entre 1 et 65535.",
+    "test": "Tester",
+    "testing": "Test en cours…",
+    "testOk": "Connecté : {{id}}",
+    "testHint": "Le test lit l'identifiant du poste et n'émet pas. Déconnectez-vous d'abord si ce programme utilise déjà le port du poste."
   }
 }

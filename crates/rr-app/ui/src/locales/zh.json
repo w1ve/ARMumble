@@ -172,5 +172,33 @@
     "count_one": "{{count}} 个服务器",
     "count_other": "{{count}} 个服务器",
     "settingsHint": "对当前已连接服务器的修改将在下次连接时生效。"
+  },
+  "cat": {
+    "method": "电台发射控制方式",
+    "methodSerial": "串口控制线 (DTR/RTS)",
+    "methodCat": "CAT 命令",
+    "model": "电台型号",
+    "configure": "配置…",
+    "connected": "CAT 已连接",
+    "notConnected": "CAT 未连接",
+    "radioTx": "电台正在发射",
+    "radioRx": "电台正在接收"
+  },
+  "k4": {
+    "title": "Elecraft K4 CAT，电台 {{radio}}",
+    "serial": "串口",
+    "network": "网络 (TCP)",
+    "serialHint": "38400 波特，8 数据位，无校验，1 停止位。",
+    "host": "IP 地址或 DNS 名称",
+    "port": "端口",
+    "password": "电台密码",
+    "networkHint": "填写密码时以 K4 Remote 方式连接（端口 9205）。密码留空则向所填端口发送纯 CAT 文本。",
+    "needPort": "请选择串口。",
+    "needHost": "请输入电台地址。",
+    "badPort": "端口必须在 1 到 65535 之间。",
+    "test": "测试",
+    "testing": "测试中…",
+    "testOk": "已连接：{{id}}",
+    "testHint": "测试只读取电台 ID，不会发射。如果本程序已在使用电台端口，请先断开连接。"
   }
 }

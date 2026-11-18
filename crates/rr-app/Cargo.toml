@@ -27,6 +27,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 rr-audio-cpal = { path = "../rr-audio-cpal" }
+rr-cat = { path = "../rr-cat" }
 rr-radio = { path = "../rr-radio", features = ["serial"] }
 tauri-plugin-global-shortcut = "2"
 

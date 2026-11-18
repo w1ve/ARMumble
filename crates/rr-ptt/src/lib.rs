@@ -137,6 +137,14 @@ pub trait PttSink {
     fn set_keyed(&mut self, down: bool) -> Result<()>;
 }
 
+/// A boxed sink keys like the sink inside it, so different kinds (serial
+/// line, CAT command) can be chosen at run time.
+impl<T: PttSink + ?Sized> PttSink for Box<T> {
+    fn set_keyed(&mut self, down: bool) -> Result<()> {
+        (**self).set_keyed(down)
+    }
+}
+
 /// Something that reports key/unkey intent — a footswitch on a serial input
 /// line, a UI command, or an inbound-audio voice gate.
 ///

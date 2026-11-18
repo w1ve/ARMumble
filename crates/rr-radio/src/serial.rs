@@ -32,6 +32,18 @@ fn control(line: KeyLine) -> ControlLine {
     }
 }
 
+/// Open one serial key line (for combining with other kinds of keying).
+///
+/// # Errors
+/// Returns a message if the port cannot be opened.
+pub fn serial_sink(port: &str, line: KeyLine, active_low: bool) -> Result<SerialPttSink, String> {
+    if port.is_empty() {
+        return Err("no serial port selected for Station PTT".into());
+    }
+    let cfg = SerialPttConfig { port: port.to_owned(), active_low };
+    SerialPttSink::open(&cfg, control(line)).map_err(|e| format!("open Station PTT: {e}"))
+}
+
 /// Open the key lines of a two-radio station. Radio 2 may share radio 1's
 /// port (on the other control line) or use its own port. Both keyers use
 /// radio 1's timing settings.

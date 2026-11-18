@@ -32,6 +32,7 @@ const IDLE: Status = {
   audio_errors: 0,
   audio_error: "",
   remote_ptt: [],
+  cat: [],
 };
 
 const NO_LEVELS: Levels = { in_l: 0, in_r: 0, out_l: 0, out_r: 0, in_clips: 0, out_clips: 0, live: false };

@@ -151,6 +151,25 @@ pub struct Status {
     pub audio_error: String,
     /// Sessions currently holding remote PTT.
     pub remote_ptt: Vec<u32>,
+    /// CAT keying links to the station's radios.
+    pub cat: Vec<CatDto>,
+}
+
+/// One radio keyed by CAT command.
+#[derive(Debug, Clone, Serialize)]
+pub struct CatDto {
+    /// Radio number (1 or 2).
+    pub radio: u8,
+    /// Radio model name.
+    pub model: String,
+    /// The link to the radio is open.
+    pub connected: bool,
+    /// Last problem, if any.
+    pub error: Option<String>,
+    /// We are asking the radio to transmit.
+    pub keyed: bool,
+    /// What the radio last reported (transmitting or not), if known.
+    pub radio_tx: Option<bool>,
 }
 
 impl Status {
@@ -175,6 +194,7 @@ impl Status {
             audio_errors: 0,
             audio_error: String::new(),
             remote_ptt: Vec::new(),
+            cat: Vec::new(),
         }
     }
 }

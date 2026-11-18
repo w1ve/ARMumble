@@ -6,6 +6,7 @@ use tauri::{AppHandle, Emitter, State};
 use crate::engine::{apply_route, lock, restart_monitor, restart_otrsp, route_dto, update_keyer, AppState, Engine};
 use crate::routing::RouteDto;
 use crate::platform::{self, DeviceDto, PortDto};
+use crate::rigs::{Rig, Rigs};
 use crate::servers::ServerEntry;
 use crate::settings::{settings_path, Settings};
 use crate::status::Status;
@@ -72,14 +73,19 @@ pub fn list_serial_ports() -> Vec<PortDto> {
 /// Connect using the saved settings.
 #[tauri::command]
 pub async fn connect(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let settings = lock(&state.settings).clone();
+    let rigs = match crate::rigs::load(&rigs_file(&state)) {
+        Ok(r) => r,
+        Err(e) if uses_cat(&settings) => return Err(format!("radio CAT settings: {e}")),
+        Err(_) => Rigs::default(),
+    };
     let old = lock(&state.engine).take();
     if let Some(e) = old {
         e.stop().await;
     }
     // Release the meter-only stream so the engine can own the input device.
     *lock(&state.monitor) = None;
-    let settings = lock(&state.settings).clone();
-    match Engine::start(&app, &settings, &state.so2r).await {
+    match Engine::start(&app, &settings, &rigs, &state.so2r).await {
         Ok(engine) => {
             *lock(&state.engine) = Some(engine);
             Ok(())
@@ -150,10 +156,40 @@ pub fn settings_location(state: State<'_, AppState>) -> String {
     lock(&state.settings_path).display().to_string()
 }
 
+fn rigs_file(state: &State<'_, AppState>) -> std::path::PathBuf {
+    let settings = lock(&state.settings_path).clone();
+    let dir = settings.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+    crate::rigs::rigs_path(&dir)
+}
+
 fn servers_file(state: &State<'_, AppState>) -> std::path::PathBuf {
     let settings = lock(&state.settings_path).clone();
     let dir = settings.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
     crate::servers::servers_path(&dir)
+}
+
+/// Station PTT keys a radio by CAT command.
+fn uses_cat(s: &Settings) -> bool {
+    let p = &s.ptt;
+    p.station.enabled && (p.station.method == rr_radio::KeyMethod::Cat || p.station2.method == rr_radio::KeyMethod::Cat)
+}
+
+/// The CAT settings of the station's radios (`rigs.json`).
+#[tauri::command]
+pub fn load_rigs(state: State<'_, AppState>) -> Result<Rigs, String> {
+    crate::rigs::load(&rigs_file(&state))
+}
+
+/// Save the CAT settings of the station's radios. They are used from the next connect.
+#[tauri::command]
+pub fn save_rigs(state: State<'_, AppState>, rigs: Rigs) -> Result<(), String> {
+    crate::rigs::save(&rigs_file(&state), &rigs)
+}
+
+/// Connect to a radio and read its identity, without keying it.
+#[tauri::command]
+pub async fn test_rig(rig: Rig) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || platform::test_rig(&rig)).await.map_err(|e| e.to_string())?
 }
 
 /// The user's server list (seeded with the shipped list on first run).

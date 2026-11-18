@@ -1,7 +1,7 @@
 //! Mobile platform glue: Oboe on Android, a stub elsewhere; the
 //! rest of the app builds so the UI can be developed against it.
 
-use rr_radio::{LocalPtt, LocalPttSettings, StationPtt, StationPttSettings};
+use rr_radio::{LocalPtt, LocalPttSettings, StationPtt};
 use serde::Serialize;
 use tauri::AppHandle;
 
@@ -156,14 +156,22 @@ where
     Err("OTRSP is not available on this platform".into())
 }
 
+/// No CAT links on mobile.
+pub type CatLinks = Vec<()>;
+
 /// Not available on mobile.
-pub fn open_station(_s: &StationPttSettings) -> Result<StationPtt, String> {
-    Err("serial PTT is not available on this platform".into())
+pub fn open_keyers(_ptt: &rr_radio::PttSettings, _two: bool, _rigs: &crate::rigs::Rigs) -> Result<(StationPtt, Option<StationPtt>, CatLinks), String> {
+    Err("Station PTT is not available on this platform".into())
+}
+
+/// No CAT links on mobile.
+pub fn cat_status(_links: &CatLinks) -> Vec<crate::status::CatDto> {
+    Vec::new()
 }
 
 /// Not available on mobile.
-pub fn open_stations(_s: &StationPttSettings, _s2: &rr_radio::SecondKeyLine) -> Result<(StationPtt, StationPtt), String> {
-    Err("serial PTT is not available on this platform".into())
+pub fn test_rig(_rig: &crate::rigs::Rig) -> Result<String, String> {
+    Err("CAT is not available on this platform".into())
 }
 
 /// Not available on mobile.

@@ -1,0 +1,19 @@
+[package]
+name = "rr-cat"
+version = "0.1.0"
+edition = "2021"
+description = "RemoteRadio CAT PTT: key a radio with its own CAT commands (serial or network) instead of an RS-232 control line. First radio: Elecraft K4."
+license = "MIT"
+
+[dependencies]
+rr-ptt = { path = "../rr-ptt" }
+serde = { version = "1", features = ["derive"] }
+serialport = "4"
+sha2 = "0.10"
+tracing = "0.1"
+
+[dev-dependencies]
+serde_json = "1"
+
+[lints]
+workspace = true

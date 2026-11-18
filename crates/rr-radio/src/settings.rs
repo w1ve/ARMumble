@@ -27,6 +27,17 @@ pub enum KeyLine {
     Rts,
 }
 
+/// How a station keys its radio.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum KeyMethod {
+    /// An RS-232 control line (DTR or RTS).
+    #[default]
+    Serial,
+    /// The radio's own CAT command (configured per radio model).
+    Cat,
+}
+
 /// Local PTT: a footswitch on an RS-232 input line. Pressing it transmits your
 /// microphone locally and, when a remote station is configured, tells that
 /// station to key its rig.
@@ -56,6 +67,8 @@ impl Default for LocalPttSettings {
 pub struct StationPttSettings {
     /// Enable rig keying.
     pub enabled: bool,
+    /// Key with a serial control line or with a CAT command.
+    pub method: KeyMethod,
     /// Serial port name.
     pub port: String,
     /// Output line that keys the rig.
@@ -80,6 +93,7 @@ impl Default for StationPttSettings {
     fn default() -> Self {
         Self {
             enabled: false,
+            method: KeyMethod::Serial,
             port: String::new(),
             key_line: KeyLine::Rts,
             active_low: false,
@@ -114,6 +128,8 @@ impl StationPttSettings {
 pub struct SecondKeyLine {
     /// Key radio 2 as well.
     pub enabled: bool,
+    /// Key radio 2 with a serial control line or with a CAT command.
+    pub method: KeyMethod,
     /// Serial port; the same port as radio 1 is fine if the line differs.
     pub port: String,
     /// Output line that keys radio 2.
@@ -124,7 +140,7 @@ pub struct SecondKeyLine {
 
 impl Default for SecondKeyLine {
     fn default() -> Self {
-        Self { enabled: false, port: String::new(), key_line: KeyLine::Dtr, active_low: false }
+        Self { enabled: false, method: KeyMethod::Serial, port: String::new(), key_line: KeyLine::Dtr, active_low: false }
     }
 }
 

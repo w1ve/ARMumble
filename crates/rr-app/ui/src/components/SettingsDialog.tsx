@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { So2rRole } from "../api";
+import { api, type KeyMethod, type Rig, type Rigs, type So2rRole } from "../api";
+import { K4Dialog } from "./K4Dialog";
 import { ServerEditor } from "./ServerEditor";
 import { LANGUAGES } from "../i18n";
 import { useApp } from "../store";
@@ -47,6 +48,19 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const route = useApp((s) => s.route);
   const servers = useApp((s) => s.servers);
   const [editingServers, setEditingServers] = useState(false);
+  const cat = useApp((s) => s.status.cat);
+  const [rigs, setRigs] = useState<Rigs | null>(null);
+  const [rigsError, setRigsError] = useState<string | null>(null);
+  const [editingRig, setEditingRig] = useState<1 | 2 | null>(null);
+  useEffect(() => {
+    api.loadRigs().then(setRigs, (e: unknown) => setRigsError(String(e)));
+  }, []);
+  const saveRig = async (radio: 1 | 2, rig: Rig) => {
+    if (!rigs) throw new Error(rigsError ?? "rigs.json");
+    const next: Rigs = radio === 1 ? { ...rigs, radio1: rig } : { ...rigs, radio2: rig };
+    await api.saveRigs(next);
+    setRigs(next);
+  };
   const so2r = settings?.audio.so2r_enabled ?? false;
   const station = so2r && settings?.audio.so2r_role === "station";
   /** A two-radio station with one sound card per radio. */
@@ -65,6 +79,47 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       ))}
     </select>
   );
+
+  const methodSelect = (value: KeyMethod, onChange: (v: KeyMethod) => void) => (
+    <label className="field">
+      <span className="field-label">{t("cat.method")}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value as KeyMethod)}>
+        <option value="serial">{t("cat.methodSerial")}</option>
+        <option value="cat">{t("cat.methodCat")}</option>
+      </select>
+    </label>
+  );
+
+  /** Radio model, Configure button and live link state for a CAT-keyed radio. */
+  const catFields = (radio: 1 | 2) => {
+    const live = cat.find((c) => c.radio === radio);
+    let state: { cls: string; text: string } | null = null;
+    if (live) {
+      if (live.connected) {
+        const tx = live.radio_tx === true ? ` · ${t("cat.radioTx")}` : live.radio_tx === false ? ` · ${t("cat.radioRx")}` : "";
+        state = { cls: "muted", text: t("cat.connected") + tx };
+      } else {
+        state = { cls: "warn-text", text: live.error ? `${t("cat.notConnected")}: ${live.error}` : t("cat.notConnected") };
+      }
+    }
+    return (
+      <>
+        <label className="field">
+          <span className="field-label">{t("cat.model")}</span>
+          <div className="row">
+            <select className="grow" value="k4" onChange={() => undefined}>
+              <option value="k4">Elecraft K4</option>
+            </select>
+            <button type="button" onClick={() => setEditingRig(radio)} disabled={!rigs}>
+              {t("cat.configure")}
+            </button>
+          </div>
+        </label>
+        {rigsError ? <p className="error">{rigsError}</p> : null}
+        {state ? <p className={state.cls}>{state.text}</p> : null}
+      </>
+    );
+  };
 
   const channelSelect = (value: number | null, onChange: (v: number | null) => void) => (
     <select value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}>
@@ -237,24 +292,31 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             <input type="checkbox" checked={stationPtt.enabled} onChange={(e) => update((x) => void (x.ptt.station.enabled = e.target.checked))} />
             {t("settings.enabled")}
           </label>
-          <label className="field">
-            <span className="field-label">{t("settings.port")}</span>
-            {portSelect(stationPtt.port, (v) => update((x) => void (x.ptt.station.port = v)))}
-          </label>
-          <label className="field">
-            <span className="field-label">{t("settings.keyLine")}</span>
-            <select
-              value={stationPtt.key_line}
-              onChange={(e) => update((x) => void (x.ptt.station.key_line = e.target.value as typeof stationPtt.key_line))}
-            >
-              <option value="rts">RTS</option>
-              <option value="dtr">DTR</option>
-            </select>
-          </label>
-          <label className="check">
-            <input type="checkbox" checked={stationPtt.active_low} onChange={(e) => update((x) => void (x.ptt.station.active_low = e.target.checked))} />
-            {t("settings.activeLow")}
-          </label>
+          {methodSelect(stationPtt.method, (v) => update((x) => void (x.ptt.station.method = v)))}
+          {stationPtt.method === "cat" ? (
+            catFields(1)
+          ) : (
+            <>
+              <label className="field">
+                <span className="field-label">{t("settings.port")}</span>
+                {portSelect(stationPtt.port, (v) => update((x) => void (x.ptt.station.port = v)))}
+              </label>
+              <label className="field">
+                <span className="field-label">{t("settings.keyLine")}</span>
+                <select
+                  value={stationPtt.key_line}
+                  onChange={(e) => update((x) => void (x.ptt.station.key_line = e.target.value as typeof stationPtt.key_line))}
+                >
+                  <option value="rts">RTS</option>
+                  <option value="dtr">DTR</option>
+                </select>
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={stationPtt.active_low} onChange={(e) => update((x) => void (x.ptt.station.active_low = e.target.checked))} />
+                {t("settings.activeLow")}
+              </label>
+            </>
+          )}
           <label className="check">
             <input type="checkbox" checked={stationPtt.vox} onChange={(e) => update((x) => void (x.ptt.station.vox = e.target.checked))} />
             {t("settings.stationVox")}
@@ -295,25 +357,32 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <input type="checkbox" checked={station2.enabled} onChange={(e) => update((x) => void (x.ptt.station2.enabled = e.target.checked))} />
               {t("settings.enabled")}
             </label>
-            <label className="field">
-              <span className="field-label">{t("settings.port")}</span>
-              {portSelect(station2.port, (v) => update((x) => void (x.ptt.station2.port = v)))}
-            </label>
-            <label className="field">
-              <span className="field-label">{t("settings.keyLine")}</span>
-              <select
-                value={station2.key_line}
-                onChange={(e) => update((x) => void (x.ptt.station2.key_line = e.target.value as typeof station2.key_line))}
-              >
-                <option value="dtr">DTR</option>
-                <option value="rts">RTS</option>
-              </select>
-            </label>
-            <label className="check">
-              <input type="checkbox" checked={station2.active_low} onChange={(e) => update((x) => void (x.ptt.station2.active_low = e.target.checked))} />
-              {t("settings.activeLow")}
-            </label>
-            <p className="hint">{t("settings.station2Hint")}</p>
+            {methodSelect(station2.method, (v) => update((x) => void (x.ptt.station2.method = v)))}
+            {station2.method === "cat" ? (
+              catFields(2)
+            ) : (
+              <>
+                <label className="field">
+                  <span className="field-label">{t("settings.port")}</span>
+                  {portSelect(station2.port, (v) => update((x) => void (x.ptt.station2.port = v)))}
+                </label>
+                <label className="field">
+                  <span className="field-label">{t("settings.keyLine")}</span>
+                  <select
+                    value={station2.key_line}
+                    onChange={(e) => update((x) => void (x.ptt.station2.key_line = e.target.value as typeof station2.key_line))}
+                  >
+                    <option value="dtr">DTR</option>
+                    <option value="rts">RTS</option>
+                  </select>
+                </label>
+                <label className="check">
+                  <input type="checkbox" checked={station2.active_low} onChange={(e) => update((x) => void (x.ptt.station2.active_low = e.target.checked))} />
+                  {t("settings.activeLow")}
+                </label>
+                <p className="hint">{t("settings.station2Hint")}</p>
+              </>
+            )}
           </fieldset>
         ) : null}
         <p className="hint">{t("settings.reconnect")}</p>
@@ -363,6 +432,14 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </label>
       </div>
       {editingServers ? <ServerEditor onClose={() => setEditingServers(false)} /> : null}
+      {editingRig && rigs ? (
+        <K4Dialog
+          radio={editingRig}
+          rig={editingRig === 1 ? rigs.radio1 : rigs.radio2}
+          onSave={(rig) => saveRig(editingRig, rig)}
+          onClose={() => setEditingRig(null)}
+        />
+      ) : null}
     </div>
   );
 }

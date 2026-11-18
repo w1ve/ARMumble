@@ -83,6 +83,7 @@ pub struct Engine {
     audio: Option<AudioHandle>,
     tasks: Vec<JoinHandle<()>>,
     station: Option<tokio::task::JoinHandle<()>>,
+    cat: Arc<Mutex<platform::CatLinks>>,
     _local: Option<LocalPtt>,
 }
 
@@ -176,7 +177,7 @@ async fn watch_events(client: RadioClient, conn: Arc<Mutex<ConnInfo>>, remote: A
 
 impl Engine {
     /// Build and start everything from `settings`.
-    pub async fn start(app: &AppHandle, settings: &Settings, so2r: &So2r) -> Result<Self, String> {
+    pub async fn start(app: &AppHandle, settings: &Settings, rigs: &crate::rigs::Rigs, so2r: &So2r) -> Result<Self, String> {
         let a = &settings.audio;
         let devices = Devices::from_settings(a);
         let mut in_p = platform::device_params(devices.input_a.as_deref(), true).map_err(|e| format!("input device: {e}"))?;
@@ -200,17 +201,14 @@ impl Engine {
         let remote = Arc::new(Mutex::new(HashSet::new()));
         let mut tasks = vec![tauri::async_runtime::spawn(watch_events(client.clone(), Arc::clone(&conn), Arc::clone(&remote)))];
 
-        let mut engine = Self { client: client.clone(), conn, remote, audio: Some(audio), tasks: Vec::new(), station: None, _local: None };
+        let mut engine = Self { client: client.clone(), conn, remote, audio: Some(audio), tasks: Vec::new(), station: None, cat: Arc::default(), _local: None };
         if settings.ptt.station.enabled {
-            let s1 = settings.ptt.station.clone().sanitised();
             let two = a.so2r_enabled && Role::parse(&a.so2r_role) == Role::Station && settings.ptt.station2.enabled;
-            let opened = if two {
-                platform::open_stations(&s1, &settings.ptt.station2).map(|(r1, r2)| (r1, Some(r2)))
-            } else {
-                platform::open_station(&s1).map(|r1| (r1, None))
-            };
-            match opened {
-                Ok((r1, r2)) => engine.station = Some(client.attach_stations(r1, r2, Arc::clone(&so2r.tx_select))),
+            match platform::open_keyers(&settings.ptt, two, rigs) {
+                Ok((r1, r2, links)) => {
+                    *lock(&engine.cat) = links;
+                    engine.station = Some(client.attach_stations(r1, r2, Arc::clone(&so2r.tx_select)));
+                }
                 Err(e) => lock(&engine.conn).error = Some(format!("Station PTT: {e}")),
             }
         }
@@ -232,6 +230,7 @@ impl Engine {
             client: self.client.clone(),
             conn: Arc::clone(&self.conn),
             remote: Arc::clone(&self.remote),
+            cat: Arc::clone(&self.cat),
         }
     }
 
@@ -253,6 +252,7 @@ struct SnapshotSource {
     client: RadioClient,
     conn: Arc<Mutex<ConnInfo>>,
     remote: Arc<Mutex<HashSet<u32>>>,
+    cat: Arc<Mutex<platform::CatLinks>>,
 }
 
 impl SnapshotSource {
@@ -311,6 +311,7 @@ impl SnapshotSource {
                 v.sort_unstable();
                 v
             },
+            cat: platform::cat_status(&lock(&self.cat)),
         }
     }
 }

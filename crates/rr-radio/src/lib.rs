@@ -24,4 +24,5 @@ pub use keyer::StationKeyer;
 pub use message::{PttMessage, SeqFilter, So2rMessage};
 pub use otrsp::{Listen, OtrspCommand, OtrspParser, Radio, So2rState};
 pub use runner::{LocalPtt, StationPtt};
-pub use settings::{KeyLine, LocalPttSettings, PttSettings, SecondKeyLine, SenseLine, StationPttSettings};
+pub use rr_ptt::PttSink;
+pub use settings::{KeyLine, KeyMethod, LocalPttSettings, PttSettings, SecondKeyLine, SenseLine, StationPttSettings};

@@ -7,6 +7,8 @@
 #![allow(unreachable_pub, reason = "internal modules of an application crate")]
 #![allow(clippy::needless_pass_by_value, reason = "Tauri command arguments are extracted by value")]
 
+#[cfg(desktop)]
+mod cat;
 mod commands;
 mod devices;
 mod engine;
@@ -17,6 +19,7 @@ mod platform;
 #[cfg(mobile)]
 #[path = "platform_mobile.rs"]
 mod platform;
+mod rigs;
 mod routing;
 mod servers;
 mod settings;
@@ -69,6 +72,9 @@ pub fn run() {
             commands::get_route,
             commands::list_servers,
             commands::save_servers,
+            commands::load_rigs,
+            commands::save_rigs,
+            commands::test_rig,
         ])
         .run(tauri::generate_context!());
     if let Err(e) = result {

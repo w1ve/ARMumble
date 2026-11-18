@@ -6,7 +6,7 @@ use std::thread::{self, JoinHandle};
 
 use rr_audio_cpal::{input_params, output_params, start_input_with, start_output, Health};
 use rr_client::AudioEndpoints;
-use rr_radio::{LocalPtt, LocalPttSettings, StationPtt, StationPttSettings};
+use rr_radio::{LocalPtt, LocalPttSettings};
 use serde::Serialize;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -178,15 +178,7 @@ where
 {
     rr_radio::serial::OtrspListener::open(port, on_command)
 }
-/// Open the rig key line.
-pub fn open_station(s: &StationPttSettings) -> Result<StationPtt, String> {
-    rr_radio::serial::open_station(s)
-}
-
-/// Open the key lines of both radios of a two-radio station.
-pub fn open_stations(s: &StationPttSettings, s2: &rr_radio::SecondKeyLine) -> Result<(StationPtt, StationPtt), String> {
-    rr_radio::serial::open_stations(s, s2)
-}
+pub use crate::cat::{open_keyers, status as cat_status, test as test_rig, CatLinks};
 
 /// Open the footswitch input.
 pub fn open_local<F>(s: &LocalPttSettings, on_message: F) -> Result<LocalPtt, String>

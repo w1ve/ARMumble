@@ -172,5 +172,33 @@
     "count_one": "{{count}} Server",
     "count_other": "{{count}} Server",
     "settingsHint": "Änderungen am verbundenen Server gelten ab der nächsten Verbindung."
+  },
+  "cat": {
+    "method": "Funkgerät tasten über",
+    "methodSerial": "Leitung der seriellen Schnittstelle (DTR/RTS)",
+    "methodCat": "CAT-Befehl",
+    "model": "Funkgerätetyp",
+    "configure": "Einrichten…",
+    "connected": "CAT verbunden",
+    "notConnected": "CAT nicht verbunden",
+    "radioTx": "Funkgerät sendet",
+    "radioRx": "Funkgerät empfängt"
+  },
+  "k4": {
+    "title": "Elecraft K4 CAT, Funkgerät {{radio}}",
+    "serial": "Serielle Schnittstelle",
+    "network": "Netzwerk (TCP)",
+    "serialHint": "38400 Baud, 8 Datenbits, keine Parität, 1 Stoppbit.",
+    "host": "IP-Adresse oder DNS-Name",
+    "port": "Port",
+    "password": "Passwort des Funkgeräts",
+    "networkHint": "Mit Passwort wird als K4 Remote verbunden (Port 9205). Ohne Passwort wird reiner CAT-Text an den eingegebenen Port gesendet.",
+    "needPort": "Serielle Schnittstelle wählen.",
+    "needHost": "Adresse des Funkgeräts eingeben.",
+    "badPort": "Der Port muss zwischen 1 und 65535 liegen.",
+    "test": "Testen",
+    "testing": "Test läuft…",
+    "testOk": "Verbunden: {{id}}",
+    "testHint": "Der Test liest die Kennung des Funkgeräts und sendet nicht. Vorher trennen, wenn dieses Programm den Port des Funkgeräts schon benutzt."
   }
 }

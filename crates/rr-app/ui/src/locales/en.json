@@ -172,5 +172,33 @@
     "count_one": "{{count}} server",
     "count_other": "{{count}} servers",
     "settingsHint": "Changes to the server you are connected to apply the next time you connect."
+  },
+  "cat": {
+    "method": "Key the radio with",
+    "methodSerial": "Serial port line (DTR/RTS)",
+    "methodCat": "CAT command",
+    "model": "Radio type",
+    "configure": "Configure…",
+    "connected": "CAT connected",
+    "notConnected": "CAT not connected",
+    "radioTx": "radio transmitting",
+    "radioRx": "radio receiving"
+  },
+  "k4": {
+    "title": "Elecraft K4 CAT, radio {{radio}}",
+    "serial": "Serial port",
+    "network": "Network (TCP)",
+    "serialHint": "38400 baud, 8 data bits, no parity, 1 stop bit.",
+    "host": "IP address or DNS name",
+    "port": "Port",
+    "password": "Radio password",
+    "networkHint": "With a password, this connects as K4 Remote (port 9205). Leave the password empty to send plain CAT text to the port you enter.",
+    "needPort": "Choose a serial port.",
+    "needHost": "Enter the radio's address.",
+    "badPort": "Port must be 1 to 65535.",
+    "test": "Test",
+    "testing": "Testing…",
+    "testOk": "Connected: {{id}}",
+    "testHint": "Test reads the radio's ID and does not transmit. Disconnect first if this program is already using the radio's port."
   }
 }

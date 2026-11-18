@@ -59,6 +59,43 @@ export interface Status {
   audio_errors: number;
   audio_error: string;
   remote_ptt: number[];
+  /** CAT keying links to the station's radios. */
+  cat: CatStatus[];
+}
+
+/** One radio keyed by CAT command. */
+export interface CatStatus {
+  radio: number;
+  model: string;
+  connected: boolean;
+  error: string | null;
+  keyed: boolean;
+  /** What the radio last reported: transmitting, receiving, or unknown. */
+  radio_tx: boolean | null;
+}
+
+/** How the station keys a radio: an RS-232 line or the radio's CAT command. */
+export type KeyMethod = "serial" | "cat";
+
+/** Elecraft K4 CAT settings. */
+export interface K4 {
+  link: "serial" | "tcp";
+  serial_port: string;
+  host: string;
+  port: number;
+  /** Radio password; empty for plain CAT text. */
+  password: string;
+}
+
+/** CAT settings of one radio (`rigs.json`). */
+export interface Rig {
+  model: string;
+  k4: K4;
+}
+
+export interface Rigs {
+  radio1: Rig;
+  radio2: Rig;
 }
 
 /** One entry of the user's server list (`servers.json`). */
@@ -129,6 +166,7 @@ export interface Settings {
     local: { enabled: boolean; port: string; sense_line: "cts" | "dsr" | "cd" | "ri"; active_low: boolean };
     station: {
       enabled: boolean;
+      method: KeyMethod;
       port: string;
       key_line: "dtr" | "rts";
       active_low: boolean;
@@ -138,7 +176,7 @@ export interface Settings {
       deadman_ms: number;
       max_tx_secs: number;
     };
-    station2: { enabled: boolean; port: string; key_line: "dtr" | "rts"; active_low: boolean };
+    station2: { enabled: boolean; method: KeyMethod; port: string; key_line: "dtr" | "rts"; active_low: boolean };
   };
   language: string;
   theme: "dark" | "light";
@@ -171,6 +209,9 @@ export const api = {
   getRoute: () => invoke<Route>("get_route"),
   listServers: () => invoke<ServerEntry[]>("list_servers"),
   saveServers: (servers: ServerEntry[]) => invoke<ServerEntry[]>("save_servers", { servers }),
+  loadRigs: () => invoke<Rigs>("load_rigs"),
+  saveRigs: (rigs: Rigs) => invoke<void>("save_rigs", { rigs }),
+  testRig: (rig: Rig) => invoke<string>("test_rig", { rig }),
 };
 
 export function onStatus(cb: (s: Status) => void): Promise<UnlistenFn> {
