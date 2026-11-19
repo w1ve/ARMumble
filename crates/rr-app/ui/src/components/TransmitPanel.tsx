@@ -79,8 +79,17 @@ export function TransmitPanel() {
             format={(v) => `${v} ms`}
             onChange={(v) => update((x) => void (x.audio.vox_hang_ms = v))}
           />
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={a.vox_keys_station}
+              onChange={(e) => update((x) => void (x.audio.vox_keys_station = e.target.checked))}
+            />
+            {t("tx.voxKeys")}
+          </label>
         </>
       ) : null}
+      {a.tx_mode === "continuous" ? <p className="hint">{t("tx.continuousNoKey")}</p> : null}
 
       <Meter source="input" label={t("tx.gain")} />
       <Slider

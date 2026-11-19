@@ -151,6 +151,7 @@ export interface Settings {
     tx_mode: TxMode;
     vox_threshold_db: number;
     vox_hang_ms: number;
+    vox_keys_station: boolean;
     /** What is played: both channels, one side in both ears, or a mono mix. */
     output_map: ChannelMap;
     force_tcp: boolean;
@@ -173,6 +174,7 @@ export interface Settings {
       active_low: boolean;
       vox: boolean;
       vox_hang_ms: number;
+    vox_keys_station: boolean;
       hang_ms: number;
       deadman_ms: number;
       max_tx_secs: number;

@@ -44,7 +44,9 @@
     "voxThreshold": "VOX 阈值",
     "voxHang": "VOX 保持",
     "clip": "削波:请降低输入电平",
-    "noProcessing": "无任何处理:没有降噪、自动增益、回声消除或限幅。"
+    "noProcessing": "无任何处理:没有降噪、自动增益、回声消除或限幅。",
+    "voxKeys": "VOX 控制电台端发射",
+    "continuousNoKey": "“始终开启”永远不会让电台端发射（否则会一直处于发射状态）。要通过电台发射，请使用按键通话或 VOX。"
   },
   "rx": {
     "title": "接收",
@@ -184,7 +186,10 @@
     "connected": "CAT 已连接",
     "notConnected": "CAT 未连接",
     "radioTx": "电台正在发射",
-    "radioRx": "电台正在接收"
+    "radioRx": "电台正在接收",
+    "notRunning": "电台 PTT 未运行：请勾选上方的“启用”，然后断开并重新连接。",
+    "notRunningOffline": "电台 PTT 只在连接期间运行。连接后可在此查看电台状态。",
+    "notTransmitting": "电台没有进入发射。它可能在此连接上忽略 TX; 命令：请改用串口，或不填密码的网络连接（端口 9200 的纯 CAT）。"
   },
   "k4": {
     "title": "Elecraft K4 CAT，电台 {{radio}}",

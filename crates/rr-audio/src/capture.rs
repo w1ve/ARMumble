@@ -144,6 +144,12 @@ impl CaptureControl {
         self.tx_mode.store(mode.to_u8(), Ordering::Relaxed);
     }
 
+    /// The current transmit mode.
+    #[must_use]
+    pub fn tx_mode(&self) -> TxMode {
+        TxMode::from_u8(self.tx_mode.load(Ordering::Relaxed))
+    }
+
     /// Press or release the PTT flag (used in [`TxMode::Ptt`]).
     pub fn set_ptt(&self, down: bool) {
         self.ptt.store(down, Ordering::Relaxed);

@@ -25,6 +25,7 @@ fn apply_live(client: &RadioClient, s: &Settings) {
     cap.set_vox(a.vox_threshold_db, a.vox_hang_ms);
     client.set_quality(a.bitrate_kbps * 1000, a.stereo, a.max_frame_ms);
     client.set_master_gain(a.master_gain);
+    client.set_vox_keys_station(a.vox_keys_station);
 }
 
 /// The saved settings.

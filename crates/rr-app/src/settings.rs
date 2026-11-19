@@ -88,6 +88,8 @@ pub struct AudioSettings {
     pub vox_threshold_db: f32,
     /// VOX hang time in ms.
     pub vox_hang_ms: u32,
+    /// While VOX is sending, ask the station to key its radio.
+    pub vox_keys_station: bool,
     /// What is played: `stereo`, `left` (left channel in both ears),
     /// `right` or `mix` (left and right mixed to mono).
     pub output_map: String,
@@ -123,6 +125,7 @@ impl Default for AudioSettings {
             tx_mode: "ptt".into(),
             vox_threshold_db: -40.0,
             vox_hang_ms: 400,
+            vox_keys_station: true,
             output_map: "stereo".into(),
             mono_output: false,
             force_tcp: false,

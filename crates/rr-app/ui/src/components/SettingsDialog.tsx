@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, type KeyMethod, type Rig, type Rigs, type So2rRole } from "../api";
+import { CatState } from "./CatState";
 import { K4Dialog } from "./K4Dialog";
 import { ServerEditor } from "./ServerEditor";
 import { LANGUAGES } from "../i18n";
@@ -48,7 +49,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const route = useApp((s) => s.route);
   const servers = useApp((s) => s.servers);
   const [editingServers, setEditingServers] = useState(false);
-  const cat = useApp((s) => s.status.cat);
   const [rigs, setRigs] = useState<Rigs | null>(null);
   const [rigsError, setRigsError] = useState<string | null>(null);
   const [editingRig, setEditingRig] = useState<1 | 2 | null>(null);
@@ -92,16 +92,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
   /** Radio model, Configure button and live link state for a CAT-keyed radio. */
   const catFields = (radio: 1 | 2) => {
-    const live = cat.find((c) => c.radio === radio);
-    let state: { cls: string; text: string } | null = null;
-    if (live) {
-      if (live.connected) {
-        const tx = live.radio_tx === true ? ` · ${t("cat.radioTx")}` : live.radio_tx === false ? ` · ${t("cat.radioRx")}` : "";
-        state = { cls: "muted", text: t("cat.connected") + tx };
-      } else {
-        state = { cls: "warn-text", text: live.error ? `${t("cat.notConnected")}: ${live.error}` : t("cat.notConnected") };
-      }
-    }
     return (
       <>
         <label className="field">
@@ -116,7 +106,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </div>
         </label>
         {rigsError ? <p className="error">{rigsError}</p> : null}
-        {state ? <p className={state.cls}>{state.text}</p> : null}
+        <CatState radio={radio} />
       </>
     );
   };

@@ -44,7 +44,9 @@
     "voxThreshold": "VOX threshold",
     "voxHang": "VOX hang",
     "clip": "Clipping: lower the input level",
-    "noProcessing": "No processing: no noise suppression, AGC, echo cancellation or limiting."
+    "noProcessing": "No processing: no noise suppression, AGC, echo cancellation or limiting.",
+    "voxKeys": "VOX keys the station's radio",
+    "continuousNoKey": "Always on never keys the station's radio (it would stay on the air). Use push to talk or VOX to transmit through the station."
   },
   "rx": {
     "title": "Receive",
@@ -184,7 +186,10 @@
     "connected": "CAT connected",
     "notConnected": "CAT not connected",
     "radioTx": "radio transmitting",
-    "radioRx": "radio receiving"
+    "radioRx": "radio receiving",
+    "notRunning": "Station PTT is not running: tick Enabled above, then disconnect and connect again.",
+    "notRunningOffline": "Station PTT runs while connected. Connect to see the radio's state here.",
+    "notTransmitting": "The radio has not gone into transmit. It may be ignoring the TX; command on this connection: try the serial port, or the network with no password (plain CAT on port 9200)."
   },
   "k4": {
     "title": "Elecraft K4 CAT, radio {{radio}}",

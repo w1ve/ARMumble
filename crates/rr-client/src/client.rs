@@ -82,7 +82,14 @@ impl RadioClient {
         let rt = tokio::runtime::Handle::current();
         let _ = self.shared.rt.set(rt);
         self.shared.shutdown.store(false, Ordering::Relaxed);
+        let _vox = tokio::spawn(vox_keying(Arc::clone(&self.shared)));
         tokio::spawn(supervise(Arc::clone(&self.shared)))
+    }
+
+    /// Whether this position's VOX transmissions key the station's radio
+    /// (on by default). Push to talk always does.
+    pub fn set_vox_keys_station(&self, on: bool) {
+        self.shared.vox_keys_station.store(on, Ordering::Relaxed);
     }
 
     /// Log out and stop reconnecting.
@@ -279,17 +286,8 @@ impl RadioClient {
     pub fn set_ptt(&self, down: bool) {
         let sh = &self.shared;
         sh.capture.set_ptt(down);
-        if sh.ptt_down.swap(down, Ordering::Relaxed) == down {
-            return;
-        }
-        let seq = sh.ptt_seq.fetch_add(1, Ordering::Relaxed) + 1;
-        let msg = PttMessage { down, seq };
-        send_ptt(sh, msg);
-        if !down {
-            return;
-        }
-        if let Some(rt) = sh.rt.get() {
-            let _task = rt.spawn(ptt_refresh(Arc::clone(sh), seq, msg));
+        if sh.ptt_down.swap(down, Ordering::Relaxed) != down {
+            announce_key(sh);
         }
     }
 
@@ -387,11 +385,45 @@ impl Rigs {
         }
     }
 }
-/// Re-send a held PTT until it is released or superseded.
+/// Tell the channel's station whether to key its rig: while PTT is held,
+/// or while VOX is sending (when enabled). Sends only on a change.
+fn announce_key(sh: &Arc<Shared>) {
+    let down = sh.ptt_down.load(Ordering::Relaxed) || sh.vox_key.load(Ordering::Relaxed);
+    if sh.key_sent.swap(down, Ordering::Relaxed) == down {
+        return;
+    }
+    let seq = sh.ptt_seq.fetch_add(1, Ordering::Relaxed) + 1;
+    let msg = PttMessage { down, seq };
+    send_ptt(sh, msg);
+    if down {
+        if let Some(rt) = sh.rt.get() {
+            let _task = rt.spawn(ptt_refresh(Arc::clone(sh), seq, msg));
+        }
+    }
+}
+
+/// Follow the VOX gate: key the station while VOX is sending audio. Runs
+/// until the client is told to disconnect.
+async fn vox_keying(sh: Arc<Shared>) {
+    let mut tick = tokio::time::interval(Duration::from_millis(20));
+    while !sh.shutdown.load(Ordering::Relaxed) {
+        let _ = tick.tick().await;
+        let on = sh.vox_keys_station.load(Ordering::Relaxed)
+            && sh.capture.tx_mode() == rr_audio::capture::TxMode::Vox
+            && sh.capture.is_transmitting();
+        if sh.vox_key.swap(on, Ordering::Relaxed) != on {
+            announce_key(&sh);
+        }
+    }
+    sh.vox_key.store(false, Ordering::Relaxed);
+    announce_key(&sh);
+}
+
+/// Re-send a held key request until it is released or superseded.
 async fn ptt_refresh(shared: Arc<Shared>, seq: u64, msg: PttMessage) {
     loop {
         tokio::time::sleep(Duration::from_millis(REFRESH_MS)).await;
-        let still_held = shared.ptt_down.load(Ordering::Relaxed) && shared.ptt_seq.load(Ordering::Relaxed) == seq;
+        let still_held = shared.key_sent.load(Ordering::Relaxed) && shared.ptt_seq.load(Ordering::Relaxed) == seq;
         if !still_held {
             break;
         }

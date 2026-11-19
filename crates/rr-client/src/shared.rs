@@ -75,6 +75,12 @@ pub(crate) struct Shared {
     pub(crate) so2r_out_seq: AtomicU64,
     pub(crate) ptt_seq: AtomicU64,
     pub(crate) ptt_down: AtomicBool,
+    /// VOX is sending audio and should key the station's radio.
+    pub(crate) vox_key: AtomicBool,
+    /// Whether VOX transmissions key the station's radio.
+    pub(crate) vox_keys_station: AtomicBool,
+    /// The key state last announced to the channel.
+    pub(crate) key_sent: AtomicBool,
     pub(crate) sent: AtomicU64,
     pub(crate) dropped: AtomicU64,
     pub(crate) plan: Mutex<Option<BandwidthPlan>>,
@@ -114,6 +120,9 @@ impl Shared {
             so2r_out_seq: AtomicU64::new(0),
             ptt_seq: AtomicU64::new(0),
             ptt_down: AtomicBool::new(false),
+            vox_key: AtomicBool::new(false),
+            vox_keys_station: AtomicBool::new(true),
+            key_sent: AtomicBool::new(false),
             sent: AtomicU64::new(0),
             dropped: AtomicU64::new(0),
             plan: Mutex::new(None),

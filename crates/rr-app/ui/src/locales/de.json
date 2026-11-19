@@ -44,7 +44,9 @@
     "voxThreshold": "VOX-Schwelle",
     "voxHang": "VOX-Nachlauf",
     "clip": "Übersteuerung: Eingangspegel senken",
-    "noProcessing": "Keine Verarbeitung: keine Rauschunterdrückung, AGC, Echounterdrückung oder Begrenzung."
+    "noProcessing": "Keine Verarbeitung: keine Rauschunterdrückung, AGC, Echounterdrückung oder Begrenzung.",
+    "voxKeys": "VOX tastet das Funkgerät der Station",
+    "continuousNoKey": "„Immer an“ tastet das Funkgerät der Station nie (es bliebe auf Sendung). Zum Senden über die Station Sprechtaste oder VOX verwenden."
   },
   "rx": {
     "title": "Empfang",
@@ -184,7 +186,10 @@
     "connected": "CAT verbunden",
     "notConnected": "CAT nicht verbunden",
     "radioTx": "Funkgerät sendet",
-    "radioRx": "Funkgerät empfängt"
+    "radioRx": "Funkgerät empfängt",
+    "notRunning": "Station-PTT läuft nicht: oben „Aktiviert“ ankreuzen, dann trennen und neu verbinden.",
+    "notRunningOffline": "Station-PTT läuft nur bei bestehender Verbindung. Verbinden, um hier den Zustand des Funkgeräts zu sehen.",
+    "notTransmitting": "Das Funkgerät ist nicht auf Senden gegangen. Es ignoriert über diese Verbindung womöglich den Befehl TX;: die serielle Schnittstelle versuchen oder das Netzwerk ohne Passwort (reines CAT an Port 9200)."
   },
   "k4": {
     "title": "Elecraft K4 CAT, Funkgerät {{radio}}",

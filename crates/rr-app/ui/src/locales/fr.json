@@ -44,7 +44,9 @@
     "voxThreshold": "Seuil VOX",
     "voxHang": "Maintien VOX",
     "clip": "Écrêtage : baisser le niveau d'entrée",
-    "noProcessing": "Aucun traitement : pas de réduction de bruit, CAG, annulation d'écho ni limiteur."
+    "noProcessing": "Aucun traitement : pas de réduction de bruit, CAG, annulation d'écho ni limiteur.",
+    "voxKeys": "Le VOX met le poste de la station en émission",
+    "continuousNoKey": "« Toujours actif » ne met jamais le poste de la station en émission (il resterait en l'air). Utilisez l'alternat ou le VOX pour émettre via la station."
   },
   "rx": {
     "title": "Réception",
@@ -184,7 +186,10 @@
     "connected": "CAT connecté",
     "notConnected": "CAT non connecté",
     "radioTx": "poste en émission",
-    "radioRx": "poste en réception"
+    "radioRx": "poste en réception",
+    "notRunning": "Le PTT de la station ne tourne pas : cochez « Activé » ci-dessus, puis déconnectez et reconnectez.",
+    "notRunningOffline": "Le PTT de la station fonctionne pendant la connexion. Connectez-vous pour voir ici l'état du poste.",
+    "notTransmitting": "Le poste n'est pas passé en émission. Il ignore peut-être la commande TX; sur cette connexion : essayez le port série, ou le réseau sans mot de passe (CAT simple sur le port 9200)."
   },
   "k4": {
     "title": "Elecraft K4 CAT, poste {{radio}}",

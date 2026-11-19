@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, type K4, type Rig } from "../api";
+import { CatState } from "./CatState";
 import { useApp } from "../store";
 
 /** Why the settings cannot be used yet (a locale key), or null. */
@@ -119,6 +120,7 @@ export function K4Dialog({ radio, rig, onSave, onClose }: { radio: number; rig: 
           {result ? <span className={result.ok ? "muted" : "error"}>{result.text}</span> : null}
         </div>
         <p className="hint">{t("k4.testHint")}</p>
+        <CatState radio={radio} />
         {saveError ? <p className="error">{saveError}</p> : null}
         <footer className="row dialog-buttons">
           <button type="button" className="ghost" onClick={onClose}>
