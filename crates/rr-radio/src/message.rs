@@ -7,7 +7,12 @@ pub const PLUGIN_NAME: &str = "remote-radio";
 /// `payloadType` of a [`PttMessage`].
 pub const PAYLOAD_TYPE_PTT: &str = "ptt";
 /// How often a held PTT is re-sent so a lost release cannot leave a rig keyed.
-pub const REFRESH_MS: u64 = 500;
+///
+/// Mumble servers rate-limit each user's control messages (by default 1 per
+/// second with a burst of 5) and silently drop the excess. Refreshing faster
+/// than that empties the allowance, and then the release itself is dropped.
+/// 1.2 s stays under the limit with room for the release and other messages.
+pub const REFRESH_MS: u64 = 1_200;
 
 /// A PTT request: `down` is the wanted state, `seq` a per-sender counter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -161,9 +161,10 @@ mod tests {
         let t0 = Instant::now();
         let mut k = StationKeyer::new(RecordingPttSink::new(), &settings());
         k.set_remote(true, t0);
-        run(&mut k, t0, 0, 1_500);
+        // The deadman is raised to its minimum (3 s) by sanitising.
+        run(&mut k, t0, 0, 2_500);
         assert!(k.is_keyed());
-        run(&mut k, t0, 1_500, 2_400);
+        run(&mut k, t0, 2_500, 3_400);
         assert!(!k.is_keyed(), "request must lapse after the deadman");
     }
 

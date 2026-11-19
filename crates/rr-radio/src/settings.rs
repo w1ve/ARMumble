@@ -100,7 +100,7 @@ impl Default for StationPttSettings {
             vox: true,
             vox_hang_ms: 500,
             hang_ms: 150,
-            deadman_ms: 2_000,
+            deadman_ms: Self::MIN_DEADMAN_MS,
             max_tx_secs: 180,
         }
     }
@@ -109,13 +109,16 @@ impl Default for StationPttSettings {
 impl StationPttSettings {
     /// Largest accepted VOX hang, in milliseconds.
     pub const MAX_VOX_HANG_MS: u32 = 5_000;
+    /// Shortest deadman: two and a half PTT refresh periods, so one late
+    /// refresh does not drop the key in the middle of a transmission.
+    pub const MIN_DEADMAN_MS: u32 = (crate::message::REFRESH_MS * 5 / 2) as u32;
 
     /// Clamp every field to a sane range.
     #[must_use]
     pub fn sanitised(mut self) -> Self {
         self.vox_hang_ms = self.vox_hang_ms.min(Self::MAX_VOX_HANG_MS);
         self.hang_ms = self.hang_ms.min(2_000);
-        self.deadman_ms = self.deadman_ms.clamp(500, 10_000);
+        self.deadman_ms = self.deadman_ms.clamp(Self::MIN_DEADMAN_MS, 10_000);
         self.max_tx_secs = self.max_tx_secs.clamp(5, 900);
         self
     }
@@ -165,7 +168,7 @@ mod tests {
         let s = StationPttSettings { vox_hang_ms: 99_999, deadman_ms: 1, max_tx_secs: 0, ..Default::default() }
             .sanitised();
         assert_eq!(s.vox_hang_ms, 5_000);
-        assert_eq!(s.deadman_ms, 500);
+        assert_eq!(s.deadman_ms, StationPttSettings::MIN_DEADMAN_MS);
         assert_eq!(s.max_tx_secs, 5);
     }
 

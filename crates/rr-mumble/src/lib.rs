@@ -18,8 +18,11 @@
 //! ```
 
 /// Extension version announced to the server so Fancy-style servers relay our
-/// plugin messages (remote PTT). Encoded with the Mumble v2 scheme.
-pub const EXTENSION_VERSION: u64 = 3_u64 << 32;
+/// plugin messages (remote PTT). Encoded with the Mumble v2 scheme
+/// (major << 48 | minor << 32 | patch << 16). Fancy servers deliver the
+/// generic `PluginMessage` only to clients announcing 0.4.0 or later; 0.3.x
+/// clients are silently skipped.
+pub const EXTENSION_VERSION: u64 = 4_u64 << 32;
 
 pub mod client;
 pub mod command;
