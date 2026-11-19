@@ -93,6 +93,13 @@ export interface Rig {
   k4: K4;
 }
 
+/** Result of keying a radio briefly over CAT. */
+export interface KeyTest {
+  transmitted: boolean;
+  /** What the radio sent during the test. */
+  replies: string;
+}
+
 export interface Rigs {
   radio1: Rig;
   radio2: Rig;
@@ -215,6 +222,7 @@ export const api = {
   loadRigs: () => invoke<Rigs>("load_rigs"),
   saveRigs: (rigs: Rigs) => invoke<void>("save_rigs", { rigs }),
   testRig: (rig: Rig) => invoke<string>("test_rig", { rig }),
+  testRigKey: (rig: Rig) => invoke<KeyTest>("test_rig_key", { rig }),
 };
 
 export function onStatus(cb: (s: Status) => void): Promise<UnlistenFn> {

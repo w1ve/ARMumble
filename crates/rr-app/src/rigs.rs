@@ -48,6 +48,15 @@ pub struct Rigs {
     pub radio2: Rig,
 }
 
+/// Result of keying a radio briefly to test CAT PTT.
+#[derive(Debug, Clone, Serialize)]
+pub struct KeyTest {
+    /// The radio said it was transmitting.
+    pub transmitted: bool,
+    /// What the radio sent during the test.
+    pub replies: String,
+}
+
 /// Where the file lives.
 #[must_use]
 pub fn rigs_path(config_dir: &Path) -> PathBuf {

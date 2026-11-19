@@ -75,6 +75,7 @@ pub fn run() {
             commands::load_rigs,
             commands::save_rigs,
             commands::test_rig,
+            commands::test_rig_key,
         ])
         .run(tauri::generate_context!());
     if let Err(e) = result {

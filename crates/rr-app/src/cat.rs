@@ -68,6 +68,12 @@ pub fn test(rig: &Rig) -> Result<String, String> {
     rr_cat::test_connection(&to_config(rig)?)
 }
 
+/// Key the radio for two seconds and report whether it said it transmitted.
+pub fn test_key(rig: &Rig) -> Result<rigs::KeyTest, String> {
+    let r = rr_cat::test_key(&to_config(rig)?, std::time::Duration::from_secs(2))?;
+    Ok(rigs::KeyTest { transmitted: r.transmitted, replies: r.replies })
+}
+
 /// The state of each CAT link, for the UI.
 pub fn status(links: &CatLinks) -> Vec<crate::status::CatDto> {
     links

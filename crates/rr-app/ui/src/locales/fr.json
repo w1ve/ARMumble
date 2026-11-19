@@ -206,6 +206,11 @@
     "test": "Tester",
     "testing": "Test en cours…",
     "testOk": "Connecté : {{id}}",
-    "testHint": "Le test lit l'identifiant du poste et n'émet pas. Déconnectez-vous d'abord si ce programme utilise déjà le port du poste."
+    "testHint": "Le test lit l'identifiant du poste et n'émet pas. Déconnectez-vous d'abord si ce programme utilise déjà le port du poste.",
+    "keyTest": "Test d'émission (2 s)",
+    "keyTestHint": "Envoie TX; au poste, maintient 2 secondes, puis RX;. Le poste émet réellement : utilisez une charge fictive ou le mode TX TEST du poste. Déconnectez-vous d'abord.",
+    "keyOk": "Le poste est passé en émission.",
+    "keyNoTx": "Le poste n'a PAS signalé d'émission.",
+    "keyReplies": "Réponse du poste"
   }
 }

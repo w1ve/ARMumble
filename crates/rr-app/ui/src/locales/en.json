@@ -206,6 +206,11 @@
     "test": "Test",
     "testing": "Testing…",
     "testOk": "Connected: {{id}}",
-    "testHint": "Test reads the radio's ID and does not transmit. Disconnect first if this program is already using the radio's port."
+    "testHint": "Test reads the radio's ID and does not transmit. Disconnect first if this program is already using the radio's port.",
+    "keyTest": "Transmit test (2 s)",
+    "keyTestHint": "Sends TX; to the radio, holds it for 2 seconds, then RX;. The radio really transmits: use a dummy load or the radio's TX TEST mode. Disconnect first.",
+    "keyOk": "The radio went into transmit.",
+    "keyNoTx": "The radio did NOT report transmit.",
+    "keyReplies": "Radio said"
   }
 }

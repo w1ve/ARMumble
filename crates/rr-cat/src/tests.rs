@@ -192,3 +192,12 @@ fn config_file_shape() {
     let back: RigConfig = serde_json::from_str(&serde_json::to_string(&c).expect("json")).expect("parse");
     assert_eq!(back, c);
 }
+
+#[test]
+fn key_test_reports_transmit_and_always_releases() {
+    let (port, log) = fake(None, None);
+    let r = super::test_key(&cfg(port, ""), Duration::from_millis(700)).expect("key test");
+    assert!(r.transmitted, "replies: {}", r.replies);
+    assert!(r.replies.contains("TQ1;"));
+    wait_for("RX;", || has(&log, "RX;"));
+}

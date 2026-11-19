@@ -206,6 +206,11 @@
     "test": "Testen",
     "testing": "Test läuft…",
     "testOk": "Verbunden: {{id}}",
-    "testHint": "Der Test liest die Kennung des Funkgeräts und sendet nicht. Vorher trennen, wenn dieses Programm den Port des Funkgeräts schon benutzt."
+    "testHint": "Der Test liest die Kennung des Funkgeräts und sendet nicht. Vorher trennen, wenn dieses Programm den Port des Funkgeräts schon benutzt.",
+    "keyTest": "Sendetest (2 s)",
+    "keyTestHint": "Sendet TX; an das Funkgerät, hält 2 Sekunden, dann RX;. Das Funkgerät sendet wirklich: Dummy Load oder den TX-TEST-Modus des Geräts verwenden. Vorher trennen.",
+    "keyOk": "Das Funkgerät ist auf Senden gegangen.",
+    "keyNoTx": "Das Funkgerät hat KEIN Senden gemeldet.",
+    "keyReplies": "Antwort des Geräts"
   }
 }

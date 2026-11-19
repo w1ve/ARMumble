@@ -76,6 +76,20 @@ async fn main() {
         }
         println!("in channel: {} (session {}){}", u.name, u.session, if muted { " muted" } else { "" });
     }
+    let names: std::collections::HashMap<u32, String> = client.users().into_iter().map(|u| (u.session, u.name)).collect();
+    let mut ptt_events = client.subscribe();
+    let t0 = std::time::Instant::now();
+    let _ptt_log = tokio::spawn(async move {
+        loop {
+            match ptt_events.recv().await {
+                Ok(rr_client::Event::RemotePtt { session, down }) => {
+                    println!("{:>6.2}s REMOTE PTT from {} : {}", t0.elapsed().as_secs_f32(), names.get(&session).map_or("?", String::as_str), if down { "DOWN" } else { "up" });
+                }
+                Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
     let mut rec: Vec<f32> = Vec::with_capacity(48_000 * 2 * usize::try_from(secs).unwrap_or(20));
     // Render in 10 ms blocks paced by the real clock (Windows timers are coarse).
     let mut buf = vec![0.0_f32; 960];

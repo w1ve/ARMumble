@@ -170,6 +170,11 @@ pub fn cat_status(_links: &CatLinks) -> Vec<crate::status::CatDto> {
 }
 
 /// Not available on mobile.
+pub fn test_rig_key(_rig: &crate::rigs::Rig) -> Result<crate::rigs::KeyTest, String> {
+    Err("CAT is not available on this platform".into())
+}
+
+/// Not available on mobile.
 pub fn test_rig(_rig: &crate::rigs::Rig) -> Result<String, String> {
     Err("CAT is not available on this platform".into())
 }

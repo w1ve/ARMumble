@@ -23,6 +23,8 @@ export function K4Dialog({ radio, rig, onSave, onClose }: { radio: number; rig: 
   const [showPw, setShowPw] = useState(false);
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [keying, setKeying] = useState(false);
+  const [keyResult, setKeyResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const problem = k4Problem(k);
   const edit = (patch: Partial<K4>) => {
@@ -40,6 +42,18 @@ export function K4Dialog({ radio, rig, onSave, onClose }: { radio: number; rig: 
       setResult({ ok: false, text: String(e) });
     } finally {
       setTesting(false);
+    }
+  };
+  const keyTest = async () => {
+    setKeying(true);
+    setKeyResult(null);
+    try {
+      const r = await api.testRigKey(current);
+      setKeyResult({ ok: r.transmitted, text: `${r.transmitted ? t("k4.keyOk") : t("k4.keyNoTx")} ${t("k4.keyReplies")}: ${r.replies || "-"}` });
+    } catch (e) {
+      setKeyResult({ ok: false, text: String(e) });
+    } finally {
+      setKeying(false);
     }
   };
   const save = async () => {
@@ -120,6 +134,13 @@ export function K4Dialog({ radio, rig, onSave, onClose }: { radio: number; rig: 
           {result ? <span className={result.ok ? "muted" : "error"}>{result.text}</span> : null}
         </div>
         <p className="hint">{t("k4.testHint")}</p>
+        <div className="row">
+          <button type="button" className="danger" onClick={() => void keyTest()} disabled={keying || testing || problem !== null}>
+            {keying ? t("tx.onAir") : t("k4.keyTest")}
+          </button>
+          {keyResult ? <span className={keyResult.ok ? "muted" : "error"}>{keyResult.text}</span> : null}
+        </div>
+        <p className="hint">{t("k4.keyTestHint")}</p>
         <CatState radio={radio} />
         {saveError ? <p className="error">{saveError}</p> : null}
         <footer className="row dialog-buttons">

@@ -187,6 +187,16 @@ pub fn save_rigs(state: State<'_, AppState>, rigs: Rigs) -> Result<(), String> {
     crate::rigs::save(&rigs_file(&state), &rigs)
 }
 
+/// Key a radio for two seconds over CAT and report whether it transmitted.
+/// Refused while connected with Station PTT running (the port is in use).
+#[tauri::command]
+pub async fn test_rig_key(state: State<'_, AppState>, rig: Rig) -> Result<crate::rigs::KeyTest, String> {
+    if lock(&state.engine).is_some() && lock(&state.settings).ptt.station.enabled {
+        return Err("disconnect first: Station PTT is using the radio".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || platform::test_rig_key(&rig)).await.map_err(|e| e.to_string())?
+}
+
 /// Connect to a radio and read its identity, without keying it.
 #[tauri::command]
 pub async fn test_rig(rig: Rig) -> Result<String, String> {

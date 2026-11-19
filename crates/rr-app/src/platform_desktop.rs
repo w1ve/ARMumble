@@ -178,7 +178,7 @@ where
 {
     rr_radio::serial::OtrspListener::open(port, on_command)
 }
-pub use crate::cat::{open_keyers, status as cat_status, test as test_rig, CatLinks};
+pub use crate::cat::{open_keyers, status as cat_status, test as test_rig, test_key as test_rig_key, CatLinks};
 
 /// Open the footswitch input.
 pub fn open_local<F>(s: &LocalPttSettings, on_message: F) -> Result<LocalPtt, String>

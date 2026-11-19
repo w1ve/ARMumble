@@ -332,5 +332,53 @@ pub fn test_connection(cfg: &RigConfig) -> Result<String, String> {
     Err("connected, but the radio did not answer the identity query".into())
 }
 
+/// What a key test saw.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct KeyTestResult {
+    /// The radio reported transmit while keyed.
+    pub transmitted: bool,
+    /// Everything the radio sent during the test, for the user.
+    pub replies: String,
+}
+
+/// Key the radio for `hold`, then release it, and report whether the radio
+/// said it was transmitting. Always sends the unkey command, even on error.
+///
+/// # Errors
+/// The connection or login problem.
+pub fn test_key(cfg: &RigConfig, hold: Duration) -> Result<KeyTestResult, String> {
+    let cmds = commands(cfg.model);
+    let mut conn = connect(cfg)?;
+    let mut seen: Vec<String> = Vec::new();
+    let mut transmitted = false;
+    let watch = |conn: &mut dyn k4::Conn, until: Instant, seen: &mut Vec<String>, tx: &mut bool| -> Result<(), String> {
+        while Instant::now() < until {
+            for r in conn.recv().map_err(|e| e.to_string())? {
+                if transmit_state(cfg.model, &r) == Some(true) {
+                    *tx = true;
+                }
+                if seen.len() < 40 {
+                    seen.push(r);
+                }
+            }
+        }
+        Ok(())
+    };
+    let keyed = conn.send(cmds.key_on).map_err(|e| e.to_string());
+    let mut result = keyed.and_then(|()| {
+        let end = Instant::now() + hold;
+        while Instant::now() < end {
+            conn.send(cmds.query_tx).map_err(|e| e.to_string())?;
+            watch(conn.as_mut(), (Instant::now() + Duration::from_millis(300)).min(end), &mut seen, &mut transmitted)?;
+        }
+        Ok(())
+    });
+    let released = conn.send(cmds.key_off).map_err(|e| e.to_string());
+    if result.is_ok() {
+        result = released.and_then(|()| watch(conn.as_mut(), Instant::now() + Duration::from_millis(400), &mut seen, &mut transmitted));
+    }
+    result.map(|()| KeyTestResult { transmitted, replies: seen.join(" ") })
+}
+
 #[cfg(test)]
 mod tests;
