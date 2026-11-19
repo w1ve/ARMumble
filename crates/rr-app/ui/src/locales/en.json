@@ -49,10 +49,12 @@
   "rx": {
     "title": "Receive",
     "volume": "Output volume",
-    "mono": "Mono output",
     "speakers": "Talkers",
     "none": "Nobody is talking",
-    "clip": "Output clipping: lower the volume"
+    "clip": "Output clipping: lower the volume",
+    "map": "Output channels",
+    "left": "Left only (both ears)",
+    "right": "Right only (both ears)"
   },
   "link": {
     "title": "Link",

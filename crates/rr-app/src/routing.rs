@@ -151,7 +151,7 @@ pub struct Plan {
 /// two-radio operation is off.
 #[must_use]
 pub fn plan(a: &AudioSettings, state: Option<So2rState>, has_out_b: bool) -> Plan {
-    let plain = if a.mono_output { StereoMode::Mono } else { StereoMode::Stereo };
+    let plain = a.output_mode();
     let Some(s) = state.filter(|_| a.so2r_enabled) else {
         return Plan { mode_a: plain, mute_a: false, mute_b: false, key: 1 };
     };
@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn disabled_is_plain_single_radio() {
-        let a = AudioSettings { mono_output: true, ..AudioSettings::default() };
+        let a = AudioSettings { output_map: "mix".into(), ..AudioSettings::default() };
         let p = plan(&a, Some(So2rState { tx: Radio::Two, rx: Listen::Single(Radio::Two) }), true);
         assert_eq!(p, Plan { mode_a: StereoMode::Mono, mute_a: false, mute_b: false, key: 1 });
     }

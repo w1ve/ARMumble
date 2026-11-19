@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use rr_audio::capture::{ChannelMap, TxMode};
+use rr_audio::playout::StereoMode;
 use rr_radio::PttSettings;
 use serde::{Deserialize, Serialize};
 
@@ -87,7 +88,11 @@ pub struct AudioSettings {
     pub vox_threshold_db: f32,
     /// VOX hang time in ms.
     pub vox_hang_ms: u32,
-    /// Fold the output to mono.
+    /// What is played: `stereo`, `left` (left channel in both ears),
+    /// `right` or `mix` (left and right mixed to mono).
+    pub output_map: String,
+    /// Older setting, read once and folded into `output_map` (true = `mix`).
+    #[serde(skip_serializing)]
     pub mono_output: bool,
     /// Send audio over TCP only.
     pub force_tcp: bool,
@@ -118,6 +123,7 @@ impl Default for AudioSettings {
             tx_mode: "ptt".into(),
             vox_threshold_db: -40.0,
             vox_hang_ms: 400,
+            output_map: "stereo".into(),
             mono_output: false,
             force_tcp: false,
         }
@@ -133,6 +139,19 @@ impl AudioSettings {
             "right" => ChannelMap::Right,
             "mix" => ChannelMap::Mix,
             _ => ChannelMap::Stereo,
+        }
+    }
+
+    /// How received audio is presented when nothing else (two-radio
+    /// listening) overrides it.
+    #[must_use]
+    pub fn output_mode(&self) -> StereoMode {
+        match self.output_map.as_str() {
+            "left" => StereoMode::LeftOnly,
+            "right" => StereoMode::RightOnly,
+            "mix" => StereoMode::Mono,
+            _ if self.mono_output => StereoMode::Mono,
+            _ => StereoMode::Stereo,
         }
     }
 
@@ -203,8 +222,18 @@ impl Settings {
     pub fn load(path: &Path) -> Self {
         std::fs::read_to_string(path)
             .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
+            .and_then(|s| serde_json::from_str::<Self>(&s).ok())
+            .map(Self::migrated)
             .unwrap_or_default()
+    }
+
+    /// Fold older settings into their replacements.
+    fn migrated(mut self) -> Self {
+        if self.audio.mono_output && self.audio.output_map == "stereo" {
+            self.audio.output_map = "mix".into();
+        }
+        self.audio.mono_output = false;
+        self
     }
 
     /// Write to `path`, creating the directory if needed.
@@ -241,6 +270,19 @@ mod tests {
         assert!((a.input_gain - 1.0).abs() < f32::EPSILON);
         assert!((a.master_gain - 1.0).abs() < f32::EPSILON);
         assert!(a.stereo);
+    }
+
+    #[test]
+    fn old_mono_output_becomes_mix() {
+        let dir = std::env::temp_dir().join(format!("rr-app-mono-{}", std::process::id()));
+        let path = settings_path(&dir);
+        std::fs::create_dir_all(&dir).expect("dir");
+        std::fs::write(&path, r#"{"audio":{"mono_output":true}}"#).expect("write");
+        let s = Settings::load(&path);
+        assert_eq!(s.audio.output_map, "mix");
+        assert_eq!(s.audio.output_mode(), StereoMode::Mono);
+        assert!(!serde_json::to_string(&s).expect("json").contains("mono_output"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

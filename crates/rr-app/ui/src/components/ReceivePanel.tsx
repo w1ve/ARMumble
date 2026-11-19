@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../api";
+import { api, type ChannelMap } from "../api";
 import { useApp } from "../store";
 import { Meter } from "./Meter";
 import { Section } from "./Section";
@@ -29,9 +29,14 @@ export function ReceivePanel() {
         warn={a.master_gain > 1}
         onChange={(v) => update((x) => void (x.audio.master_gain = v / 100))}
       />
-      <label className="check">
-        <input type="checkbox" checked={a.mono_output} onChange={(e) => update((x) => void (x.audio.mono_output = e.target.checked))} />
-        {t("rx.mono")}
+      <label className="field">
+        <span className="field-label">{t("rx.map")}</span>
+        <select value={a.output_map} onChange={(e) => update((x) => void (x.audio.output_map = e.target.value as ChannelMap))}>
+          <option value="stereo">{t("tx.stereo")}</option>
+          <option value="left">{t("rx.left")}</option>
+          <option value="right">{t("rx.right")}</option>
+          <option value="mix">{t("tx.mix")}</option>
+        </select>
       </label>
 
       <h3>{t("rx.speakers")}</h3>

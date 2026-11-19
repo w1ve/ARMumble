@@ -49,10 +49,12 @@
   "rx": {
     "title": "Réception",
     "volume": "Volume de sortie",
-    "mono": "Sortie mono",
     "speakers": "Locuteurs",
     "none": "Personne ne parle",
-    "clip": "Écrêtage en sortie : baisser le volume"
+    "clip": "Écrêtage en sortie : baisser le volume",
+    "map": "Canaux de sortie",
+    "left": "Gauche seule (deux oreilles)",
+    "right": "Droite seule (deux oreilles)"
   },
   "link": {
     "title": "Liaison",

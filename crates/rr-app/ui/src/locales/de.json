@@ -49,10 +49,12 @@
   "rx": {
     "title": "Empfang",
     "volume": "Ausgangslautstärke",
-    "mono": "Mono-Ausgabe",
     "speakers": "Sprecher",
     "none": "Niemand spricht",
-    "clip": "Ausgang übersteuert: Lautstärke senken"
+    "clip": "Ausgang übersteuert: Lautstärke senken",
+    "map": "Ausgangskanäle",
+    "left": "Nur links (beide Ohren)",
+    "right": "Nur rechts (beide Ohren)"
   },
   "link": {
     "title": "Verbindung",
