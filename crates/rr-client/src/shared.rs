@@ -77,6 +77,8 @@ pub(crate) struct Shared {
     pub(crate) ptt_down: AtomicBool,
     /// VOX is sending audio and should key the station's radio.
     pub(crate) vox_key: AtomicBool,
+    /// Whisper is held: the transmit gate is open for it.
+    pub(crate) whisper_gate: AtomicBool,
     /// Whether VOX transmissions key the station's radio.
     pub(crate) vox_keys_station: AtomicBool,
     /// The key state last announced to the channel.
@@ -121,6 +123,7 @@ impl Shared {
             ptt_seq: AtomicU64::new(0),
             ptt_down: AtomicBool::new(false),
             vox_key: AtomicBool::new(false),
+            whisper_gate: AtomicBool::new(false),
             vox_keys_station: AtomicBool::new(true),
             key_sent: AtomicBool::new(false),
             sent: AtomicU64::new(0),

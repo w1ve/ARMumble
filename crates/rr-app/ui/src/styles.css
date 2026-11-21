@@ -245,7 +245,8 @@ ul {
   font-weight: 700;
   touch-action: none;
 }
-.hold:active {
+.hold:active,
+.hold.on {
   background: var(--accent);
   color: #fff;
 }

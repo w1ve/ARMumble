@@ -44,8 +44,9 @@ pub fn save_settings(app: AppHandle, state: State<'_, AppState>, settings: Setti
     platform::apply_hotkeys(&app, &settings.hotkeys);
     let old = std::mem::replace(&mut *lock(&state.settings), settings.clone()).audio;
     let new = &settings.audio;
-    if Devices::from_settings(&old) != Devices::from_settings(new) && lock(&state.engine).is_some() {
-        let _task = tauri::async_runtime::spawn(restart_for_devices(app.clone()));
+    let devices = Devices::from_settings(new);
+    if Devices::from_settings(&old) != devices && lock(&state.engine).is_some() {
+        let _task = tauri::async_runtime::spawn(restart_for_devices(app.clone(), devices));
     }
     if let Some(e) = lock(&state.engine).as_ref() {
         apply_live(&e.client, &settings);
@@ -108,16 +109,48 @@ async fn start_engine(app: &AppHandle, state: &AppState) -> Result<(), String> {
     }
 }
 
-/// The sound devices changed while connected: the streams are fixed to their
-/// devices, so restart the connection on the new ones.
-async fn restart_for_devices(app: AppHandle) {
+/// The sound devices changed while connected: move the streams to the new
+/// devices, keeping the connection, channel and holds. Only adding or removing
+/// a second output device needs a reconnect, which then returns to the channel.
+async fn restart_for_devices(app: AppHandle, d: Devices) {
+    let switched = tauri::async_runtime::spawn_blocking({
+        let app = app.clone();
+        move || {
+            let state = app.state::<AppState>();
+            let mut slot = lock(&state.engine);
+            slot.as_mut().map(|e| e.switch_devices(d))
+        }
+    })
+    .await;
+    match switched {
+        Ok(None | Some(Ok(true) | Err(_))) => {}
+        Err(e) => tracing::warn!("device switch task failed: {e}"),
+        Ok(Some(Ok(false))) => reconnect_in_place(&app).await,
+    }
+}
+
+/// Reconnect, then go back to the channel we were in.
+async fn reconnect_in_place(app: &AppHandle) {
     let state = app.state::<AppState>();
-    if lock(&state.engine).is_none() {
+    let channel = lock(&state.engine).as_ref().and_then(|e| e.client.own_channel());
+    if let Err(e) = start_engine(app, &state).await {
+        tracing::warn!("reconnect on new sound devices failed: {e}");
+        let _ = app.emit("status", Status { error: Some(e), ..Status::idle() });
         return;
     }
-    if let Err(e) = start_engine(&app, &state).await {
-        tracing::warn!("restart on new sound devices failed: {e}");
-        let _ = app.emit("status", Status { error: Some(e), ..Status::idle() });
+    let (Some(channel), Some(client)) = (channel, lock(&state.engine).as_ref().map(|e| e.client.clone())) else {
+        return;
+    };
+    for _ in 0..100 {
+        if client.own_channel().is_some() && !client.channels().is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    if client.own_channel() != Some(channel) {
+        if let Err(e) = client.join_channel(channel).await {
+            tracing::warn!("could not return to channel {channel}: {e}");
+        }
     }
 }
 

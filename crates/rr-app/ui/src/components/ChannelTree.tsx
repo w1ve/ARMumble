@@ -1,14 +1,26 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { useApp } from "../store";
 import { buildTree, type TreeNode } from "../util";
 import { useHold } from "./useHold";
 
-function HoldButton({ label, title, onDown, onUp }: { label: string; title: string; onDown: () => void; onUp: () => void }) {
-  const hold = useHold(onDown, onUp);
+/** A press-and-hold button; lit while held. Failures are shown, not dropped. */
+function HoldButton({ label, title, action }: { label: string; title: string; action: (down: boolean) => Promise<void> }) {
+  const [on, setOn] = useState(false);
+  const run = (down: boolean) => {
+    setOn(down);
+    action(down).catch((e: unknown) => {
+      setOn(false);
+      useApp.setState({ actionError: `${title}: ${String(e)}` });
+    });
+  };
+  const hold = useHold(
+    () => run(true),
+    () => run(false),
+  );
   return (
-    <button type="button" className="hold" title={title} aria-label={title} {...hold}>
+    <button type="button" className={`hold${on ? " on" : ""}`} title={title} aria-label={title} aria-pressed={on} {...hold}>
       {label}
     </button>
   );
@@ -32,14 +44,12 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
             <HoldButton
               label="W"
               title={t("channels.whisper")}
-              onDown={() => void api.whisper(node.channel.id, true)}
-              onUp={() => void api.whisper(node.channel.id, false)}
+              action={(down) => api.whisper(node.channel.id, down)}
             />
             <HoldButton
               label="L"
               title={t("channels.listen")}
-              onDown={() => void api.listenIn(node.channel.id, true)}
-              onUp={() => void api.listenIn(node.channel.id, false)}
+              action={(down) => api.listenIn(node.channel.id, down)}
             />
           </span>
         ) : null}

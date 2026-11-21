@@ -245,8 +245,16 @@ impl RadioClient {
                     };
                     self.handle()?.send(SetVoiceTarget { id: WHISPER_SLOT, targets: vec![entry] }).await?;
                     self.shared.target.store(WHISPER_SLOT, Ordering::Relaxed);
+                    // Holding Whisper is a push to talk of its own: open the
+                    // transmit gate. It does not ask the station to key.
+                    self.shared.whisper_gate.store(true, Ordering::Relaxed);
+                    self.shared.capture.set_ptt(true);
                 }
-                HoldAction::Whisper(None) => self.shared.target.store(0, Ordering::Relaxed),
+                HoldAction::Whisper(None) => {
+                    self.shared.target.store(0, Ordering::Relaxed);
+                    self.shared.whisper_gate.store(false, Ordering::Relaxed);
+                    self.shared.capture.set_ptt(self.shared.ptt_down.load(Ordering::Relaxed));
+                }
                 HoldAction::MuteHome(m) => self.shared.mute_home.store(m, Ordering::Relaxed),
             }
         }
@@ -292,7 +300,7 @@ impl RadioClient {
     /// lost release cannot leave the rig on the air.
     pub fn set_ptt(&self, down: bool) {
         let sh = &self.shared;
-        sh.capture.set_ptt(down);
+        sh.capture.set_ptt(down || sh.whisper_gate.load(Ordering::Relaxed));
         if sh.ptt_down.swap(down, Ordering::Relaxed) != down {
             announce_key(sh);
         }
@@ -419,7 +427,9 @@ async fn vox_keying(sh: Arc<Shared>) {
             && sh.capture.tx_mode() == rr_audio::capture::TxMode::Vox
             && sh.capture.is_transmitting()
             // The stereo test is for the other position's ears, never the air.
-            && !sh.capture.test_playing();
+            && !sh.capture.test_playing()
+            // A whisper goes to another channel, not to this channel's radio.
+            && sh.target.load(Ordering::Relaxed) == 0;
         if sh.vox_key.swap(on, Ordering::Relaxed) != on {
             announce_key(&sh);
         }

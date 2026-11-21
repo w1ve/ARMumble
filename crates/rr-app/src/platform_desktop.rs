@@ -1,11 +1,12 @@
 //! Desktop platform glue: sound cards, serial ports and system-wide hotkeys.
 
 use std::sync::mpsc::{channel, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 
-use rr_audio_cpal::{input_params, output_params, start_input_with, start_output, Health};
-use rr_client::AudioEndpoints;
+use rr_audio::playout::Playout;
+use rr_audio_cpal::{input_params, output_params, start_input_with, start_output_with, Health};
+use rr_client::{AudioEndpoints, InputPipe};
 use rr_radio::{LocalPtt, LocalPttSettings};
 use serde::Serialize;
 use tauri::AppHandle;
@@ -72,25 +73,29 @@ pub fn device_params(id: Option<&str>, input: bool) -> Result<Params, String> {
     let p = if input { input_params(id) } else { output_params(id) }.map_err(|e| e.to_string())?;
     Ok(Params { rate: p.rate, channels: p.channels })
 }
-/// Owns the sound-card streams on a dedicated thread (streams must stay on the
-/// thread that created them).
+/// The client's audio endpoints, shared so the streams can be reopened on
+/// other devices without reconnecting. Only the running streams use them, and
+/// only one set of streams runs at a time, so the locks are never contended.
+#[derive(Debug, Clone)]
+struct Shared {
+    pipe: Arc<Mutex<InputPipe>>,
+    out_a: Arc<Mutex<Playout>>,
+    out_b: Option<Arc<Mutex<Playout>>>,
+}
+
+fn locked<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// The streams' thread (streams must stay on the thread that created them).
 #[derive(Debug)]
-pub struct AudioHandle {
+struct Running {
     stop: Option<Sender<()>>,
     join: Option<JoinHandle<()>>,
     health: Vec<Arc<Health>>,
 }
 
-impl AudioHandle {
-    /// Total stream errors and the latest message.
-    pub fn health(&self) -> (u64, String) {
-        let errors = self.health.iter().map(|h| h.error_count()).sum();
-        let last = self.health.iter().map(|h| h.last_error()).find(|s| !s.is_empty()).unwrap_or_default();
-        (errors, last)
-    }
-}
-
-impl Drop for AudioHandle {
+impl Drop for Running {
     fn drop(&mut self) {
         if let Some(tx) = self.stop.take() {
             let _ = tx.send(());
@@ -101,36 +106,106 @@ impl Drop for AudioHandle {
     }
 }
 
+/// Owns the sound-card streams.
+#[derive(Debug)]
+pub struct AudioHandle {
+    shared: Shared,
+    devices: Devices,
+    running: Option<Running>,
+}
+
+impl AudioHandle {
+    /// Total stream errors and the latest message.
+    pub fn health(&self) -> (u64, String) {
+        let Some(r) = &self.running else {
+            return (0, String::new());
+        };
+        let errors = r.health.iter().map(|h| h.error_count()).sum();
+        let last = r.health.iter().map(|h| h.last_error()).find(|s| !s.is_empty()).unwrap_or_default();
+        (errors, last)
+    }
+
+    /// Move the streams to other devices, keeping the connection. Returns
+    /// `Ok(false)` if this needs a reconnect instead (a second output device
+    /// added or removed). On failure the old devices are reopened if possible.
+    pub fn switch(&mut self, d: Devices) -> Result<bool, String> {
+        if d == self.devices {
+            return Ok(true);
+        }
+        if d.output_b.is_some() != self.shared.out_b.is_some() {
+            return Ok(false);
+        }
+        self.running = None;
+        match configure(&self.shared, &d).and_then(|()| spawn_streams(&d, &self.shared)) {
+            Ok(r) => {
+                self.running = Some(r);
+                self.devices = d;
+                Ok(true)
+            }
+            Err(e) => {
+                let old = self.devices.clone();
+                if configure(&self.shared, &old).is_ok() {
+                    self.running = spawn_streams(&old, &self.shared).ok();
+                }
+                Err(e)
+            }
+        }
+    }
+}
+
+/// Set the pipes to the formats the devices will run at.
+fn configure(s: &Shared, d: &Devices) -> Result<(), String> {
+    let pa = device_params(d.input_a.as_deref(), true).map_err(|e| format!("input device: {e}"))?;
+    // Two cards are combined into one stereo signal at card A's rate.
+    let channels = if d.input_b.is_some() { 2 } else { usize::from(pa.channels) };
+    locked(&s.pipe).set_device_format(pa.rate, channels);
+    let oa = device_params(d.output_a.as_deref(), false).map_err(|e| format!("output device: {e}"))?;
+    locked(&s.out_a).set_out_rate(oa.rate);
+    if let (Some(id), Some(b)) = (&d.output_b, &s.out_b) {
+        let ob = device_params(Some(id), false).map_err(|e| format!("output B device: {e}"))?;
+        locked(b).set_out_rate(ob.rate);
+    }
+    Ok(())
+}
+
 /// Open every configured device on a dedicated audio thread. Fails, naming the
 /// device, if any of them cannot be opened.
 pub fn start_audio(d: Devices, ep: AudioEndpoints) -> Result<AudioHandle, String> {
+    let AudioEndpoints { input, output, output_b } = ep;
+    let shared = Shared {
+        pipe: Arc::new(Mutex::new(input)),
+        out_a: Arc::new(Mutex::new(output)),
+        out_b: output_b.map(|p| Arc::new(Mutex::new(p))),
+    };
+    let running = spawn_streams(&d, &shared)?;
+    Ok(AudioHandle { shared, devices: d, running: Some(running) })
+}
+
+fn spawn_streams(d: &Devices, s: &Shared) -> Result<Running, String> {
     let (ready_tx, ready_rx) = channel::<Result<Vec<Arc<Health>>, String>>();
     let (stop_tx, stop_rx) = channel::<()>();
+    let (d, s) = (d.clone(), s.clone());
     let join = thread::Builder::new()
         .name("rr-audio".into())
-        .spawn(move || {
-            let opened = open_all(&d, ep);
-            match opened {
-                Ok((streams, health)) => {
-                    let _ = ready_tx.send(Ok(health));
-                    let _ = stop_rx.recv();
-                    drop(streams);
-                }
-                Err(e) => {
-                    let _ = ready_tx.send(Err(e));
-                }
+        .spawn(move || match open_all(&d, &s) {
+            Ok((streams, health)) => {
+                let _ = ready_tx.send(Ok(health));
+                let _ = stop_rx.recv();
+                drop(streams);
+            }
+            Err(e) => {
+                let _ = ready_tx.send(Err(e));
             }
         })
         .map_err(|e| e.to_string())?;
     let health = ready_rx.recv().map_err(|e| e.to_string())??;
-    Ok(AudioHandle { stop: Some(stop_tx), join: Some(join), health })
+    Ok(Running { stop: Some(stop_tx), join: Some(join), health })
 }
 
 /// Streams that must stay alive (and on this thread) while audio runs.
 type Streams = (Vec<rr_audio_cpal::RunningInput>, Vec<rr_audio_cpal::RunningOutput>);
 
-fn open_all(d: &Devices, ep: AudioEndpoints) -> Result<(Streams, Vec<Arc<Health>>), String> {
-    let AudioEndpoints { input: mut pipe, output, output_b } = ep;
+fn open_all(d: &Devices, s: &Shared) -> Result<(Streams, Vec<Arc<Health>>), String> {
     let mut inputs = Vec::new();
     let mut health = Vec::new();
     let pa = device_params(d.input_a.as_deref(), true).map_err(|e| format!("input A device: {e}"))?;
@@ -144,25 +219,29 @@ fn open_all(d: &Devices, ep: AudioEndpoints) -> Result<(Streams, Vec<Arc<Health>
         health.push(Arc::clone(&b.health));
         inputs.push(b);
         let mut stereo = Vec::new();
-        let a = start_input_with(d.input_a.as_deref(), move |s| {
+        let pipe = Arc::clone(&s.pipe);
+        let a = start_input_with(d.input_a.as_deref(), move |x| {
             stereo.clear();
-            comb.process(s, &mut stereo);
-            pipe.process(&stereo);
+            comb.process(x, &mut stereo);
+            locked(&pipe).process(&stereo);
         })
         .map_err(|e| format!("input A device: {e}"))?;
         health.push(Arc::clone(&a.health));
         inputs.push(a);
     } else {
-        let a = start_input_with(d.input_a.as_deref(), move |s| pipe.process(s)).map_err(|e| format!("input device: {e}"))?;
+        let pipe = Arc::clone(&s.pipe);
+        let a = start_input_with(d.input_a.as_deref(), move |x| locked(&pipe).process(x)).map_err(|e| format!("input device: {e}"))?;
         health.push(Arc::clone(&a.health));
         inputs.push(a);
     }
     let mut outputs = Vec::new();
-    let a = start_output(d.output_a.as_deref(), output).map_err(|e| format!("output A device: {e}"))?;
+    let out_a = Arc::clone(&s.out_a);
+    let a = start_output_with(d.output_a.as_deref(), move |o| locked(&out_a).render(o)).map_err(|e| format!("output A device: {e}"))?;
     health.push(Arc::clone(&a.health));
     outputs.push(a);
-    if let (Some(id), Some(play)) = (&d.output_b, output_b) {
-        let b = start_output(Some(id), play).map_err(|e| format!("output B device: {e}"))?;
+    if let (Some(id), Some(play)) = (&d.output_b, &s.out_b) {
+        let play = Arc::clone(play);
+        let b = start_output_with(Some(id), move |o| locked(&play).render(o)).map_err(|e| format!("output B device: {e}"))?;
         health.push(Arc::clone(&b.health));
         outputs.push(b);
     }

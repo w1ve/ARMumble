@@ -80,6 +80,11 @@ mod audio {
         pub fn health(&self) -> (u64, String) {
             (self.health.error_count(), self.health.last_error())
         }
+
+        /// The device is fixed on mobile: nothing to switch.
+        pub fn switch(&mut self, _d: crate::devices::Devices) -> Result<bool, String> {
+            Ok(true)
+        }
     }
 
     impl Drop for AudioHandle {
@@ -132,6 +137,11 @@ mod audio {
         /// No streams, no errors.
         pub fn health(&self) -> (u64, String) {
             (0, String::new())
+        }
+
+        /// Nothing to switch.
+        pub fn switch(&mut self, _d: crate::devices::Devices) -> Result<bool, String> {
+            Ok(true)
         }
     }
 

@@ -242,6 +242,20 @@ impl Engine {
         self.client.disconnect().await;
     }
 
+    /// Move the sound streams to other devices without reconnecting.
+    /// `Ok(false)` means a reconnect is needed instead. A failure is also
+    /// shown in the status.
+    pub fn switch_devices(&mut self, d: Devices) -> Result<bool, String> {
+        let Some(audio) = self.audio.as_mut() else {
+            return Ok(false);
+        };
+        let r = audio.switch(d);
+        if let Err(e) = &r {
+            lock(&self.conn).error = Some(format!("sound device: {e}"));
+        }
+        r
+    }
+
     /// Current sound-card health.
     pub fn audio_health(&self) -> (u64, String) {
         self.audio.as_ref().map_or((0, String::new()), AudioHandle::health)

@@ -215,6 +215,21 @@ pub fn playout(out_rate: u32) -> (Playout, PlayoutHandle) {
 }
 
 impl Playout {
+    /// The output device rate this playout renders at.
+    #[must_use]
+    pub fn out_rate(&self) -> u32 {
+        self.out_rate
+    }
+
+    /// Render for an output device at another rate (after switching device).
+    /// Talkers are re-created at the new rate as their next packets arrive.
+    pub fn set_out_rate(&mut self, out_rate: u32) {
+        if out_rate != self.out_rate && out_rate > 0 {
+            self.out_rate = out_rate;
+            self.streams.clear();
+        }
+    }
+
     fn drain_messages(&mut self) {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {

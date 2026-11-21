@@ -104,14 +104,15 @@ where
     .map_err(|e| BackendError::Stream(e.to_string()))
 }
 
-fn build_output<T>(
+fn build_output<T, R>(
     dev: &Device,
     cfg: &StreamConfig,
-    mut play: Playout,
+    mut render: R,
     health: &Arc<Health>,
 ) -> Result<Stream, BackendError>
 where
     T: SizedSample + FromSample<f32> + Send + 'static,
+    R: FnMut(&mut [f32]) + Send + 'static,
 {
     let channels = usize::from(cfg.channels);
     let mut stereo: Vec<f32> = Vec::new();
@@ -121,7 +122,7 @@ where
         move |data: &mut [T], _| {
             let frames = data.len() / channels;
             stereo.resize(frames * 2, 0.0);
-            play.render(&mut stereo);
+            render(&mut stereo);
             for (out, s) in data.chunks_exact_mut(channels).zip(stereo.as_chunks::<2>().0) {
                 map_frame(out, s[0], s[1]);
             }
@@ -175,16 +176,25 @@ where
 }
 
 /// Start playing the engine's output.
-pub fn start_output(device_id: Option<&str>, play: Playout) -> Result<RunningOutput, BackendError> {
+pub fn start_output(device_id: Option<&str>, mut play: Playout) -> Result<RunningOutput, BackendError> {
+    start_output_with(device_id, move |out| play.render(out))
+}
+
+/// Start playing whatever `render` produces: it fills interleaved stereo at
+/// the device rate (see [`crate::output_params`]).
+pub fn start_output_with<R>(device_id: Option<&str>, render: R) -> Result<RunningOutput, BackendError>
+where
+    R: FnMut(&mut [f32]) + Send + 'static,
+{
     let dev = find_device(device_id, false)?;
     let sc = choose(&dev, false)?;
     let cfg = sc.config();
     let health = Arc::new(Health::default());
     let stream = match sc.sample_format() {
-        SampleFormat::F32 => build_output::<f32>(&dev, &cfg, play, &health),
-        SampleFormat::I16 => build_output::<i16>(&dev, &cfg, play, &health),
-        SampleFormat::I32 => build_output::<i32>(&dev, &cfg, play, &health),
-        SampleFormat::U16 => build_output::<u16>(&dev, &cfg, play, &health),
+        SampleFormat::F32 => build_output::<f32, R>(&dev, &cfg, render, &health),
+        SampleFormat::I16 => build_output::<i16, R>(&dev, &cfg, render, &health),
+        SampleFormat::I32 => build_output::<i32, R>(&dev, &cfg, render, &health),
+        SampleFormat::U16 => build_output::<u16, R>(&dev, &cfg, render, &health),
         other => Err(BackendError::Format(other)),
     }?;
     stream.play().map_err(|e| BackendError::Stream(e.to_string()))?;
