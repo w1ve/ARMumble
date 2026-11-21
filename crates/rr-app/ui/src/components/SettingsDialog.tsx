@@ -245,7 +245,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         <button type="button" className="ghost" onClick={() => void refresh()}>
           {t("settings.refresh")}
         </button>
-        <p className="hint">{t("settings.reconnect")}</p>
+        <p className="hint">{t("settings.devicesLive")}</p>
 
         <h3>{t("settings.ptt")}</h3>
         <fieldset>

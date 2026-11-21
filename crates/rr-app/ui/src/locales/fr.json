@@ -82,7 +82,7 @@
     "output": "Sortie",
     "default": "Par défaut du système",
     "refresh": "Actualiser",
-    "reconnect": "Les changements de périphérique et de serveur s'appliquent à la prochaine connexion.",
+    "reconnect": "Les changements de serveur et de matériel PTT s'appliquent à la prochaine connexion.",
     "ptt": "Matériel PTT",
     "local": "PTT local (pédale)",
     "station": "PTT station (commande de l'émetteur)",
@@ -134,7 +134,8 @@
     "station2Hint": "La radio 2 peut partager le port de la radio 1 sur l'autre ligne (par exemple RTS pour la 1, DTR pour la 2). Les réglages de temps sont communs.",
     "keyerUdp": "Envoyer l'OTRSP au manipulateur CW de cet ordinateur (UDP)",
     "keyerUdpPort": "Port UDP du manipulateur",
-    "keyerUdpHint": "Envoie TX1/TX2 (et l'état RX) à 127.0.0.1 à chaque changement et toutes les 2 secondes, pour que le manipulateur commande la radio qui émet. Fonctionne quel que soit l'emplacement du logiciel de contest, même sans connexion."
+    "keyerUdpHint": "Envoie TX1/TX2 (et l'état RX) à 127.0.0.1 à chaque changement et toutes les 2 secondes, pour que le manipulateur commande la radio qui émet. Fonctionne quel que soit l'emplacement du logiciel de contest, même sans connexion.",
+    "devicesLive": "Un nouveau périphérique audio est pris en compte tout de suite : si vous êtes connecté, la connexion redémarre un instant."
   },
   "errors": {
     "title": "Problème"

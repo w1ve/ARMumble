@@ -1,10 +1,11 @@
 //! Commands callable from the UI.
 
 use rr_client::RadioClient;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::engine::{apply_route, lock, restart_monitor, restart_otrsp, route_dto, update_keyer, AppState, Engine};
 use crate::routing::RouteDto;
+use crate::devices::Devices;
 use crate::platform::{self, DeviceDto, PortDto};
 use crate::rigs::{Rig, Rigs};
 use crate::servers::ServerEntry;
@@ -42,6 +43,9 @@ pub fn save_settings(app: AppHandle, state: State<'_, AppState>, settings: Setti
     platform::apply_hotkeys(&app, &settings.hotkeys);
     let old = std::mem::replace(&mut *lock(&state.settings), settings.clone()).audio;
     let new = &settings.audio;
+    if Devices::from_settings(&old) != Devices::from_settings(new) && lock(&state.engine).is_some() {
+        let _task = tauri::async_runtime::spawn(restart_for_devices(app.clone()));
+    }
     if let Some(e) = lock(&state.engine).as_ref() {
         apply_live(&e.client, &settings);
     }
@@ -74,8 +78,13 @@ pub fn list_serial_ports() -> Vec<PortDto> {
 /// Connect using the saved settings.
 #[tauri::command]
 pub async fn connect(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    start_engine(&app, &state).await
+}
+
+/// (Re)start the engine from the saved settings, replacing a running one.
+async fn start_engine(app: &AppHandle, state: &AppState) -> Result<(), String> {
     let settings = lock(&state.settings).clone();
-    let rigs = match crate::rigs::load(&rigs_file(&state)) {
+    let rigs = match crate::rigs::load(&rigs_file(state)) {
         Ok(r) => r,
         Err(e) if uses_cat(&settings) => return Err(format!("radio CAT settings: {e}")),
         Err(_) => Rigs::default(),
@@ -86,15 +95,28 @@ pub async fn connect(app: AppHandle, state: State<'_, AppState>) -> Result<(), S
     }
     // Release the meter-only stream so the engine can own the input device.
     *lock(&state.monitor) = None;
-    match Engine::start(&app, &settings, &rigs, &state.so2r).await {
+    match Engine::start(app, &settings, &rigs, &state.so2r).await {
         Ok(engine) => {
             *lock(&state.engine) = Some(engine);
             Ok(())
         }
         Err(e) => {
-            restart_monitor(&state);
+            restart_monitor(state);
             Err(e)
         }
+    }
+}
+
+/// The sound devices changed while connected: the streams are fixed to their
+/// devices, so restart the connection on the new ones.
+async fn restart_for_devices(app: AppHandle) {
+    let state = app.state::<AppState>();
+    if lock(&state.engine).is_none() {
+        return;
+    }
+    if let Err(e) = start_engine(&app, &state).await {
+        tracing::warn!("restart on new sound devices failed: {e}");
+        let _ = app.emit("status", Status { error: Some(e), ..Status::idle() });
     }
 }
 
@@ -157,7 +179,7 @@ pub fn settings_location(state: State<'_, AppState>) -> String {
     lock(&state.settings_path).display().to_string()
 }
 
-fn rigs_file(state: &State<'_, AppState>) -> std::path::PathBuf {
+fn rigs_file(state: &AppState) -> std::path::PathBuf {
     let settings = lock(&state.settings_path).clone();
     let dir = settings.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
     crate::rigs::rigs_path(&dir)

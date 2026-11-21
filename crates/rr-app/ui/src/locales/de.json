@@ -82,7 +82,7 @@
     "output": "Ausgang",
     "default": "Systemstandard",
     "refresh": "Aktualisieren",
-    "reconnect": "Geräte- und Serveränderungen gelten ab der nächsten Verbindung.",
+    "reconnect": "Änderungen an Server und PTT-Hardware gelten ab der nächsten Verbindung.",
     "ptt": "PTT-Hardware",
     "local": "Lokales PTT (Fußschalter)",
     "station": "Stations-PTT (Funkgerät tasten)",
@@ -134,7 +134,8 @@
     "station2Hint": "Funkgerät 2 kann den Port von Funkgerät 1 auf der anderen Leitung nutzen (z. B. RTS für 1, DTR für 2). Die Zeiteinstellungen gelten für beide.",
     "keyerUdp": "OTRSP an den CW-Keyer auf diesem Computer senden (UDP)",
     "keyerUdpPort": "UDP-Port des Keyers",
-    "keyerUdpHint": "Sendet TX1/TX2 (und den RX-Zustand) bei jeder Änderung und alle 2 Sekunden an 127.0.0.1, damit der Keyer das sendende Funkgerät tastet. Funktioniert unabhängig davon, wo der Logger läuft, auch ohne Verbindung."
+    "keyerUdpHint": "Sendet TX1/TX2 (und den RX-Zustand) bei jeder Änderung und alle 2 Sekunden an 127.0.0.1, damit der Keyer das sendende Funkgerät tastet. Funktioniert unabhängig davon, wo der Logger läuft, auch ohne Verbindung.",
+    "devicesLive": "Ein neues Audiogerät gilt sofort: Bei bestehender Verbindung wird sie kurz neu aufgebaut."
   },
   "errors": {
     "title": "Problem"
