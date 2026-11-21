@@ -96,6 +96,8 @@ pub struct AudioSettings {
     /// Older setting, read once and folded into `output_map` (true = `mix`).
     #[serde(skip_serializing)]
     pub mono_output: bool,
+    /// Swap the left and right channels of what is played.
+    pub swap_lr: bool,
     /// Send audio over TCP only.
     pub force_tcp: bool,
 }
@@ -128,6 +130,7 @@ impl Default for AudioSettings {
             vox_keys_station: true,
             output_map: "stereo".into(),
             mono_output: false,
+            swap_lr: false,
             force_tcp: false,
         }
     }

@@ -27,6 +27,7 @@ fn apply_live(client: &RadioClient, s: &Settings) {
     client.set_quality(a.bitrate_kbps * 1000, a.stereo, a.max_frame_ms);
     client.set_master_gain(a.master_gain);
     client.set_vox_keys_station(a.vox_keys_station);
+    client.set_swap_lr(a.swap_lr);
 }
 
 /// The saved settings.
@@ -142,6 +143,18 @@ pub async fn join_channel(state: State<'_, AppState>, id: u32) -> Result<(), Str
 #[tauri::command]
 pub fn set_ptt(state: State<'_, AppState>, down: bool) -> Result<(), String> {
     client_of(&state)?.set_ptt(down);
+    Ok(())
+}
+
+/// Start (`play` true) or stop sending the stereo test clip.
+#[tauri::command]
+pub fn stereo_test(state: State<'_, AppState>, play: bool) -> Result<(), String> {
+    let c = client_of(&state)?;
+    if play {
+        c.capture().play_test(crate::stereo_test::clip()?);
+    } else {
+        c.capture().stop_test();
+    }
     Ok(())
 }
 

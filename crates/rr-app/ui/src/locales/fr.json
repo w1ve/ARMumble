@@ -46,7 +46,10 @@
     "clip": "Écrêtage : baisser le niveau d'entrée",
     "noProcessing": "Aucun traitement : pas de réduction de bruit, CAG, annulation d'écho ni limiteur.",
     "voxKeys": "Le VOX met le poste de la station en émission",
-    "continuousNoKey": "« Toujours actif » ne met jamais le poste de la station en émission (il resterait en l'air). Utilisez l'alternat ou le VOX pour émettre via la station."
+    "continuousNoKey": "« Toujours actif » ne met jamais le poste de la station en émission (il resterait en l'air). Utilisez l'alternat ou le VOX pour émettre via la station.",
+    "stereoTestPlay": "Lancer le test stéréo",
+    "stereoTestStop": "Arrêter le test stéréo",
+    "stereoTestHint": "Envoie un bruit blanc stéréo (les deux / gauche / droite, environ 40 s) dans le canal pour que l'autre poste vérifie la séparation des canaux. Il remplace votre entrée pendant la lecture et ne met jamais le poste de la station en émission. Nécessite « Stéréo » dans Liaison."
   },
   "rx": {
     "title": "Réception",
@@ -56,7 +59,8 @@
     "clip": "Écrêtage en sortie : baisser le volume",
     "map": "Canaux de sortie",
     "left": "Gauche seule (deux oreilles)",
-    "right": "Droite seule (deux oreilles)"
+    "right": "Droite seule (deux oreilles)",
+    "swap": "Inverser gauche et droite"
   },
   "link": {
     "title": "Liaison",

@@ -46,7 +46,10 @@
     "clip": "Clipping: lower the input level",
     "noProcessing": "No processing: no noise suppression, AGC, echo cancellation or limiting.",
     "voxKeys": "VOX keys the station's radio",
-    "continuousNoKey": "Always on never keys the station's radio (it would stay on the air). Use push to talk or VOX to transmit through the station."
+    "continuousNoKey": "Always on never keys the station's radio (it would stay on the air). Use push to talk or VOX to transmit through the station.",
+    "stereoTestPlay": "Play stereo test",
+    "stereoTestStop": "Stop stereo test",
+    "stereoTestHint": "Sends a stereo white-noise test (both / left / right, about 40 s) to the channel so the other position can check channel separation. It replaces your input while it plays and never keys the station's radio. Needs Stereo on in Link."
   },
   "rx": {
     "title": "Receive",
@@ -56,7 +59,8 @@
     "clip": "Output clipping: lower the volume",
     "map": "Output channels",
     "left": "Left only (both ears)",
-    "right": "Right only (both ears)"
+    "right": "Right only (both ears)",
+    "swap": "Swap left and right"
   },
   "link": {
     "title": "Link",

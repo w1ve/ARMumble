@@ -9,7 +9,7 @@
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::asrc::Resampler;
 use crate::codec::{EncoderSettings, FrameEncoder, SAMPLE_RATE};
@@ -102,6 +102,11 @@ pub struct CaptureControl {
     peak_r: AtomicF32,
     clips: AtomicU64,
     transmitting: AtomicBool,
+    /// A test clip waiting to be picked up by the audio thread.
+    test_clip: Mutex<Option<Arc<[f32]>>>,
+    /// 0 nothing, 1 start the waiting clip, 2 stop.
+    test_request: AtomicU8,
+    test_playing: AtomicBool,
 }
 
 impl CaptureControl {
@@ -120,7 +125,30 @@ impl CaptureControl {
             peak_r: AtomicF32::new(0.0),
             clips: AtomicU64::new(0),
             transmitting: AtomicBool::new(false),
+            test_clip: Mutex::new(None),
+            test_request: AtomicU8::new(0),
+            test_playing: AtomicBool::new(false),
         }
+    }
+
+    /// Transmit `clip` (interleaved stereo at 48 kHz) in place of the input,
+    /// once, then return to the input. The input's channel map and gain do not
+    /// apply, and the clip is sent whatever the transmit mode.
+    pub fn play_test(&self, clip: Arc<[f32]>) {
+        *self.test_clip.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(clip);
+        self.test_playing.store(true, Ordering::Relaxed);
+        self.test_request.store(1, Ordering::Release);
+    }
+
+    /// Stop a test clip early.
+    pub fn stop_test(&self) {
+        self.test_request.store(2, Ordering::Release);
+    }
+
+    /// Whether a test clip is being sent.
+    #[must_use]
+    pub fn test_playing(&self) -> bool {
+        self.test_playing.load(Ordering::Relaxed)
     }
 
     /// Set the input gain (linear, 0.0 to [`MAX_INPUT_GAIN`]).
@@ -245,6 +273,12 @@ pub struct CaptureEngine {
     seq: u64,
     transmitting: bool,
     hang_frames: u32,
+    /// The test clip being sent and the next sample to send.
+    test: Option<(Arc<[f32]>, usize)>,
+    /// Clip samples still waiting in `pending`; frames made from them are sent.
+    test_left: usize,
+    /// The frame being handled came from the clip.
+    frame_is_test: bool,
 }
 
 impl CaptureEngine {
@@ -264,6 +298,9 @@ impl CaptureEngine {
             seq: 0,
             transmitting: false,
             hang_frames: 0,
+            test: None,
+            test_left: 0,
+            frame_is_test: false,
         };
         Ok((engine, ctl))
     }
@@ -326,10 +363,12 @@ impl CaptureEngine {
     /// Feed device samples; completed packets are appended to `out`.
     pub fn process(&mut self, input: &[f32], out: &mut Vec<EncodedPacket>) {
         self.stage_input(input);
+        let start = self.pending.len();
         match self.resampler.as_mut() {
             Some(rs) => rs.process(&self.stage, &mut self.pending),
             None => self.pending.extend_from_slice(&self.stage),
         }
+        self.replace_with_test(start);
         loop {
             let settings = self.ctl.encoder_settings();
             if settings != self.encoder.settings() && !self.apply_settings(settings) {
@@ -341,7 +380,40 @@ impl CaptureEngine {
                 break;
             }
             let frame: Vec<f32> = self.pending.drain(..frame_len).collect();
+            self.frame_is_test = self.test_left > 0;
+            self.test_left = self.test_left.saturating_sub(frame_len);
             self.on_frame(frame, out);
+        }
+    }
+
+    /// Pick up test-clip requests and, while a clip plays, put it in place of
+    /// the input samples just added at `pending[start..]` (same count, so the
+    /// clip runs at the device's pace).
+    fn replace_with_test(&mut self, start: usize) {
+        match self.ctl.test_request.swap(0, Ordering::Acquire) {
+            1 => {
+                if let Ok(mut slot) = self.ctl.test_clip.try_lock() {
+                    self.test = slot.take().map(|c| (c, 0));
+                }
+            }
+            2 => {
+                self.test = None;
+                self.test_left = 0;
+            }
+            _ => {}
+        }
+        let Some((clip, pos)) = self.test.as_mut() else {
+            self.ctl.test_playing.store(false, Ordering::Relaxed);
+            return;
+        };
+        for s in &mut self.pending[start..] {
+            *s = clip.get(*pos).copied().unwrap_or(0.0);
+            *pos += 1;
+        }
+        self.test_left = self.pending.len();
+        if *pos >= clip.len() {
+            self.test = None;
+            self.ctl.test_playing.store(false, Ordering::Relaxed);
         }
     }
 
@@ -360,6 +432,9 @@ impl CaptureEngine {
     }
 
     fn wants_tx(&mut self, frame: &[f32]) -> bool {
+        if self.frame_is_test {
+            return true;
+        }
         match TxMode::from_u8(self.ctl.tx_mode.load(Ordering::Relaxed)) {
             TxMode::Continuous => true,
             TxMode::Ptt => self.ctl.ptt.load(Ordering::Relaxed),
@@ -480,6 +555,32 @@ mod tests {
         ctl.set_ptt(false);
         e.process(&block, &mut out);
         assert!(out.last().is_some_and(|p| p.terminator && p.data.is_empty()));
+    }
+
+    #[test]
+    fn test_clip_is_sent_in_ptt_mode_then_stops() {
+        let cfg = CaptureConfig { tx_mode: TxMode::Ptt, ..CaptureConfig::default() };
+        let (mut e, ctl) = CaptureEngine::new(cfg).expect("engine");
+        let block = vec![0.0_f32; 960 * 2];
+        let mut out = Vec::new();
+        // Three 20 ms frames of clip.
+        ctl.play_test(vec![0.1_f32; 960 * 2 * 3].into());
+        assert!(ctl.test_playing());
+        for _ in 0..3 {
+            e.process(&block, &mut out);
+        }
+        assert_eq!(out.iter().filter(|p| !p.data.is_empty()).count(), 3);
+        assert!(!ctl.test_playing());
+        e.process(&block, &mut out);
+        assert!(out.last().is_some_and(|p| p.terminator), "ends like a released PTT");
+        // Stopping early.
+        out.clear();
+        ctl.play_test(vec![0.1_f32; 960 * 2 * 50].into());
+        e.process(&block, &mut out);
+        ctl.stop_test();
+        e.process(&block, &mut out);
+        assert!(!ctl.test_playing());
+        assert_eq!(out.iter().filter(|p| !p.data.is_empty()).count(), 1);
     }
 
     #[test]

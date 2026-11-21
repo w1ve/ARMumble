@@ -114,6 +114,16 @@ export function TransmitPanel() {
         </select>
       </label>
       <p className="hint">{t("tx.noProcessing")}</p>
+
+      <button
+        type="button"
+        className={status.stereo_test ? "danger" : undefined}
+        disabled={status.phase !== "connected"}
+        onClick={() => void api.stereoTest(!status.stereo_test)}
+      >
+        {status.stereo_test ? t("tx.stereoTestStop") : t("tx.stereoTestPlay")}
+      </button>
+      <p className="hint">{t("tx.stereoTestHint")}</p>
     </Section>
   );
 }

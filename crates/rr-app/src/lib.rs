@@ -24,6 +24,7 @@ mod routing;
 mod servers;
 mod settings;
 mod status;
+mod stereo_test;
 
 use tauri::Manager;
 
@@ -65,6 +66,7 @@ pub fn run() {
             commands::disconnect,
             commands::join_channel,
             commands::set_ptt,
+            commands::stereo_test,
             commands::listen_in,
             commands::whisper,
             commands::set_user_gain,

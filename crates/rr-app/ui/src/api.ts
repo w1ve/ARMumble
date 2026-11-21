@@ -61,6 +61,8 @@ export interface Status {
   remote_ptt: number[];
   /** CAT keying links to the station's radios. */
   cat: CatStatus[];
+  /** The stereo test clip is being sent. */
+  stereo_test: boolean;
 }
 
 /** One radio keyed by CAT command. */
@@ -161,6 +163,8 @@ export interface Settings {
     vox_keys_station: boolean;
     /** What is played: both channels, one side in both ears, or a mono mix. */
     output_map: ChannelMap;
+    /** Swap left and right of what is played. */
+    swap_lr: boolean;
     force_tcp: boolean;
   };
   hotkeys: {
@@ -213,6 +217,7 @@ export const api = {
   disconnect: () => invoke<void>("disconnect"),
   joinChannel: (id: number) => invoke<void>("join_channel", { id }),
   setPtt: (down: boolean) => invoke<void>("set_ptt", { down }),
+  stereoTest: (play: boolean) => invoke<void>("stereo_test", { play }),
   listenIn: (target: number, down: boolean) => invoke<void>("listen_in", { target, down }),
   whisper: (target: number, down: boolean) => invoke<void>("whisper", { target, down }),
   setUserGain: (session: number, gain: number) => invoke<void>("set_user_gain", { session, gain }),

@@ -163,6 +163,13 @@ impl RadioClient {
         }
     }
 
+    /// Swap left and right on every output.
+    pub fn set_swap_lr(&self, swap: bool) {
+        for p in self.shared.playouts() {
+            p.set_swap(swap);
+        }
+    }
+
     /// Set one talker's volume on every output.
     pub fn set_user_gain(&self, session: u32, gain: f32) {
         for p in self.shared.playouts() {
@@ -410,7 +417,9 @@ async fn vox_keying(sh: Arc<Shared>) {
         let _ = tick.tick().await;
         let on = sh.vox_keys_station.load(Ordering::Relaxed)
             && sh.capture.tx_mode() == rr_audio::capture::TxMode::Vox
-            && sh.capture.is_transmitting();
+            && sh.capture.is_transmitting()
+            // The stereo test is for the other position's ears, never the air.
+            && !sh.capture.test_playing();
         if sh.vox_key.swap(on, Ordering::Relaxed) != on {
             announce_key(&sh);
         }

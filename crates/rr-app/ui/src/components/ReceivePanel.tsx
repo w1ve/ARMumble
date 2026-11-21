@@ -38,6 +38,10 @@ export function ReceivePanel() {
           <option value="mix">{t("tx.mix")}</option>
         </select>
       </label>
+      <label className="check">
+        <input type="checkbox" checked={a.swap_lr} onChange={(e) => update((x) => void (x.audio.swap_lr = e.target.checked))} />
+        {t("rx.swap")}
+      </label>
 
       <h3>{t("rx.speakers")}</h3>
       {active.length === 0 ? <p className="muted">{t("rx.none")}</p> : null}

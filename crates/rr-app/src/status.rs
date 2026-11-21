@@ -153,6 +153,8 @@ pub struct Status {
     pub remote_ptt: Vec<u32>,
     /// CAT keying links to the station's radios.
     pub cat: Vec<CatDto>,
+    /// The stereo test clip is being sent.
+    pub stereo_test: bool,
 }
 
 /// One radio keyed by CAT command.
@@ -195,6 +197,7 @@ impl Status {
             audio_error: String::new(),
             remote_ptt: Vec::new(),
             cat: Vec::new(),
+            stereo_test: false,
         }
     }
 }

@@ -88,6 +88,7 @@ enum Msg {
 struct Shared {
     master: AtomicF32,
     mode: AtomicU8,
+    swap: AtomicBool,
     muted: AtomicBool,
     peak_l: AtomicF32,
     peak_r: AtomicF32,
@@ -136,6 +137,11 @@ impl PlayoutHandle {
     /// Master output volume (linear, 1.0 = unity).
     pub fn set_master_gain(&self, gain: f32) {
         self.shared.master.store(gain.clamp(0.0, 4.0));
+    }
+
+    /// Swap the left and right channels (applied before the stereo mode).
+    pub fn set_swap(&self, swap: bool) {
+        self.shared.swap.store(swap, Ordering::Relaxed);
     }
 
     /// Silence this output while it keeps running. Jitter buffers and drift
@@ -188,6 +194,7 @@ pub fn playout(out_rate: u32) -> (Playout, PlayoutHandle) {
     let shared = Arc::new(Shared {
         master: AtomicF32::new(1.0),
         mode: AtomicU8::new(0),
+        swap: AtomicBool::new(false),
         muted: AtomicBool::new(false),
         peak_l: AtomicF32::new(0.0),
         peak_r: AtomicF32::new(0.0),
@@ -269,10 +276,12 @@ impl Playout {
         }
         let master = self.shared.master.load();
         let mode = StereoMode::from_code(self.shared.mode.load(Ordering::Relaxed));
+        let swap = self.shared.swap.load(Ordering::Relaxed);
         let (mut pl, mut pr) = (0.0_f32, 0.0_f32);
         let mut clips = 0_u64;
         for f in out.as_chunks_mut::<2>().0.iter_mut() {
-            let (l, r) = mode.apply(f[0] * master, f[1] * master);
+            let (a, b) = if swap { (f[1], f[0]) } else { (f[0], f[1]) };
+            let (l, r) = mode.apply(a * master, b * master);
             clips += u64::from(l.abs() > 1.0) + u64::from(r.abs() > 1.0);
             f[0] = l.clamp(-1.0, 1.0);
             f[1] = r.clamp(-1.0, 1.0);
