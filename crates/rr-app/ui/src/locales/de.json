@@ -49,7 +49,9 @@
     "continuousNoKey": "„Immer an“ tastet das Funkgerät der Station nie (es bliebe auf Sendung). Zum Senden über die Station Sprechtaste oder VOX verwenden.",
     "stereoTestPlay": "Stereo-Test abspielen",
     "stereoTestStop": "Stereo-Test stoppen",
-    "stereoTestHint": "Sendet ein Stereo-Rauschsignal (beide / links / rechts, etwa 40 s) in den Kanal, damit die Gegenseite die Kanaltrennung prüfen kann. Es ersetzt während der Wiedergabe deinen Eingang und tastet nie das Funkgerät der Station. Benötigt „Stereo“ unter Verbindung."
+    "stereoTestHint": "Sendet ein Stereo-Rauschsignal (beide / links / rechts, etwa 40 s) in den Kanal, damit die Gegenseite die Kanaltrennung prüfen kann. Es ersetzt während der Wiedergabe deinen Eingang und tastet nie das Funkgerät der Station. Benötigt „Stereo“ unter Verbindung.",
+    "pauseOperators": "Pausieren, während ein Operator spricht (verhindert das Echo)",
+    "pauseOperatorsHint": "Für eine Station: Solange ein Operator spricht oder die Sprechtaste hält, und 0,6 s danach, wird der Ton des Funkgeräts nicht gesendet. Sonst hören die anderen Operatoren den Sprecher ein zweites Mal, verzögert, über den Sendemonitor des Funkgeräts."
   },
   "rx": {
     "title": "Empfang",

@@ -49,7 +49,9 @@
     "continuousNoKey": "« Toujours actif » ne met jamais le poste de la station en émission (il resterait en l'air). Utilisez l'alternat ou le VOX pour émettre via la station.",
     "stereoTestPlay": "Lancer le test stéréo",
     "stereoTestStop": "Arrêter le test stéréo",
-    "stereoTestHint": "Envoie un bruit blanc stéréo (les deux / gauche / droite, environ 40 s) dans le canal pour que l'autre poste vérifie la séparation des canaux. Il remplace votre entrée pendant la lecture et ne met jamais le poste de la station en émission. Nécessite « Stéréo » dans Liaison."
+    "stereoTestHint": "Envoie un bruit blanc stéréo (les deux / gauche / droite, environ 40 s) dans le canal pour que l'autre poste vérifie la séparation des canaux. Il remplace votre entrée pendant la lecture et ne met jamais le poste de la station en émission. Nécessite « Stéréo » dans Liaison.",
+    "pauseOperators": "Pause quand un opérateur parle (supprime l'écho)",
+    "pauseOperatorsHint": "Pour une station : tant qu'un opérateur parle ou tient l'alternat, et 0,6 s après, le son du poste n'est pas envoyé. Sinon les autres opérateurs entendent celui qui parle une deuxième fois, en retard, par le moniteur d'émission du poste."
   },
   "rx": {
     "title": "Réception",

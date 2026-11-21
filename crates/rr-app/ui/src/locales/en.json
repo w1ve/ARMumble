@@ -49,7 +49,9 @@
     "continuousNoKey": "Always on never keys the station's radio (it would stay on the air). Use push to talk or VOX to transmit through the station.",
     "stereoTestPlay": "Play stereo test",
     "stereoTestStop": "Stop stereo test",
-    "stereoTestHint": "Sends a stereo white-noise test (both / left / right, about 40 s) to the channel so the other position can check channel separation. It replaces your input while it plays and never keys the station's radio. Needs Stereo on in Link."
+    "stereoTestHint": "Sends a stereo white-noise test (both / left / right, about 40 s) to the channel so the other position can check channel separation. It replaces your input while it plays and never keys the station's radio. Needs Stereo on in Link.",
+    "pauseOperators": "Pause while an operator talks (stops the echo)",
+    "pauseOperatorsHint": "For a station: while an operator talks or holds PTT, and for 0.6 s after, the radio's audio is not sent. Otherwise the other operators hear the talker a second time, late, through the radio's transmit monitor."
   },
   "rx": {
     "title": "Receive",

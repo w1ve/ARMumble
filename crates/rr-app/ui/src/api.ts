@@ -161,6 +161,7 @@ export interface Settings {
     vox_threshold_db: number;
     vox_hang_ms: number;
     vox_keys_station: boolean;
+    pause_while_operators_talk: boolean;
     /** What is played: both channels, one side in both ears, or a mono mix. */
     output_map: ChannelMap;
     /** Swap left and right of what is played. */
@@ -185,7 +186,6 @@ export interface Settings {
       active_low: boolean;
       vox: boolean;
       vox_hang_ms: number;
-    vox_keys_station: boolean;
       hang_ms: number;
       deadman_ms: number;
       max_tx_secs: number;

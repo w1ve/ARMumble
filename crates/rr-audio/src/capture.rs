@@ -107,6 +107,8 @@ pub struct CaptureControl {
     /// 0 nothing, 1 start the waiting clip, 2 stop.
     test_request: AtomicU8,
     test_playing: AtomicBool,
+    /// Hold transmission (for example while operators talk at a station).
+    paused: AtomicBool,
 }
 
 impl CaptureControl {
@@ -128,7 +130,20 @@ impl CaptureControl {
             test_clip: Mutex::new(None),
             test_request: AtomicU8::new(0),
             test_playing: AtomicBool::new(false),
+            paused: AtomicBool::new(false),
         }
+    }
+
+    /// Hold (`true`) or resume sending, whatever the transmit mode. The
+    /// stereo test still plays.
+    pub fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::Relaxed);
+    }
+
+    /// Whether sending is held.
+    #[must_use]
+    pub fn is_paused(&self) -> bool {
+        self.paused.load(Ordering::Relaxed)
     }
 
     /// Transmit `clip` (interleaved stereo at 48 kHz) in place of the input,
@@ -435,6 +450,10 @@ impl CaptureEngine {
         if self.frame_is_test {
             return true;
         }
+        if self.ctl.paused.load(Ordering::Relaxed) {
+            self.hang_frames = 0;
+            return false;
+        }
         match TxMode::from_u8(self.ctl.tx_mode.load(Ordering::Relaxed)) {
             TxMode::Continuous => true,
             TxMode::Ptt => self.ctl.ptt.load(Ordering::Relaxed),
@@ -581,6 +600,24 @@ mod tests {
         e.process(&block, &mut out);
         assert!(!ctl.test_playing());
         assert_eq!(out.iter().filter(|p| !p.data.is_empty()).count(), 1);
+    }
+
+    #[test]
+    fn pause_holds_always_on_and_resumes() {
+        let cfg = CaptureConfig { tx_mode: TxMode::Continuous, ..CaptureConfig::default() };
+        let (mut e, ctl) = CaptureEngine::new(cfg).expect("engine");
+        let block = vec![0.2_f32; 960 * 2];
+        let mut out = Vec::new();
+        e.process(&block, &mut out);
+        assert_eq!(out.len(), 1);
+        ctl.set_paused(true);
+        e.process(&block, &mut out);
+        e.process(&block, &mut out);
+        assert!(out.last().is_some_and(|p| p.terminator), "a pause ends the transmission cleanly");
+        assert_eq!(out.len(), 2, "nothing is sent while paused");
+        ctl.set_paused(false);
+        e.process(&block, &mut out);
+        assert!(out.last().is_some_and(|p| !p.data.is_empty()));
     }
 
     #[test]

@@ -89,7 +89,20 @@ export function TransmitPanel() {
           </label>
         </>
       ) : null}
-      {a.tx_mode === "continuous" ? <p className="hint">{t("tx.continuousNoKey")}</p> : null}
+      {a.tx_mode === "continuous" ? (
+        <>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={a.pause_while_operators_talk}
+              onChange={(e) => update((x) => void (x.audio.pause_while_operators_talk = e.target.checked))}
+            />
+            {t("tx.pauseOperators")}
+          </label>
+          <p className="hint">{t("tx.pauseOperatorsHint")}</p>
+          <p className="hint">{t("tx.continuousNoKey")}</p>
+        </>
+      ) : null}
 
       <Meter source="input" label={t("tx.gain")} />
       <Slider

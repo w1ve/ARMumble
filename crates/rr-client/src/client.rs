@@ -86,6 +86,12 @@ impl RadioClient {
         tokio::spawn(supervise(Arc::clone(&self.shared)))
     }
 
+    /// Always on (a station): stop sending while operators talk, so their
+    /// voice does not come back through the radio's monitor. On by default.
+    pub fn set_pause_while_operators_talk(&self, on: bool) {
+        self.shared.pause_while_operators_talk.store(on, Ordering::Relaxed);
+    }
+
     /// Whether this position's VOX transmissions key the station's radio
     /// (on by default). Push to talk always does.
     pub fn set_vox_keys_station(&self, on: bool) {
@@ -417,12 +423,44 @@ fn announce_key(sh: &Arc<Shared>) {
     }
 }
 
-/// Follow the VOX gate: key the station while VOX is sending audio. Runs
-/// until the client is told to disconnect.
+/// After the last operator stops, keep holding this long: their voice is
+/// still coming out of this station's playout buffer and the radio.
+const PAUSE_HANG: Duration = Duration::from_millis(600);
+/// A key request with no refresh for this long is treated as ended.
+const REMOTE_KEY_STALE: Duration = Duration::from_secs(3);
+
+/// Always on: hold sending while an operator talks or holds PTT.
+fn follow_operators(sh: &Shared, last_busy: &mut Option<Instant>) {
+    let on = sh.pause_while_operators_talk.load(Ordering::Relaxed) && sh.capture.tx_mode() == rr_audio::capture::TxMode::Continuous;
+    if !on {
+        if sh.capture.is_paused() {
+            sh.capture.set_paused(false);
+        }
+        return;
+    }
+    let now = Instant::now();
+    let keyed = sh.remote_keys.lock().is_ok_and(|mut k| {
+        k.retain(|_, at| now.duration_since(*at) < REMOTE_KEY_STALE);
+        !k.is_empty()
+    });
+    if keyed || sh.activity.is_active() {
+        *last_busy = Some(now);
+    }
+    let pause = last_busy.is_some_and(|t| now.duration_since(t) < PAUSE_HANG);
+    if sh.capture.is_paused() != pause {
+        sh.capture.set_paused(pause);
+    }
+}
+
+/// Follow the VOX gate (key the station while VOX is sending audio) and, at
+/// an always-on station, pause while operators talk. Runs until the client is
+/// told to disconnect.
 async fn vox_keying(sh: Arc<Shared>) {
     let mut tick = tokio::time::interval(Duration::from_millis(20));
+    let mut last_busy = None;
     while !sh.shutdown.load(Ordering::Relaxed) {
         let _ = tick.tick().await;
+        follow_operators(&sh, &mut last_busy);
         let on = sh.vox_keys_station.load(Ordering::Relaxed)
             && sh.capture.tx_mode() == rr_audio::capture::TxMode::Vox
             && sh.capture.is_transmitting()
@@ -436,6 +474,7 @@ async fn vox_keying(sh: Arc<Shared>) {
     }
     sh.vox_key.store(false, Ordering::Relaxed);
     announce_key(&sh);
+    sh.capture.set_paused(false);
 }
 
 /// Re-send a held key request until it is released or superseded.

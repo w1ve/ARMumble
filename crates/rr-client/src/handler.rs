@@ -50,6 +50,13 @@ impl Handler {
         };
         let down = self.shared.ptt_filters().entry(session).or_default().accept(msg);
         if let Some(down) = down {
+            if let Ok(mut keys) = self.shared.remote_keys.lock() {
+                if down {
+                    let _ = keys.insert(session, std::time::Instant::now());
+                } else {
+                    let _ = keys.remove(&session);
+                }
+            }
             self.shared.emit(Event::RemotePtt { session, down });
         }
     }

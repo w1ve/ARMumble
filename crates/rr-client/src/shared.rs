@@ -79,6 +79,11 @@ pub(crate) struct Shared {
     pub(crate) vox_key: AtomicBool,
     /// Whisper is held: the transmit gate is open for it.
     pub(crate) whisper_gate: AtomicBool,
+    /// Operators currently asking to key, and when they last said so.
+    pub(crate) remote_keys: Mutex<HashMap<u32, Instant>>,
+    /// Always on: stop sending while operators talk (prevents the echo of
+    /// their voice through the radio's transmit monitor).
+    pub(crate) pause_while_operators_talk: AtomicBool,
     /// Whether VOX transmissions key the station's radio.
     pub(crate) vox_keys_station: AtomicBool,
     /// The key state last announced to the channel.
@@ -124,6 +129,8 @@ impl Shared {
             ptt_down: AtomicBool::new(false),
             vox_key: AtomicBool::new(false),
             whisper_gate: AtomicBool::new(false),
+            remote_keys: Mutex::new(HashMap::new()),
+            pause_while_operators_talk: AtomicBool::new(true),
             vox_keys_station: AtomicBool::new(true),
             key_sent: AtomicBool::new(false),
             sent: AtomicU64::new(0),

@@ -90,6 +90,8 @@ pub struct AudioSettings {
     pub vox_hang_ms: u32,
     /// While VOX is sending, ask the station to key its radio.
     pub vox_keys_station: bool,
+    /// Always on (a station): stop sending while an operator talks.
+    pub pause_while_operators_talk: bool,
     /// What is played: `stereo`, `left` (left channel in both ears),
     /// `right` or `mix` (left and right mixed to mono).
     pub output_map: String,
@@ -128,6 +130,7 @@ impl Default for AudioSettings {
             vox_threshold_db: -40.0,
             vox_hang_ms: 400,
             vox_keys_station: true,
+            pause_while_operators_talk: true,
             output_map: "stereo".into(),
             mono_output: false,
             swap_lr: false,
