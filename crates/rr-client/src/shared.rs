@@ -1,7 +1,7 @@
 //! State shared between the connection task, the audio threads and the API.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -19,6 +19,33 @@ use crate::event::{ChannelInfo, Event, UserInfo};
 
 /// Voice target slot used for whispers.
 pub(crate) const WHISPER_SLOT: u32 = 1;
+/// Voice-target slot an always-on station uses to send only to the talkers.
+pub(crate) const TALKER_SLOT: u32 = 2;
+
+/// What an always-on station sends while an operator talks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum OperatorTalk {
+    /// Keep sending to everyone (the others hear the talker again through the
+    /// radio's transmit monitor).
+    Everyone = 0,
+    /// Send only to the operators who are talking, so they hear the radio's
+    /// monitor and the others hear no echo.
+    #[default]
+    Talker = 1,
+    /// Send nothing until they stop.
+    Nobody = 2,
+}
+
+impl OperatorTalk {
+    pub(crate) fn from_u8(v: u8) -> Self {
+        match v {
+            0 => Self::Everyone,
+            2 => Self::Nobody,
+            _ => Self::Talker,
+        }
+    }
+}
 /// Inbound audio counts as active for this long after the last packet.
 const ACTIVITY_TIMEOUT: Duration = Duration::from_millis(250);
 
@@ -81,9 +108,10 @@ pub(crate) struct Shared {
     pub(crate) whisper_gate: AtomicBool,
     /// Operators currently asking to key, and when they last said so.
     pub(crate) remote_keys: Mutex<HashMap<u32, Instant>>,
-    /// Always on: stop sending while operators talk (prevents the echo of
-    /// their voice through the radio's transmit monitor).
-    pub(crate) pause_while_operators_talk: AtomicBool,
+    /// Always on: what to send while operators talk (an `OperatorTalk` code).
+    pub(crate) operator_talk: AtomicU8,
+    /// When each talker's last voice packet arrived.
+    pub(crate) talkers: Mutex<HashMap<u32, Instant>>,
     /// Whether VOX transmissions key the station's radio.
     pub(crate) vox_keys_station: AtomicBool,
     /// The key state last announced to the channel.
@@ -130,7 +158,8 @@ impl Shared {
             vox_key: AtomicBool::new(false),
             whisper_gate: AtomicBool::new(false),
             remote_keys: Mutex::new(HashMap::new()),
-            pause_while_operators_talk: AtomicBool::new(true),
+            operator_talk: AtomicU8::new(OperatorTalk::Talker as u8),
+            talkers: Mutex::new(HashMap::new()),
             vox_keys_station: AtomicBool::new(true),
             key_sent: AtomicBool::new(false),
             sent: AtomicU64::new(0),

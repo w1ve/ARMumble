@@ -90,8 +90,9 @@ pub struct AudioSettings {
     pub vox_hang_ms: u32,
     /// While VOX is sending, ask the station to key its radio.
     pub vox_keys_station: bool,
-    /// Always on (a station): stop sending while an operator talks.
-    pub pause_while_operators_talk: bool,
+    /// Always on (a station): while an operator talks, send the radio to
+    /// `everyone`, only to the `talker` (their monitor), or to `nobody`.
+    pub while_operators_talk: String,
     /// What is played: `stereo`, `left` (left channel in both ears),
     /// `right` or `mix` (left and right mixed to mono).
     pub output_map: String,
@@ -130,7 +131,7 @@ impl Default for AudioSettings {
             vox_threshold_db: -40.0,
             vox_hang_ms: 400,
             vox_keys_station: true,
-            pause_while_operators_talk: true,
+            while_operators_talk: "talker".into(),
             output_map: "stereo".into(),
             mono_output: false,
             swap_lr: false,
@@ -161,6 +162,16 @@ impl AudioSettings {
             "mix" => StereoMode::Mono,
             _ if self.mono_output => StereoMode::Mono,
             _ => StereoMode::Stereo,
+        }
+    }
+
+    /// What an always-on station sends while an operator talks.
+    #[must_use]
+    pub fn operator_talk(&self) -> rr_client::OperatorTalk {
+        match self.while_operators_talk.as_str() {
+            "everyone" => rr_client::OperatorTalk::Everyone,
+            "nobody" => rr_client::OperatorTalk::Nobody,
+            _ => rr_client::OperatorTalk::Talker,
         }
     }
 

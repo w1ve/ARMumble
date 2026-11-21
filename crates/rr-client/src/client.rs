@@ -24,7 +24,7 @@ use crate::config::{ClientBuilder, ClientSettings};
 use crate::event::{ChannelInfo, Event, UserInfo};
 use crate::handler::Handler;
 use crate::io::{AudioEndpoints, InputPipe};
-use crate::shared::{Shared, WHISPER_SLOT};
+use crate::shared::{OperatorTalk, Shared, TALKER_SLOT, WHISPER_SLOT};
 
 /// Errors from client operations.
 #[derive(Debug, thiserror::Error)]
@@ -86,10 +86,11 @@ impl RadioClient {
         tokio::spawn(supervise(Arc::clone(&self.shared)))
     }
 
-    /// Always on (a station): stop sending while operators talk, so their
-    /// voice does not come back through the radio's monitor. On by default.
-    pub fn set_pause_while_operators_talk(&self, on: bool) {
-        self.shared.pause_while_operators_talk.store(on, Ordering::Relaxed);
+    /// Always on (a station): what to send while operators talk. By default
+    /// only the talkers get the radio (their monitor), so the others hear no
+    /// echo of them.
+    pub fn set_operator_talk(&self, mode: OperatorTalk) {
+        self.shared.operator_talk.store(mode as u8, Ordering::Relaxed);
     }
 
     /// Whether this position's VOX transmissions key the station's radio
@@ -426,41 +427,81 @@ fn announce_key(sh: &Arc<Shared>) {
 /// After the last operator stops, keep holding this long: their voice is
 /// still coming out of this station's playout buffer and the radio.
 const PAUSE_HANG: Duration = Duration::from_millis(600);
+/// A talker counts as talking for this long after their last voice packet.
+const TALKER_FRESH: Duration = Duration::from_millis(300);
 /// A key request with no refresh for this long is treated as ended.
 const REMOTE_KEY_STALE: Duration = Duration::from_secs(3);
 
-/// Always on: hold sending while an operator talks or holds PTT.
-fn follow_operators(sh: &Shared, last_busy: &mut Option<Instant>) {
-    let on = sh.pause_while_operators_talk.load(Ordering::Relaxed) && sh.capture.tx_mode() == rr_audio::capture::TxMode::Continuous;
-    if !on {
-        if sh.capture.is_paused() {
-            sh.capture.set_paused(false);
-        }
-        return;
-    }
-    let now = Instant::now();
-    let keyed = sh.remote_keys.lock().is_ok_and(|mut k| {
+/// What an always-on station is doing about talking operators.
+#[derive(Debug, Default)]
+struct Follow {
+    /// Each busy operator and when they were last heard or keyed.
+    busy: std::collections::HashMap<u32, Instant>,
+    /// The sessions the talker voice target was last set to.
+    sent_to: Vec<u32>,
+}
+
+/// The operators talking now or within the hang time, sorted.
+fn busy_operators(sh: &Shared, f: &mut Follow, now: Instant) -> Vec<u32> {
+    if let Ok(mut k) = sh.remote_keys.lock() {
         k.retain(|_, at| now.duration_since(*at) < REMOTE_KEY_STALE);
-        !k.is_empty()
-    });
-    if keyed || sh.activity.is_active() {
-        *last_busy = Some(now);
+        for s in k.keys() {
+            let _ = f.busy.insert(*s, now);
+        }
     }
-    let pause = last_busy.is_some_and(|t| now.duration_since(t) < PAUSE_HANG);
+    if let Ok(t) = sh.talkers.lock() {
+        for (s, at) in t.iter() {
+            if now.duration_since(*at) < TALKER_FRESH {
+                let _ = f.busy.insert(*s, now);
+            }
+        }
+    }
+    f.busy.retain(|_, at| now.duration_since(*at) < PAUSE_HANG);
+    let mut v: Vec<u32> = f.busy.keys().copied().collect();
+    v.sort_unstable();
+    v
+}
+
+/// Always on: while operators talk, send the radio only to them (or to no
+/// one, or to everyone, as chosen).
+async fn follow_operators(sh: &Shared, f: &mut Follow) {
+    let mode = OperatorTalk::from_u8(sh.operator_talk.load(Ordering::Relaxed));
+    let station = sh.capture.tx_mode() == rr_audio::capture::TxMode::Continuous;
+    let now = Instant::now();
+    let busy = if station && mode != OperatorTalk::Everyone { busy_operators(sh, f, now) } else { Vec::new() };
+    let pause = mode == OperatorTalk::Nobody && !busy.is_empty();
     if sh.capture.is_paused() != pause {
         sh.capture.set_paused(pause);
     }
+    let to_talkers = mode == OperatorTalk::Talker && !busy.is_empty();
+    if !to_talkers {
+        if !f.sent_to.is_empty() {
+            f.sent_to.clear();
+            let _ = sh.target.compare_exchange(TALKER_SLOT, 0, Ordering::Relaxed, Ordering::Relaxed);
+        }
+        return;
+    }
+    if busy == f.sent_to {
+        return;
+    }
+    let Some(h) = sh.handle() else {
+        return;
+    };
+    let entry = VoiceTargetEntry { sessions: busy.clone(), channel_id: None, group: None, links: false, children: false };
+    if h.send(SetVoiceTarget { id: TALKER_SLOT, targets: vec![entry] }).await.is_ok() {
+        sh.target.store(TALKER_SLOT, Ordering::Relaxed);
+        f.sent_to = busy;
+    }
 }
-
 /// Follow the VOX gate (key the station while VOX is sending audio) and, at
 /// an always-on station, pause while operators talk. Runs until the client is
 /// told to disconnect.
 async fn vox_keying(sh: Arc<Shared>) {
     let mut tick = tokio::time::interval(Duration::from_millis(20));
-    let mut last_busy = None;
+    let mut follow = Follow::default();
     while !sh.shutdown.load(Ordering::Relaxed) {
         let _ = tick.tick().await;
-        follow_operators(&sh, &mut last_busy);
+        follow_operators(&sh, &mut follow).await;
         let on = sh.vox_keys_station.load(Ordering::Relaxed)
             && sh.capture.tx_mode() == rr_audio::capture::TxMode::Vox
             && sh.capture.is_transmitting()

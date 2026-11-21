@@ -50,8 +50,11 @@
     "stereoTestPlay": "Stereo-Test abspielen",
     "stereoTestStop": "Stereo-Test stoppen",
     "stereoTestHint": "Sendet ein Stereo-Rauschsignal (beide / links / rechts, etwa 40 s) in den Kanal, damit die Gegenseite die Kanaltrennung prüfen kann. Es ersetzt während der Wiedergabe deinen Eingang und tastet nie das Funkgerät der Station. Benötigt „Stereo“ unter Verbindung.",
-    "pauseOperators": "Pausieren, während ein Operator spricht (verhindert das Echo)",
-    "pauseOperatorsHint": "Für eine Station: Solange ein Operator spricht oder die Sprechtaste hält, und 0,6 s danach, wird der Ton des Funkgeräts nicht gesendet. Sonst hören die anderen Operatoren den Sprecher ein zweites Mal, verzögert, über den Sendemonitor des Funkgeräts."
+    "whileOperators": "Während ein Operator spricht, das Funkgerät senden",
+    "whileTalker": "Nur an den sprechenden Operator (Monitor)",
+    "whileNobody": "An niemanden (Pause)",
+    "whileEveryone": "An alle (die anderen hören ein Echo)",
+    "whileOperatorsHint": "Für eine Station. Der sprechende Operator hört den Sendemonitor des Funkgeräts; die anderen Operatoren bekommen bis 0,6 s nach seinem Ende nichts von der Station und hören ihn so nur einmal."
   },
   "rx": {
     "title": "Empfang",

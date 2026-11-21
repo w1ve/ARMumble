@@ -28,7 +28,7 @@ fn apply_live(client: &RadioClient, s: &Settings) {
     client.set_master_gain(a.master_gain);
     client.set_vox_keys_station(a.vox_keys_station);
     client.set_swap_lr(a.swap_lr);
-    client.set_pause_while_operators_talk(a.pause_while_operators_talk);
+    client.set_operator_talk(a.operator_talk());
 }
 
 /// The saved settings.

@@ -195,7 +195,7 @@ impl Engine {
         client.set_master_gain(a.master_gain);
         client.set_vox_keys_station(a.vox_keys_station);
         client.set_swap_lr(a.swap_lr);
-        client.set_pause_while_operators_talk(a.pause_while_operators_talk);
+        client.set_operator_talk(a.operator_talk());
         let (state, _) = so2r.effective(a, false);
         routing::apply(&client, routing::plan(a, Some(state), out_b.is_some()), &so2r.tx_select);
         let audio = platform::start_audio(devices, endpoints)?;        let _connection = client.start();

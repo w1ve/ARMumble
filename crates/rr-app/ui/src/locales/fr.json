@@ -50,8 +50,11 @@
     "stereoTestPlay": "Lancer le test stéréo",
     "stereoTestStop": "Arrêter le test stéréo",
     "stereoTestHint": "Envoie un bruit blanc stéréo (les deux / gauche / droite, environ 40 s) dans le canal pour que l'autre poste vérifie la séparation des canaux. Il remplace votre entrée pendant la lecture et ne met jamais le poste de la station en émission. Nécessite « Stéréo » dans Liaison.",
-    "pauseOperators": "Pause quand un opérateur parle (supprime l'écho)",
-    "pauseOperatorsHint": "Pour une station : tant qu'un opérateur parle ou tient l'alternat, et 0,6 s après, le son du poste n'est pas envoyé. Sinon les autres opérateurs entendent celui qui parle une deuxième fois, en retard, par le moniteur d'émission du poste."
+    "whileOperators": "Quand un opérateur parle, envoyer le poste",
+    "whileTalker": "Seulement à l'opérateur qui parle (moniteur)",
+    "whileNobody": "À personne (pause)",
+    "whileEveryone": "À tout le monde (les autres entendent un écho)",
+    "whileOperatorsHint": "Pour une station. L'opérateur qui parle entend le moniteur d'émission du poste ; les autres opérateurs ne reçoivent rien de la station jusqu'à 0,6 s après qu'il s'arrête, et ne l'entendent donc qu'une fois."
   },
   "rx": {
     "title": "Réception",

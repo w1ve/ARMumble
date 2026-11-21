@@ -91,15 +91,18 @@ export function TransmitPanel() {
       ) : null}
       {a.tx_mode === "continuous" ? (
         <>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={a.pause_while_operators_talk}
-              onChange={(e) => update((x) => void (x.audio.pause_while_operators_talk = e.target.checked))}
-            />
-            {t("tx.pauseOperators")}
+          <label className="field">
+            <span className="field-label">{t("tx.whileOperators")}</span>
+            <select
+              value={a.while_operators_talk}
+              onChange={(e) => update((x) => void (x.audio.while_operators_talk = e.target.value as typeof a.while_operators_talk))}
+            >
+              <option value="talker">{t("tx.whileTalker")}</option>
+              <option value="nobody">{t("tx.whileNobody")}</option>
+              <option value="everyone">{t("tx.whileEveryone")}</option>
+            </select>
           </label>
-          <p className="hint">{t("tx.pauseOperatorsHint")}</p>
+          <p className="hint">{t("tx.whileOperatorsHint")}</p>
           <p className="hint">{t("tx.continuousNoKey")}</p>
         </>
       ) : null}

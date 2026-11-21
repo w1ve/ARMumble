@@ -102,6 +102,13 @@ impl Handler {
             }
         }
         sh.activity.packet(a.is_terminator && a.opus_data.is_empty());
+        if let Ok(mut t) = sh.talkers.lock() {
+            if a.is_terminator {
+                let _ = t.remove(&a.sender_session);
+            } else {
+                let _ = t.insert(a.sender_session, std::time::Instant::now());
+            }
+        }
         for p in sh.playouts() {
             p.push_packet(a.sender_session, a.frame_number, a.opus_data.clone(), a.is_terminator);
         }

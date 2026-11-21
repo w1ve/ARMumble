@@ -50,8 +50,11 @@
     "stereoTestPlay": "Play stereo test",
     "stereoTestStop": "Stop stereo test",
     "stereoTestHint": "Sends a stereo white-noise test (both / left / right, about 40 s) to the channel so the other position can check channel separation. It replaces your input while it plays and never keys the station's radio. Needs Stereo on in Link.",
-    "pauseOperators": "Pause while an operator talks (stops the echo)",
-    "pauseOperatorsHint": "For a station: while an operator talks or holds PTT, and for 0.6 s after, the radio's audio is not sent. Otherwise the other operators hear the talker a second time, late, through the radio's transmit monitor."
+    "whileOperators": "While an operator talks, send the radio",
+    "whileTalker": "Only to the operator talking (monitor)",
+    "whileNobody": "To nobody (pause)",
+    "whileEveryone": "To everyone (others hear an echo)",
+    "whileOperatorsHint": "For a station. The operator talking hears the radio's transmit monitor; the other operators get nothing from the station until 0.6 s after he stops, so they hear him only once."
   },
   "rx": {
     "title": "Receive",

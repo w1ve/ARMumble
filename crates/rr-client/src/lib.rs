@@ -31,3 +31,4 @@ pub use client::{ClientError, RadioClient};
 pub use config::{ClientBuilder, ClientSettings, Scope};
 pub use event::{ChannelInfo, Event, UserInfo};
 pub use io::{AudioEndpoints, InputPipe};
+pub use shared::OperatorTalk;

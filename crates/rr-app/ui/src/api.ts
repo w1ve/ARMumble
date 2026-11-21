@@ -161,7 +161,8 @@ export interface Settings {
     vox_threshold_db: number;
     vox_hang_ms: number;
     vox_keys_station: boolean;
-    pause_while_operators_talk: boolean;
+    /** Always on: who gets the radio while an operator talks. */
+    while_operators_talk: "everyone" | "talker" | "nobody";
     /** What is played: both channels, one side in both ears, or a mono mix. */
     output_map: ChannelMap;
     /** Swap left and right of what is played. */
