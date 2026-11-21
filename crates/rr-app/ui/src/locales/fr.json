@@ -54,7 +54,7 @@
     "whileTalker": "Seulement à l'opérateur qui parle (moniteur)",
     "whileNobody": "À personne (pause)",
     "whileEveryone": "À tout le monde (les autres entendent un écho)",
-    "whileOperatorsHint": "Pour une station. L'opérateur qui parle entend le moniteur d'émission du poste ; les autres opérateurs ne reçoivent rien de la station jusqu'à 0,6 s après qu'il s'arrête, et ne l'entendent donc qu'une fois."
+    "whileOperatorsHint": "Pour une station. L'opérateur qui parle entend le moniteur d'émission du poste ; les autres opérateurs ne reçoivent rien de la station jusqu'à 0,25 s après qu'il s'arrête, et ne l'entendent donc qu'une fois."
   },
   "rx": {
     "title": "Réception",

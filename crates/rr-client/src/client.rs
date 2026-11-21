@@ -426,9 +426,7 @@ fn announce_key(sh: &Arc<Shared>) {
 
 /// After the last operator stops, keep holding this long: their voice is
 /// still coming out of this station's playout buffer and the radio.
-const PAUSE_HANG: Duration = Duration::from_millis(600);
-/// A talker counts as talking for this long after their last voice packet.
-const TALKER_FRESH: Duration = Duration::from_millis(300);
+const PAUSE_HANG: Duration = Duration::from_millis(250);
 /// A key request with no refresh for this long is treated as ended.
 const REMOTE_KEY_STALE: Duration = Duration::from_secs(3);
 
@@ -449,10 +447,13 @@ fn busy_operators(sh: &Shared, f: &mut Follow, now: Instant) -> Vec<u32> {
             let _ = f.busy.insert(*s, now);
         }
     }
+    // Timed from the talker's last voice packet, so the others get the radio
+    // back exactly PAUSE_HANG after the talker's audio ends.
     if let Ok(t) = sh.talkers.lock() {
         for (s, at) in t.iter() {
-            if now.duration_since(*at) < TALKER_FRESH {
-                let _ = f.busy.insert(*s, now);
+            let e = f.busy.entry(*s).or_insert(*at);
+            if *at > *e {
+                *e = *at;
             }
         }
     }

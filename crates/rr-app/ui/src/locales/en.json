@@ -54,7 +54,7 @@
     "whileTalker": "Only to the operator talking (monitor)",
     "whileNobody": "To nobody (pause)",
     "whileEveryone": "To everyone (others hear an echo)",
-    "whileOperatorsHint": "For a station. The operator talking hears the radio's transmit monitor; the other operators get nothing from the station until 0.6 s after he stops, so they hear him only once."
+    "whileOperatorsHint": "For a station. The operator talking hears the radio's transmit monitor; the other operators get nothing from the station until 0.25 s after he stops, so they hear him only once."
   },
   "rx": {
     "title": "Receive",

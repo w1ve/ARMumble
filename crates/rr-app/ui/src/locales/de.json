@@ -54,7 +54,7 @@
     "whileTalker": "Nur an den sprechenden Operator (Monitor)",
     "whileNobody": "An niemanden (Pause)",
     "whileEveryone": "An alle (die anderen hören ein Echo)",
-    "whileOperatorsHint": "Für eine Station. Der sprechende Operator hört den Sendemonitor des Funkgeräts; die anderen Operatoren bekommen bis 0,6 s nach seinem Ende nichts von der Station und hören ihn so nur einmal."
+    "whileOperatorsHint": "Für eine Station. Der sprechende Operator hört den Sendemonitor des Funkgeräts; die anderen Operatoren bekommen bis 0,25 s nach seinem Ende nichts von der Station und hören ihn so nur einmal."
   },
   "rx": {
     "title": "Empfang",
