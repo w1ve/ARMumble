@@ -61,6 +61,7 @@ pub fn run() {
             commands::load_settings,
             commands::save_settings,
             commands::list_devices,
+            commands::device_format,
             commands::list_serial_ports,
             commands::connect,
             commands::disconnect,

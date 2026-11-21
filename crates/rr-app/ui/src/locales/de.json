@@ -144,7 +144,9 @@
     "keyerUdp": "OTRSP an den CW-Keyer auf diesem Computer senden (UDP)",
     "keyerUdpPort": "UDP-Port des Keyers",
     "keyerUdpHint": "Sendet TX1/TX2 (und den RX-Zustand) bei jeder Änderung und alle 2 Sekunden an 127.0.0.1, damit der Keyer das sendende Funkgerät tastet. Funktioniert unabhängig davon, wo der Logger läuft, auch ohne Verbindung.",
-    "devicesLive": "Ein neues Audiogerät gilt sofort: Bei bestehender Verbindung wird sie kurz neu aufgebaut."
+    "devicesLive": "Ein neues Audiogerät gilt sofort: Bei bestehender Verbindung wird sie kurz neu aufgebaut.",
+    "format": "Öffnet mit {{rate}} kHz, {{n}} Kanal/Kanälen",
+    "formatMono": "Dieses Gerät liefert einen Kanal: beide Ohren bekommen denselben Ton."
   },
   "errors": {
     "title": "Problem"

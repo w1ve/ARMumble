@@ -144,7 +144,9 @@
     "keyerUdp": "Envoyer l'OTRSP au manipulateur CW de cet ordinateur (UDP)",
     "keyerUdpPort": "Port UDP du manipulateur",
     "keyerUdpHint": "Envoie TX1/TX2 (et l'état RX) à 127.0.0.1 à chaque changement et toutes les 2 secondes, pour que le manipulateur commande la radio qui émet. Fonctionne quel que soit l'emplacement du logiciel de contest, même sans connexion.",
-    "devicesLive": "Un nouveau périphérique audio est pris en compte tout de suite : si vous êtes connecté, la connexion redémarre un instant."
+    "devicesLive": "Un nouveau périphérique audio est pris en compte tout de suite : si vous êtes connecté, la connexion redémarre un instant.",
+    "format": "Ouvert à {{rate}} kHz, {{n}} canal/canaux",
+    "formatMono": "Ce périphérique ne fournit qu'un canal : les deux oreilles auront le même son."
   },
   "errors": {
     "title": "Problème"

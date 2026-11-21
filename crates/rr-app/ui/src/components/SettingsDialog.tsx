@@ -9,11 +9,38 @@ import { useApp } from "../store";
 import { HotkeyInput } from "./HotkeyInput";
 import { Slider } from "./Slider";
 
+/** The format the app opens a device with, as the OS reports it. */
+function DeviceFormat({ id, input, none }: { id: string | null; input: boolean; none: boolean }) {
+  const { t } = useTranslation();
+  const [fmt, setFmt] = useState<[number, number] | null>(null);
+  useEffect(() => {
+    let live = true;
+    setFmt(null);
+    if (!none) {
+      api.deviceFormat(id, input).then(
+        (f) => live && setFmt(f),
+        () => live && setFmt(null),
+      );
+    }
+    return () => {
+      live = false;
+    };
+  }, [id, input, none]);
+  if (!fmt) return null;
+  return (
+    <>
+      <span className="hint">{t("settings.format", { rate: fmt[0] / 1000, n: fmt[1] })}</span>
+      {input && fmt[1] === 1 ? <span className="warn-text">{t("settings.formatMono")}</span> : null}
+    </>
+  );
+}
+
 function DeviceSelect({
   label,
   value,
   options,
   emptyLabel,
+  input = false,
   onChange,
 }: {
   label: string;
@@ -21,6 +48,8 @@ function DeviceSelect({
   options: { id: string; name: string }[];
   /** Text of the empty choice: "System default" for A, "(None)" for B. */
   emptyLabel: string;
+  /** A capture device (shows a warning if it is mono). */
+  input?: boolean;
   onChange: (v: string | null) => void;
 }) {
   return (
@@ -34,6 +63,8 @@ function DeviceSelect({
           </option>
         ))}
       </select>
+      {/* An empty B choice means "not used", so there is nothing to open. */}
+      <DeviceFormat id={value} input={input} none={value === null && emptyLabel !== ""} />
     </label>
   );
 }
@@ -213,6 +244,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         <DeviceSelect
           label={twoCards ? t("settings.inputA") : t("settings.input")}
           value={settings.audio.input_device}
+          input
           options={devices.filter((d) => d.input)}
           emptyLabel={t("settings.default")}
           onChange={(v) => update((x) => void (x.audio.input_device = v))}
@@ -221,6 +253,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           <DeviceSelect
             label={t("settings.inputB")}
             value={settings.audio.input_device_b}
+            input
             options={devices.filter((d) => d.input)}
             emptyLabel={t("settings.noDevice")}
             onChange={(v) => update((x) => void (x.audio.input_device_b = v))}

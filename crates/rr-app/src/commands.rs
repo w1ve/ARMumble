@@ -72,6 +72,14 @@ pub fn list_devices() -> Vec<DeviceDto> {
     platform::devices()
 }
 
+/// The rate and channel count a device opens with (`None` id: the default).
+#[tauri::command]
+pub async fn device_format(id: Option<String>, input: bool) -> Result<(u32, u16), String> {
+    tauri::async_runtime::spawn_blocking(move || platform::device_params(id.as_deref(), input).map(|p| (p.rate, p.channels)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Serial ports.
 #[tauri::command]
 pub fn list_serial_ports() -> Vec<PortDto> {

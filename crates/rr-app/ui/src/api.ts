@@ -213,6 +213,7 @@ export const api = {
   loadSettings: () => invoke<Settings>("load_settings"),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
   listDevices: () => invoke<Device[]>("list_devices"),
+  deviceFormat: (id: string | null, input: boolean) => invoke<[number, number]>("device_format", { id, input }),
   listPorts: () => invoke<Port[]>("list_serial_ports"),
   connect: () => invoke<void>("connect"),
   disconnect: () => invoke<void>("disconnect"),

@@ -144,7 +144,9 @@
     "keyerUdp": "Send OTRSP to the CW keyer on this computer (UDP)",
     "keyerUdpPort": "Keyer UDP port",
     "keyerUdpHint": "Sends TX1/TX2 (and the RX state) to 127.0.0.1 on every change and every 2 seconds, so the keyer keys the transmitting radio. Works wherever the logger runs, and also when not connected.",
-    "devicesLive": "A new sound device is used at once: while connected, the connection restarts for a moment."
+    "devicesLive": "A new sound device is used at once: while connected, the connection restarts for a moment.",
+    "format": "Opens at {{rate}} kHz, {{n}} channel(s)",
+    "formatMono": "This device gives one channel: both ears will get the same audio."
   },
   "errors": {
     "title": "Problem"

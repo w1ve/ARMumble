@@ -144,7 +144,9 @@
     "keyerUdp": "将 OTRSP 发送给本机的 CW 电键器(UDP)",
     "keyerUdpPort": "电键器 UDP 端口",
     "keyerUdpHint": "每次变化及每 2 秒向 127.0.0.1 发送 TX1/TX2(以及接收状态),使电键器只键控正在发射的电台。无论日志软件在哪一端运行都有效,未连接时也有效。",
-    "devicesLive": "新的声音设备立即生效：已连接时，连接会短暂重启。"
+    "devicesLive": "新的声音设备立即生效：已连接时，连接会短暂重启。",
+    "format": "以 {{rate}} kHz、{{n}} 声道打开",
+    "formatMono": "此设备只提供一个声道：两耳会听到相同的声音。"
   },
   "errors": {
     "title": "问题"
